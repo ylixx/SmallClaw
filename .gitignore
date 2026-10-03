@@ -1,0 +1,108 @@
+# ============================================================
+# LocalClaw - .gitignore
+# ============================================================
+
+# --- DOCKER / ENV ---
+.env
+
+# --- SECRETS & CONFIG (NEVER COMMIT) ---
+.localclaw/config.json
+.localclaw/credentials/
+.localclaw/vault/
+.smallclaw/config.json
+.smallclaw/credentials/
+.smallclaw/vault/
+
+# --- RUNTIME DATA ---
+.localclaw/sessions/
+.localclaw/logs/
+.localclaw/memory/
+.localclaw/facts.json
+.localclaw/self_learning.json
+.localclaw/jobs.db
+.localclaw/update_state.json
+.localclaw/tasks/
+.localclaw/jobs/
+.localclaw/ocr-cache/
+.localclaw/heartbeat/
+.localclaw/task-heartbeat.json
+.localclaw/cron/runs/
+.localclaw/agents/
+.localclaw/settings.json
+.smallclaw/sessions/
+.smallclaw/logs/
+.smallclaw/memory/
+.smallclaw/facts.json
+.smallclaw/self_learning.json
+.smallclaw/jobs.db
+.smallclaw/update_state.json
+.smallclaw/tasks/
+.smallclaw/jobs/
+.smallclaw/ocr-cache/
+.smallclaw/heartbeat/
+.smallclaw/task-heartbeat.json
+.smallclaw/cron/runs/
+.smallclaw/cron/jobs.json
+.smallclaw/skills/
+.smallclaw/skills_state.json
+.smallclaw/workspace_state.json
+.smallclaw/.migrated-from-localclaw
+.smallclaw/agents/
+.smallclaw/settings.json
+
+# --- WORKSPACE RUNTIME FILES ---
+# Keep: SOUL.md, SELF.md, IDENTITY.md, USER.md, MEMORY.md, AGENTS.md, TOOLS.md, BOOT.md, README.md
+# These are default templates that ship with SmallClaw — new users need them.
+# Ignore: daily memory logs, tool audit log, heartbeat, and any AI-generated scratch files.
+workspace/memory/
+workspace/tool_audit.log
+workspace/HEARTBEAT.md
+workspace/note.txt
+workspace/*.html
+workspace/*.js
+workspace/*.css
+workspace/*.py
+workspace/*.sh
+workspace/*.bat
+workspace/*.txt
+workspace/*.xlsx
+workspace/*.docx
+workspace/*.pptx
+workspace/*.pdf
+workspace/*.png
+
+# --- DASHBOARD RUNTIME STATE ---
+ai-dashboard/dashboard-state.json
+ai-dashboard/dashboard-requests.json
+
+# --- LOGS ---
+gateway.log
+gateway.err.log
+*.log
+
+# --- TEMP FILES ---
+tmp_payload.json
+mnt/
+.tmp_*
+.tmp_*/
+.tmp_openclaw_*/
+.tmp_codex_*
+
+# --- NODE ---
+node_modules/
+dist/
+*.js.map
+package/
+*.tgz
+
+# --- PYTHON ---
+__pycache__/
+*.pyc
+
+# --- TEST ARTIFACTS ---
+tests/.golden-progress.log
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+desktop.ini

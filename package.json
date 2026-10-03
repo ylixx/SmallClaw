@@ -1,0 +1,56 @@
+{
+  "name": "smallclaw",
+  "version": "1.0.1",
+  "description": "Local AI agent framework powered by Ollama - OpenClaw alternative",
+  "main": "dist/index.js",
+  "bin": {
+    "smallclaw": "./dist/cli/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/cli/index.ts",
+    "start": "node dist/cli/index.js",
+    "gateway": "tsx src/gateway/server-v2.ts",
+    "test": "tsx tests/golden-routing.ts",
+    "test:desktop": "tsx tests/desktop-tools.ts"
+  },
+  "keywords": [
+    "ai",
+    "agent",
+    "ollama",
+    "automation",
+    "openclaw"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "better-sqlite3": "^13.0.3",
+    "chalk": "^4.1.2",
+    "commander": "^12.0.0",
+    "cors": "^2.8.6",
+    "croner": "^10.0.1",
+    "dotenv": "^16.4.0",
+    "express": "^4.18.0",
+    "node-pty": "^1.1.0",
+    "ollama": "^0.5.0",
+    "playwright": "^1.58.2",
+    "tesseract.js": "^5.1.1",
+    "ws": "^8.16.0",
+    "zod": "^3.22.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.0",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^4.17.0",
+    "@types/node": "^20.11.0",
+    "@types/ws": "^8.5.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.0"
+  },
+  "allowScripts": {
+    "better-sqlite3@9.6.0": true,
+    "esbuild@0.27.3": true,
+    "node-pty@1.1.0": true,
+    "tesseract.js@5.1.1": true
+  }
+}
