@@ -610,5 +610,5 @@ Inspired by [OpenClaw](https://openclaw.ai) and the Anthropic team. Built for th
 
 ---
 
-**Note:** This README reflects SmallClaw `v1.0.3`.
+**Note:** This README reflects SmallClaw `v1.1.0`.
 

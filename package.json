@@ -1,6 +1,6 @@
 {
   "name": "smallclaw",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "Local AI agent framework powered by Ollama - OpenClaw alternative",
   "main": "dist/index.js",
   "bin": {
