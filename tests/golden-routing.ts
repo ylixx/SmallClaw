@@ -857,7 +857,7 @@ async function run() {
         updatedAt: Date.now(),
         currentTurnExecution: {
           turnId: 'failed_turn',
-          objective: 'change the text in the index.html file to be red',
+          objective_normalized: 'change the text in the index.html file to be red',
           mode: 'execute',
           status: 'failed',
           tool_calls: [],

@@ -4368,7 +4368,9 @@ function inferDeterministicFileBatchCalls(
       const explicitUnique = Array.from(new Set(explicitMatches));
       const hasExplicitNamedTxt = explicitUnique.some((p: string) => /\.txt$/i.test(p));
       const hasExplicitNamedHtml = explicitUnique.some((p: string) => /\.html?$/i.test(p));
-      const asksPluralDelete = /\b(all|both|files|them|those)\b/i.test(clause);
+      const asksPluralDelete = /\b(all|both|files|them|those)\b/i.test(clause)
+        // "remove the txt and html file" — two type words joined by and/or also imply plural intent.
+        || /\b(?:txt|text|html?|md|json|css|js|ts|py)\s+(?:and|&|or|\/)\s+(?:the\s+)?(?:txt|text|html?|md|json|css|js|ts|py)\b/i.test(clause);
       const deleteIdx = (() => {
         const mm = /\b(?:remove|delete)(?:\/delete)?\b/i.exec(clause);
         return mm && Number.isFinite((mm as any).index) ? Number((mm as any).index) : -1;
@@ -5983,6 +5985,8 @@ async function runTurnPipeline(args: {
   const replay = resolveRetryReplayMessage(normalizedMessage, sessionState);
   const correctiveReplay = replay ? '' : resolveCorrectiveReplayMessage(normalizedMessage, sessionState);
   const replayMessage = replay || correctiveReplay;
+  // A retry replay re-runs a failed execute objective — bypass discuss-first so it goes straight to execution.
+  const retryReplayActive = !!(replay && replayMessage);
   if (replayMessage) {
     routingMessage = replayMessage;
     if (wantsSSE && sseEvent) {
@@ -6000,7 +6004,7 @@ async function runTurnPipeline(args: {
   let policyDecision = decideRoute(normalizedInitial);
   let turnPlan: TurnPlan | null = null;
 
-  if (!policyDecision.locked_by_policy && !FEATURE_FLAGS.model_trigger_mode_switch) {
+  if (!policyDecision.locked_by_policy && (!FEATURE_FLAGS.model_trigger_mode_switch || retryReplayActive)) {
     turnPlan = await inferTurnPlan(ollama, routingMessage, sessionState, history || []);
     if (turnPlan && turnPlan.confidence >= 0.58) {
       routingMessage = turnPlan.standalone_request || turnPlan.search_text || normalizedMessage;
@@ -6057,7 +6061,7 @@ async function runTurnPipeline(args: {
   } else if (FEATURE_FLAGS.model_trigger_mode_switch) {
     // Model-led switching mode: always start in discuss/chat, then let model output
     // trigger words to escalate to execute/web within the same turn.
-    const obviousExecute = FEATURE_FLAGS.fast_execute_bypass && requiresToolExecutionForTurn(routingMessage, sessionState);
+    const obviousExecute = (FEATURE_FLAGS.fast_execute_bypass && requiresToolExecutionForTurn(routingMessage, sessionState)) || retryReplayActive;
     if (obviousExecute) {
       agentIntent = 'execute';
       turnKind = 'side_question';
