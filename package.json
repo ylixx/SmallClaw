@@ -11,7 +11,7 @@
     "dev": "tsx src/cli/index.ts",
     "start": "node dist/cli/index.js",
     "gateway": "tsx src/gateway/server-v2.ts",
-    "test": "tsx tests/golden-routing.ts",
+    "test": "vitest run",
     "test:desktop": "tsx tests/desktop-tools.ts"
   },
   "keywords": [
@@ -45,7 +45,8 @@
     "@types/node": "^20.11.0",
     "@types/ws": "^8.5.0",
     "tsx": "^4.7.0",
-    "typescript": "^5.3.0"
+    "typescript": "^5.3.0",
+    "vitest": "^4.1.11"
   },
   "allowScripts": {
     "better-sqlite3@9.6.0": true,

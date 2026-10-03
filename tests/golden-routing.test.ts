@@ -1,6 +1,7 @@
 import assert from 'assert';
 import fs from 'fs';
 import path from 'path';
+import { describe, it } from 'vitest';
 
 async function run() {
   process.env.LOCALCLAW_DISABLE_SERVER = '1';
@@ -886,9 +887,8 @@ async function run() {
   console.log('golden-routing: all checks passed');
 }
 
-run()
-  .then(() => process.exit(0))
-  .catch((err) => {
-    console.error(err);
-    process.exit(1);
+describe('golden-routing', () => {
+  it('covers policy routing, verification and deterministic file-op cases (43 golden cases)', async () => {
+    await run();
   });
+});

@@ -303,6 +303,15 @@ Config is stored in `.smallclaw/config.json` in the project folder (or `~/.small
 
 Most settings can be changed live from the Settings panel without restarting the gateway.
 
+### How model configuration fields relate
+
+There are two config layers, and they serve different purposes:
+
+- **`llm.provider` + `llm.providers.<provider>`** — the *active* model chain. The gateway reads `llm.provider` to pick which provider (e.g. `llama_cpp`, `ollama`) and which model to call right now. This is what Settings → Models edits.
+- **`models.primary` / `models.roles`** — a legacy compatibility/fallback field. It is used as a fallback when a provider entry has no model, and by `reactor.ts` to auto-tune the execution channel for small models (models ≤7B get the conservative `node_call<>` channel instead of native tool-calling).
+
+Keep both within the 4B–30B range you deploy locally — the framework auto-adapts context windows, history length and tool-calling style to fit models in that range.
+
 ### Agents Array Example
 
 User-defined agents (no preset roles). Put this in `.smallclaw/config.json`:
