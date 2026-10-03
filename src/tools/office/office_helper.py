@@ -72,10 +72,15 @@ def detect_format(path):
         return "pdf"
     if ext in CSV_EXT:
         return "csv"
+    # TEXT_EXT was defined but never matched here, so .md/.txt/.json/.log/.html
+    # fell through to the "Unsupported document type" error - whose message
+    # listed "md" as supported. That contradiction made agents retry in a loop.
+    if ext in TEXT_EXT:
+        return "text"
     if ext in UNSUPPORTED_EXT:
         raise OfficeError(UNSUPPORTED_EXT[ext])
     raise OfficeError(
-        "Unsupported document type '%s'. Supported: xlsx, docx, pptx, pdf, csv, txt, md." % ext
+        "Unsupported document type '%s'. Supported: xlsx, docx, pptx, pdf, csv, txt, md, json, log, html." % ext
     )
 
 
@@ -435,6 +440,43 @@ def docx_read(path, target=None, limit=200):
     }
 
 
+def text_read(path, target=None, limit=200):
+    """Read a plain-text document (.md/.txt/.json/.log/.html) with line numbers."""
+    with open(path, "r", encoding="utf-8", errors="replace") as fh:
+        raw = fh.read()
+    lines = raw.split("\n")
+    start = max(0, int(target)) if target else 0
+    end = min(len(lines), start + max(1, int(limit)))
+    body = "\n".join(
+        "%d: %s" % (start + idx + 1, line) for idx, line in enumerate(lines[start:end])
+    )
+    if not body:
+        body = "(file is empty)"
+    return {
+        "format": "text",
+        "path": path,
+        "line_range": [start, end],
+        "line_total": len(lines),
+        "markdown": body,
+        "text": body,
+    }
+
+
+def text_inspect(path, preview_lines=20):
+    with open(path, "r", encoding="utf-8", errors="replace") as fh:
+        raw = fh.read()
+    lines = raw.split("\n")
+    preview = "\n".join(lines[:preview_lines])
+    return {
+        "format": "text",
+        "path": path,
+        "line_total": len(lines),
+        "char_total": len(raw),
+        "markdown": preview,
+        "text": preview,
+    }
+
+
 def _capture_run_font(paragraph):
     if not paragraph.runs:
         return None
@@ -786,6 +828,8 @@ def op_inspect(payload):
         return pdf_read(path, payload.get("target"))
     if fmt == "csv":
         return csv_inspect(path)
+    if fmt == "text":
+        return text_inspect(path)
     raise OfficeError("Unsupported format: %s" % fmt)
 
 
@@ -803,6 +847,8 @@ def op_read(payload):
         return pdf_read(path, payload.get("target"))
     if fmt == "csv":
         return csv_read(path, payload.get("target"), int(payload.get("limit") or 200))
+    if fmt == "text":
+        return text_read(path, payload.get("target"), int(payload.get("limit") or 200))
     raise OfficeError("Unsupported format: %s" % fmt)
 
 
@@ -2001,6 +2047,27 @@ def op_convert(payload):
             fh.write(raw)
         return _convert_result(src, out, to, "copy")
 
+    # Markdown -> docx without LibreOffice. The soffice route (md -> html ->
+    # soffice) fails on machines where LibreOffice cannot load its own filters
+    # ("no export filter ... found"), and python-docx is already required here,
+    # so build the document directly instead of shelling out.
+    if ext in (".md", ".markdown") and to == "docx":
+        from docx import Document
+
+        with open(src, "r", encoding="utf-8", errors="replace") as fh:
+            raw = fh.read()
+        blocks = parse_markdown_blocks(raw)
+        doc = Document()
+        if blocks:
+            _append_markdown_blocks(doc, blocks)
+        else:
+            for line in raw.split("\n"):
+                doc.add_paragraph(line)
+        tmp = out + ".tmp-%d" % os.getpid()
+        doc.save(tmp)
+        os.replace(tmp, out)
+        return _convert_result(src, out, to, "python-docx")
+
     soffice = _find_soffice()
     if not soffice:
         raise OfficeError("LibreOffice (soffice) not found. Install LibreOffice or set SMALLCLAW_SOFFICE.")
@@ -2044,7 +2111,11 @@ def op_convert(payload):
                     break
         if not produced:
             raise OfficeError(
-                "LibreOffice did not produce a .%s file (exit %s)" % (to, rc),
+                "LibreOffice did not produce a .%s file (exit %s). Do NOT retry this conversion - "
+                "it will fail identically because this is a local LibreOffice installation problem, "
+                "not a problem with the source file. Options: repair/reinstall LibreOffice (or set "
+                "SMALLCLAW_SOFFICE), pick a different target format, or leave the source as-is. "
+                "(.md -> .docx no longer uses LibreOffice, so that one works regardless.)" % (to, rc),
                 detail=log[-800:] or None,
             )
         os.replace(produced, out)
