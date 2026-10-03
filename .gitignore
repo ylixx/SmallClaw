@@ -106,3 +106,9 @@ tests/.golden-progress.log
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# --- LOCAL SCRATCH (backups, launcher scripts, debug dumps) ---
+.backup/
+
+# --- WORKBUDDY WORKSPACE DATA ---
+.workbuddy/

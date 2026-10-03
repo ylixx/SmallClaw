@@ -128,6 +128,10 @@ export const DEFAULT_CONFIG: SmallClawConfig = {
       shell: {
         workspace_only: true,
         confirm_destructive: true,
+        // Expose the real shell to the agent as the "shell_exec" tool.
+        // OFF by default: turning this on hands the model a real terminal.
+        // (run_command stays available either way - it is only a GUI launcher.)
+        expose_to_agent: false,
         blocked_patterns: ['rm -rf /', 'del C:\\Windows', 'format']
       },
       files: {

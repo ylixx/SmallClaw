@@ -30,6 +30,7 @@ import { getSession, addMessage, getHistory, getHistoryForApiCall, getWorkspace,
 import { hookBus } from './hooks';
 import { loadWorkspaceHooks } from './hook-loader';
 import { runBootMd } from './boot';
+import { resolveRunCommand, suggestRunCommandFix, SAFE_COMMANDS, ARG_SAFE_COMMANDS } from './run-command-router';
 import { TaskRunner, runTask, TaskTool, TaskState } from './task-runner';
 import { setupErrorResponseEndpoint } from './error-response-endpoint-integrated';
 import { initCredentialHandler, getCredentialHandler } from '../security/credential-handler';
@@ -301,70 +302,76 @@ const isWindows = process.platform === 'win32';
 const isMac = process.platform === 'darwin';
 const isLinux = process.platform === 'linux';
 
-const SAFE_COMMANDS: Record<string, string> = isWindows
-  ? {
-      'chrome': 'start chrome',
-      'browser': 'start chrome',
-      'firefox': 'start firefox',
-      'edge': 'start msedge',
-      'notepad': 'start notepad',
-      'calc': 'start calc',
-      'calculator': 'start calc',
-      'explorer': 'start explorer',
-      'terminal': 'start cmd',
-      'cmd': 'start cmd',
-      'powershell': 'start powershell',
-    }
-  : isMac
-    ? {
-        'chrome': 'open -a "Google Chrome"',
-        'browser': 'open',
-        'firefox': 'open -a "Firefox"',
-        'edge': 'open -a "Microsoft Edge"',
-        'notepad': 'open -a "TextEdit"',
-        'calc': 'open -a "Calculator"',
-        'calculator': 'open -a "Calculator"',
-        'explorer': 'open .',
-        'terminal': 'open -a "Terminal"',
-        'cmd': 'open -a "Terminal"',
-        'powershell': 'open -a "Terminal"',
-      }
-    : {
-        'chrome': 'google-chrome',
-        'browser': 'xdg-open',
-        'firefox': 'firefox',
-        'edge': 'microsoft-edge',
-        'notepad': 'gedit',
-        'calc': 'gnome-calculator',
-        'calculator': 'gnome-calculator',
-        'explorer': 'xdg-open .',
-        'terminal': 'x-terminal-emulator',
-        'cmd': 'x-terminal-emulator',
-        'powershell': 'pwsh',
-      };
+// run_command routing now lives in ./run-command-router.ts - extracted so the
+// allowlist logic can be unit-tested without booting the whole gateway.
+// See resolveRunCommand() there.
 
-function quoteShellArg(value: string): string {
-  return `"${String(value || '').replace(/"/g, '\\"')}"`;
+// ── Real shell escape hatch (opt-in, OFF by default) ─────────────────────────
+// src/tools/shell.ts already implements a full shell (PTY + workspace
+// confinement + dangerous-command filters), but it was never exposed to the
+// agent, so any command outside run_command's allowlist had no valid outlet.
+// It stays off by default because enabling it hands the model a real shell.
+// Named "shell_exec" on purpose: naming it "shell" would make it match the
+// legacy config.tools.enabled entry and silently filter every other tool out.
+function agentShellEnabled(): boolean {
+  try {
+    const cfg = getConfig().getConfig() as any;
+    return cfg?.tools?.permissions?.shell?.expose_to_agent === true;
+  } catch {
+    return false;
+  }
 }
 
-function buildUrlOpenCommand(url: string): string {
-  if (isWindows) return `start "" ${quoteShellArg(url)}`;
-  if (isMac) return `open ${quoteShellArg(url)}`;
-  return `xdg-open ${quoteShellArg(url)}`;
+function shellExecToolDefinition(): any {
+  return {
+    type: 'function',
+    function: {
+      name: 'shell_exec',
+      description: 'Run a real terminal command inside the workspace and return its output. Use this when run_command rejects a command - run_command is only a GUI app launcher, not a shell. Confined to the workspace directory; destructive patterns are blocked.',
+      parameters: {
+        type: 'object', required: ['command'],
+        properties: {
+          command: { type: 'string', description: 'Command to run, e.g. "npm test" or "git status". Paths outside the workspace are rejected.' },
+          cwd: { type: 'string', description: 'Optional working directory, defaults to the workspace root.' },
+        },
+      },
+    },
+  };
 }
 
-function buildBrowserLaunchCommand(app: string, url: string): string {
-  const appCmd = SAFE_COMMANDS[app] || SAFE_COMMANDS.browser;
-  if (isWindows) return `${appCmd} ${quoteShellArg(url)}`;
-  if (app === 'browser') return buildUrlOpenCommand(url);
-  return `${appCmd} ${quoteShellArg(url)}`;
+// ── Repeated-failure circuit breaker ─────────────────────────────────────────
+// A small model that gets a vague error tends to retry the same call verbatim.
+// After N identical failures, stop the loop and say so explicitly instead of
+// letting it burn the remaining steps on the same rejected call.
+const TOOL_FAILURE_LIMIT = 3;
+const toolFailureTracker = new Map<string, { key: string; count: number }>();
+
+function toolFailureKey(name: string, args: any): string {
+  let serialized = '?';
+  try {
+    serialized = JSON.stringify(args ?? {});
+  } catch {
+    /* unserializable args - fall back to name-only matching */
+  }
+  return `${name}:${serialized}`;
 }
 
-function hasUriScheme(value: string): boolean {
-  return /^[a-z][a-z0-9+.-]*:/i.test(String(value || '').trim());
+function noteToolFailure(sessionId: string, name: string, args: any): string | null {
+  const key = toolFailureKey(name, args);
+  if (toolFailureTracker.size > 500) toolFailureTracker.clear();
+  const prev = toolFailureTracker.get(sessionId);
+  const count = prev && prev.key === key ? prev.count + 1 : 1;
+  toolFailureTracker.set(sessionId, { key, count });
+  if (count < TOOL_FAILURE_LIMIT) return null;
+  toolFailureTracker.delete(sessionId);
+  return [
+    `Stop - "${name}" has now failed ${TOOL_FAILURE_LIMIT} times with identical arguments.`,
+    'Calling it again the same way will fail again. Instead:',
+    '  - re-read the error message and change the arguments,',
+    '  - switch to a different tool that can do this,',
+    '  - or report what is blocked to the user and ask how to proceed.',
+  ].join('\n');
 }
-
-const BLOCKED_PATTERNS = ['del ', 'rm ', 'format', 'shutdown', 'restart', 'rmdir', 'rd ', 'taskkill', 'reg '];
 
 // ── Sub-Agent Tool Profiles ────────────────────────────────────────────────────────────
 type SubagentProfile = 'file_editor' | 'researcher' | 'shell_runner' | 'reader_only';
@@ -1245,11 +1252,11 @@ function buildTools() {
       type: 'function',
       function: {
         name: 'run_command',
-        description: 'Open apps for the USER to see on their screen. NEVER use this to open Chrome or Edge for web automation — those windows have no debug port and are invisible to browser_open/snapshot/click. For any web browsing, always use browser_open instead. Use run_command only for: launching GUI apps like notepad or VS Code.',
+        description: 'Open apps for the USER to see on their screen. This is a GUI launcher, NOT a shell: it cannot run pipelines, globs, redirects, switches or arbitrary commands, and it returns no output. NEVER use this to open Chrome or Edge for web automation — those windows have no debug port and are invisible to browser_open/snapshot/click. For any web browsing, always use browser_open instead. Use run_command only for: launching GUI apps like notepad or VS Code.',
         parameters: {
           type: 'object', required: ['command'],
           properties: {
-            command: { type: 'string', description: 'Examples: "notepad", "code D:\\project". Do NOT use "chrome" or "msedge" here — use browser_open instead.' },
+            command: { type: 'string', description: 'Accepted: a bare app name ("notepad", "calc"), an app plus a file path ("code D:\\project", "notepad notes.txt" - only notepad/code/explorer take a path), or a URL. Rejected: "start <file>", "powershell <cmd>", anything with switches or pipes. Do NOT use "chrome" or "msedge" here — use browser_open instead.' },
           },
         },
       },
@@ -1545,6 +1552,7 @@ function buildTools() {
   toolDefs.push(...getOfficeToolDefinitions());
   toolDefs.push(...getImageToolDefinitions());
   toolDefs.push(...getFileBatchToolDefinitions());
+  if (agentShellEnabled()) toolDefs.push(shellExecToolDefinition());
   toolDefs.push(...planToolDefinitions());
   toolDefs.push(...buildMcpToolDefinitions(new Set(toolDefs.map((t: any) => String(t?.function?.name || '')))));
   return toolDefs;
@@ -1625,7 +1633,7 @@ const FILE_TOOL_NAMES = new Set([
   'doc_inspect', 'doc_read', 'doc_write', 'doc_chart', 'doc_convert',
   'image_render', 'image_generate', 'file_batch',
 ]);
-const SHELL_TOOL_NAMES = new Set(['run_command']);
+const SHELL_TOOL_NAMES = new Set(['run_command', 'shell_exec']);
 
 // ─── Artifact log: what tools produced/changed in this gateway run ────────────
 export interface ArtifactEntry {
@@ -1998,6 +2006,17 @@ async function executeTool(name: string, args: any, workspacePath: string, sessi
 
   const result = await executeToolImpl(name, args, workspacePath, sessionId, emit);
 
+  // Circuit breaker: the same call failing repeatedly means the model is stuck
+  // guessing. Surface that instead of letting it burn more steps on it.
+  if (result.error) {
+    const breaker = noteToolFailure(sessionId, name, args);
+    if (breaker) {
+      return { name, args, result: `${result.result}\n\n${breaker}`, error: true };
+    }
+  } else {
+    toolFailureTracker.delete(sessionId);
+  }
+
   if (!result.error && targetPath) {
     const afterText = readTextSnapshot(targetPath);
     const changed = afterText !== null
@@ -2250,57 +2269,29 @@ async function executeToolImpl(name: string, args: any, workspacePath: string, s
 
       case 'run_command': {
         const rawCmd = (args.command || '').trim();
-        const cmd = rawCmd.toLowerCase();
-        // Check blocked patterns
-        for (const blocked of BLOCKED_PATTERNS) {
-          if (cmd.includes(blocked.toLowerCase())) {
-            return { name, args, result: `Blocked: "${cmd}" contains unsafe pattern "${blocked}"`, error: true };
-          }
-        }
+        const { execCmd, blocked } = resolveRunCommand(rawCmd);
 
-        let execCmd = '';
-
-        // 1. Check allowlist (exact match)
-        if (SAFE_COMMANDS[cmd]) {
-          execCmd = SAFE_COMMANDS[cmd];
-        }
-        // 2. "chrome <url>" or "browser <url>" → open browser with URL
-        else if (/^(chrome|browser|firefox|edge)\s+/.test(cmd)) {
-          const parts = rawCmd.split(/\s+/);
-          const app = parts[0].toLowerCase();
-          let url = parts.slice(1).join(' ');
-          // Add https:// only when no URI scheme is present.
-          // This preserves file://, chrome://, about:, etc.
-          if (url && !hasUriScheme(url)) url = 'https://' + url;
-          execCmd = buildBrowserLaunchCommand(app, url);
-        }
-        // 3. URL/URI → open in default browser
-        else if (/^(https?:\/\/|file:\/\/|chrome:\/\/|about:|www\.)/.test(cmd)) {
-          const url = cmd.startsWith('www.') ? 'https://' + rawCmd : rawCmd;
-          execCmd = buildUrlOpenCommand(url);
-        }
-        // 4. Bare domain like "youtube.com" → open in browser
-        else if (/^[a-z0-9-]+\.[a-z]{2,}/.test(cmd) && !cmd.includes(' ')) {
-          execCmd = buildUrlOpenCommand(`https://${rawCmd}`);
-        }
-        // 5. "code <path>" → VS Code
-        else if (cmd.startsWith('code ')) {
-          execCmd = rawCmd;
-        }
-        // 6. Windows-only: "start <url>" → pass through
-        else if (isWindows && (cmd.startsWith('start http') || cmd.startsWith('start https'))) {
-          execCmd = rawCmd;
-        }
-        // 7. Windows-only: "explorer <path>"
-        else if (isWindows && cmd.startsWith('explorer ')) {
-          execCmd = rawCmd;
+        if (blocked) {
+          return { name, args, result: `Blocked: "${rawCmd.toLowerCase()}" contains unsafe pattern "${blocked}"`, error: true };
         }
 
         if (!execCmd) {
+          const fix = suggestRunCommandFix(rawCmd);
+          const lines = [
+            `Command "${rawCmd}" not recognized.`,
+            'run_command is NOT a shell - it only launches GUI apps for the user to see.',
+            'It cannot run pipelines, globs, redirects, switches, or arbitrary binaries.',
+            '',
+            'Supported forms:',
+            `  - bare app name: ${Object.keys(SAFE_COMMANDS).join(', ')}`,
+            `  - app + file path: ${Array.from(ARG_SAFE_COMMANDS).map(a => `${a} <path>`).join(', ')}`,
+            '  - open a URL: chrome <url>, or just a URL / bare domain',
+          ];
+          if (fix) lines.push('', fix);
           return {
             name,
             args,
-            result: `Command "${rawCmd}" not recognized. Try: chrome, chrome youtube.com, notepad, code <path>, or a URL`,
+            result: lines.join('\n'),
             error: true,
           };
         }
@@ -2310,6 +2301,26 @@ async function executeToolImpl(name: string, args: any, workspacePath: string, s
           return { name, args, result: `Executed: ${execCmd}`, error: false };
         } catch (err: any) {
           return { name, args, result: `Failed: ${err.message}`, error: true };
+        }
+      }
+
+      case 'shell_exec': {
+        if (!agentShellEnabled()) {
+          return { name, args, result: 'shell_exec is disabled. Enable it by setting tools.permissions.shell.expose_to_agent = true in the config.', error: true };
+        }
+        const command = String(args?.command || '').trim();
+        if (!command) return { name, args, result: 'shell_exec requires a "command" argument.', error: true };
+        try {
+          const { executeShell } = await import('../tools/shell.js');
+          const res = await executeShell({ command, cwd: args?.cwd });
+          return {
+            name,
+            args,
+            result: res.success ? (res.stdout || '(command succeeded, no output)') : (res.error || 'command failed'),
+            error: !res.success,
+          };
+        } catch (err: any) {
+          return { name, args, result: `shell_exec failed: ${err?.message || err}`, error: true };
         }
       }
 
