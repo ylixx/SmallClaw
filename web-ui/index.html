@@ -2120,6 +2120,21 @@
   .error-context-detail.visible {
     display: block;
   }
+
+  /* ---- Markdown structured rendering (doc_read / doc_inspect / tool results) ---- */
+  .msg-content .md-h { margin: 10px 0 6px; font-weight: 700; line-height: 1.3; }
+  .msg-content h1.md-h, .msg-content h2.md-h { font-size: 15px; }
+  .msg-content h3.md-h { font-size: 13.5px; }
+  .msg-content h4.md-h, .msg-content h5.md-h { font-size: 12.5px; }
+  .md-table { border-collapse: collapse; margin: 8px 0; max-width: 100%; }
+  .md-table th, .md-table td { border: 1px solid var(--line); padding: 4px 10px; font-size: 12px; text-align: left; vertical-align: top; }
+  .md-table th { background: var(--panel-2); font-weight: 700; }
+  .md-code { display: block; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin: 8px 0; overflow-x: auto; font-size: 12px; line-height: 1.5; font-family: 'IBM Plex Mono', Consolas, monospace; white-space: pre; }
+  .msg-content code { background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; font-size: 11.5px; font-family: 'IBM Plex Mono', Consolas, monospace; }
+  .md-list { margin: 6px 0; padding-left: 22px; }
+  .md-list li { margin: 2px 0; }
+  .md-quote { border-left: 3px solid var(--line); padding: 2px 10px; margin: 8px 0; color: var(--muted); }
+  .msg-content a { color: #2f6fed; text-decoration: underline; }
 </style>
 </head>
 <body>
@@ -4181,10 +4196,118 @@ function toggleSteps(id) {
   el.previousElementSibling.textContent = `${visible ? '?' : '?'} ${el.querySelectorAll('.react-step').length} tool step${el.querySelectorAll('.react-step').length !== 1 ? 's' : ''} used`;
 }
 
+// ---- Markdown rendering: safe allow-list renderer, no external deps ----
+// Lets doc_read / doc_inspect / tool results render as real headings, tables,
+// lists and code blocks in the chat stream instead of escaped plain text.
+// Every source string is escaped (escHtml); only allow-listed tags are emitted.
+function mdInline(text) {
+  const out = [];
+  const rest = String(text || '');
+  const TOKEN = /\*\*([^*]+?)\*\*|`([^`]+?)`|\*([^*]+?)\*|\[([^\]]+)\]\(([^)]+)\)/g;
+  let last = 0, m;
+  while ((m = TOKEN.exec(rest))) {
+    if (m.index > last) out.push(escHtml(rest.slice(last, m.index)));
+    if (m[1] !== undefined) out.push('<strong>' + escHtml(m[1]) + '</strong>');
+    else if (m[2] !== undefined) out.push('<code>' + escHtml(m[2]) + '</code>');
+    else if (m[3] !== undefined) out.push('<em>' + escHtml(m[3]) + '</em>');
+    else if (m[4] !== undefined) {
+      const url = String(m[5] || '').trim();
+      const safe = /^(https?:|mailto:)/i.test(url) ? url : '';
+      out.push(safe
+        ? '<a href="' + escHtml(safe) + '" target="_blank" rel="noopener noreferrer">' + escHtml(m[4]) + '</a>'
+        : escHtml(m[4] + ' (' + url + ')'));
+    }
+    last = m.index + m[0].length;
+  }
+  if (last < rest.length) out.push(escHtml(rest.slice(last)));
+  return out.join('');
+}
+
+function splitTableRow(line) {
+  return String(line).trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => c.trim());
+}
+
+function renderMarkdown(text) {
+  const raw = String(text || '').replace(/\r/g, '');
+  if (!raw.trim()) return '';
+  // Extract fenced code blocks first so their contents are never parsed as markdown.
+  const fenced = [];
+  let body = raw.replace(/```[^\n]*\n([\s\S]*?)```/g, (m, code) => {
+    fenced.push('<pre class="md-code"><code>' + escHtml(code.replace(/\n$/, '')) + '</code></pre>');
+    return '\u0000' + (fenced.length - 1) + '\u0000';
+  });
+  const lines = body.split('\n');
+  const html = [];
+  let para = [];
+  const flushPara = () => {
+    if (para.length) { html.push('<p>' + mdInline(para.join(' ')) + '</p>'); para = []; }
+  };
+  const isTableSep = (s) => /^\|?[\s:|-]+\|?$/.test(String(s || '').trim()) && String(s || '').includes('-');
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const ph = line.match(/^\u0000(\d+)\u0000$/);
+    if (ph) { flushPara(); html.push(fenced[+ph[1]]); continue; }
+    const h = line.match(/^(#{1,5})\s+(.*)$/);
+    if (h) { flushPara(); html.push('<h' + h[1].length + ' class="md-h">' + mdInline(h[2]) + '</h' + h[1].length + '>'); continue; }
+    if (line.trim().startsWith('|') && i + 1 < lines.length && isTableSep(lines[i + 1])) {
+      flushPara();
+      const hdr = splitTableRow(line);
+      i += 2;
+      const rows = [];
+      while (i < lines.length && lines[i].trim().startsWith('|')) { rows.push(splitTableRow(lines[i])); i++; }
+      i--;
+      html.push('<table class="md-table"><thead><tr>' + hdr.map(c => '<th>' + mdInline(c) + '</th>').join('') + '</tr></thead><tbody>'
+        + rows.map(r => '<tr>' + r.map(c => '<td>' + mdInline(c) + '</td>').join('') + '</tr>').join('')
+        + '</tbody></table>');
+      continue;
+    }
+    const ul = line.match(/^\s*[-*]\s+(.*)$/);
+    if (ul) {
+      flushPara();
+      const items = [ul[1]];
+      while (i + 1 < lines.length) {
+        const n = lines[i + 1].match(/^\s*[-*]\s+(.*)$/);
+        if (!n) break;
+        items.push(n[1]); i++;
+      }
+      html.push('<ul class="md-list">' + items.map(it => '<li>' + mdInline(it) + '</li>').join('') + '</ul>');
+      continue;
+    }
+    const ol = line.match(/^\s*\d+\.\s+(.*)$/);
+    if (ol) {
+      flushPara();
+      const items = [ol[1]];
+      while (i + 1 < lines.length) {
+        const n = lines[i + 1].match(/^\s*\d+\.\s+(.*)$/);
+        if (!n) break;
+        items.push(n[1]); i++;
+      }
+      html.push('<ol class="md-list">' + items.map(it => '<li>' + mdInline(it) + '</li>').join('') + '</ol>');
+      continue;
+    }
+    const q = line.match(/^>\s?(.*)$/);
+    if (q) {
+      flushPara();
+      const qs = [q[1]];
+      while (i + 1 < lines.length) {
+        const n = lines[i + 1].match(/^>\s?(.*)$/);
+        if (!n) break;
+        qs.push(n[1]); i++;
+      }
+      html.push('<blockquote class="md-quote">' + qs.map(s => '<p>' + mdInline(s) + '</p>').join('') + '</blockquote>');
+      continue;
+    }
+    if (!line.trim()) { flushPara(); continue; }
+    para.push(line);
+  }
+  flushPara();
+  return html.join('\n');
+}
+
 function renderAssistantContent(content) {
   const text = String(content || '');
   const hasStaged = /(^|\n)(Initial chat|Execution result|Final chat):\s*/i.test(text);
-  if (!hasStaged) return `<div class="msg-content">${escHtml(text)}</div>`;
+  if (!hasStaged) return `<div class="msg-content">${renderMarkdown(text)}</div>`;
   const chunks = text
     .split(/\n\s*---\s*\n/g)
     .map(s => String(s || '').trim())
@@ -4196,7 +4319,7 @@ function renderAssistantContent(content) {
     return `
       <div class="msg-stage">
         <div class="msg-stage-title">${escHtml(title)}</div>
-        <div class="msg-content">${escHtml(body)}</div>
+        <div class="msg-content">${renderMarkdown(body)}</div>
       </div>
     `;
   }).join('');
