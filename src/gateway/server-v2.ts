@@ -2307,6 +2307,22 @@ async function executeToolImpl(name: string, args: any, workspacePath: string, s
         const wsRoot = getConfig().getWorkspacePath();
 
         if (targetFile) {
+          // Path-escape guard: relative targets must stay inside the workspace.
+          if (!path.isAbsolute(targetFile)) {
+            const resolved = path.resolve(wsRoot, targetFile);
+            const wsNorm = wsRoot.toLowerCase().replace(/[\\/]+$/, '');
+            if (
+              resolved.toLowerCase() !== wsNorm &&
+              !resolved.toLowerCase().startsWith(wsNorm + path.sep)
+            ) {
+              return {
+                name,
+                args,
+                result: `Cannot open "${targetFile}": path escapes the workspace (${wsRoot}). Use a path inside the workspace.`,
+                error: true,
+              };
+            }
+          }
           const absolute = path.isAbsolute(targetFile) ? targetFile : path.join(wsRoot, targetFile);
           if (!fs.existsSync(absolute)) {
             let docs: string[] = [];

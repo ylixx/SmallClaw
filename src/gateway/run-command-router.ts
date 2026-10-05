@@ -62,6 +62,15 @@ export const SAFE_COMMANDS: Record<string, string> = isWindows
 
 export const BLOCKED_PATTERNS = ['del ', 'rm ', 'format', 'shutdown', 'restart', 'rmdir', 'rd /s', 'taskkill', 'reg '];
 
+/**
+ * Extensions that `start <file>` must never be allowed to open: for these,
+ * start() executes the file instead of opening it in a viewer/editor.
+ */
+export const EXECUTABLE_EXTENSIONS: ReadonlySet<string> = new Set([
+  'exe', 'bat', 'cmd', 'com', 'ps1', 'vbs', 'jse', 'msi', 'msp', 'reg',
+  'scr', 'pif', 'cpl', 'wsh', 'lnk', 'appx', 'msix', 'hta', 'wsf',
+]);
+
 // Allowlisted apps that may receive a user-supplied argument.
 // Deliberately excludes cmd / powershell / terminal: handing an argument to a
 // shell binary is equivalent to arbitrary code execution. Browsers are excluded
@@ -207,6 +216,15 @@ export function resolveRunCommand(rawCmdInput: string): RunCommandResolution {
         return { execCmd: '' };
       }
       if (/[\x00&|<>^%`]/.test(target)) return { execCmd: '' };
+      // NEVER let "start <file>" launch executables: for these extensions
+      // start == arbitrary code execution, not "open a document".
+      const extMatch = target.toLowerCase().match(/\.([a-z0-9]{1,10})$/);
+      if (extMatch) {
+        const ext = extMatch[1];
+        if (EXECUTABLE_EXTENSIONS.has(ext)) {
+          return { execCmd: '', blocked: `executable extension ".${ext}" (use an app name, not start, to run programs)` };
+        }
+      }
       return { execCmd: `start "" ${quoteShellArg(target)}`, targetFile: stripQuotes(target) };
     }
   }

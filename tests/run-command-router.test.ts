@@ -67,6 +67,16 @@ describe('open file with default app (start <file> / open <file>)', () => {
     expect(resolveRunCommand('start a&calc.exe').execCmd).toBe('');
     expect(resolveRunCommand('open x|cmd').execCmd).toBe('');
   });
+  it('refuses to start executable extensions (arbitrary code execution)', () => {
+    for (const ext of ['bat', 'exe', 'ps1', 'vbs', 'msi', 'cmd', 'reg', 'lnk', 'scr']) {
+      const r = resolveRunCommand(`start run.${ext}`);
+      expect(r.execCmd).toBe('');
+      expect(r.blocked).toContain(ext);
+    }
+    // non-executable documents still open normally
+    expect(resolveRunCommand('start plan.pdf').execCmd).toBe('start "" "plan.pdf"');
+    expect(resolveRunCommand('start data.csv').execCmd).toBe('start "" "data.csv"');
+  });
   it('does not hijack URLs (start http handled by URL branch)', () => {
     const r = resolveRunCommand('start https://example.com');
     expect(r.execCmd).not.toBe('');
