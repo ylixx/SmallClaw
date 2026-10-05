@@ -1252,7 +1252,7 @@ function buildTools() {
       type: 'function',
       function: {
         name: 'run_command',
-        description: 'Open apps for the USER to see on their screen. This is a GUI launcher, NOT a shell: it cannot run pipelines, globs, redirects, switches or arbitrary commands, and it returns no output. NEVER use this to open Chrome or Edge for web automation — those windows have no debug port and are invisible to browser_open/snapshot/click. For any web browsing, always use browser_open instead. Use run_command only for: launching GUI apps (notepad, calc, word, winword), opening a local file with the system default program (start <file>), or opening a path in VS Code / Explorer.',
+        description: 'Open apps for the USER to see on their screen. This is a GUI launcher, NOT a shell: it cannot run pipelines, globs, redirects, switches or arbitrary commands, and it returns no output. NEVER use this to open Chrome or Edge for web automation — those windows have no debug port and are invisible to browser_open/snapshot/click. For any web browsing, always use browser_open instead. Use run_command only for: launching GUI apps (notepad, calc, word, winword, excel, powerpoint), opening a local file with the system default program (start <file>; if the extension has no default app, Windows pops the "how do you want to open this" picker for the user to choose — do not retry), or opening a path in VS Code / Explorer.',
         parameters: {
           type: 'object', required: ['command'],
           properties: {
