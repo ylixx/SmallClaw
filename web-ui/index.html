@@ -6668,7 +6668,9 @@ async function deletePreset(id) {
         return;
       }
       const fallback = others[0];
-      if (!confirm('「' + fallback.name + '」正在使用，删除前将自动切换到「' + fallback.name + '」，继续？')) return;
+      const target = (list?.presets || []).find(p => String(p.id) === String(id));
+      const activeName = target ? target.name : '当前档案';
+      if (!confirm('「' + activeName + '」正在使用，删除前将自动切换到「' + fallback.name + '」，继续？')) return;
       if (statusEl) { statusEl.style.color = 'var(--warn)'; statusEl.textContent = '正在切换到 ' + fallback.name + ' …'; }
       const sw = await api('/api/models/presets/switch', { method: 'POST', body: JSON.stringify({ preset_id: fallback.id }) });
       if (!sw || !sw.success) {
