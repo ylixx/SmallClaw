@@ -358,6 +358,9 @@ const SECRET_FIELD_MAP: Array<[string[], string]> = [
   [['hooks', 'token'],                             'hooks.token'],
 ];
 
+/** Field names inside model-preset providers that hold secrets. */
+const SECRET_FIELD_RE = /api[_-]?key|apikey|token|secret|password|passwd|credential/i;
+
 function deepGet(obj: any, keys: string[]): string | undefined {
   let cur = obj;
   for (const k of keys) {
@@ -395,6 +398,29 @@ function migrateSecretsToVault(config: any, configDir: string): any {
     // It's a real plaintext secret — move it to vault
     vault.set(vaultKey, value, 'config:migrate');
     deepSet(copy, fieldPath, `vault:${vaultKey}`);
+  }
+
+  // Model presets each carry their own provider secrets (api_key etc.).
+  // Migrate them to per-preset vault keys so switching presets never shares
+  // or clobbers another service's key.
+  const presets = copy.llm?.presets;
+  if (presets && typeof presets === 'object') {
+    for (const [presetId, preset] of Object.entries<any>(presets)) {
+      const provs = preset?.providers;
+      if (!provs || typeof provs !== 'object') continue;
+      for (const [provName, prov] of Object.entries<any>(provs)) {
+        if (!prov || typeof prov !== 'object') continue;
+        for (const [field, val] of Object.entries<any>(prov)) {
+          if (!SECRET_FIELD_RE.test(field)) continue;
+          if (typeof val !== 'string' || !val) continue;
+          if (val.startsWith('vault:') || val.startsWith('env:')) continue;
+          if (val === '••••••••') continue;
+          const vaultKey = `preset.${presetId}.${provName}.${field}`;
+          vault.set(vaultKey, val, 'config:migrate');
+          prov[field] = `vault:${vaultKey}`;
+        }
+      }
+    }
   }
 
   return copy;

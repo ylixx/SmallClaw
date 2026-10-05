@@ -40,10 +40,16 @@ export class OpenAICompatAdapter implements LLMProvider {
     return null;
   }
 
-  private baseUrl(): string {
-    // Normalize: strip trailing slashes and a trailing /v1 so endpoints may be
-    // configured either as "https://host/v1" (OpenAI convention) or bare host.
-    return this.config.endpoint.replace(/\/+$/, '').replace(/\/v1$/, '');
+  private apiPath(suffix: string): string {
+    // OpenAI-compatible services differ in base layout:
+    //   - "https://host"             → "https://host/v1/chat/completions" (OpenAI default)
+    //   - "https://host/v1"          → "https://host/v1/chat/completions"
+    //   - "https://host/api/paas/v4" → "https://host/api/paas/v4/chat/completions" (Zhipu GLM)
+    // If the configured endpoint already carries a version segment, use it as-is
+    // and drop the version prefix from the path; otherwise append the full path.
+    const base = this.config.endpoint.replace(/\/+$/, '');
+    const hasVersionSegment = /\/v\d+$/i.test(base);
+    return hasVersionSegment ? base + suffix.replace(/^\/v\d+/, '') : base + suffix;
   }
 
   private async post(path: string, body: object): Promise<any> {
@@ -58,7 +64,7 @@ export class OpenAICompatAdapter implements LLMProvider {
         const headers: Record<string, string> = { 'Content-Type': 'application/json' };
         if (auth) headers['Authorization'] = auth;
 
-        const url = `${this.baseUrl()}${path}`;
+        const url = this.apiPath(path);
         const response = await fetch(url, {
           method: 'POST',
           headers,
@@ -87,7 +93,7 @@ export class OpenAICompatAdapter implements LLMProvider {
     const headers: Record<string, string> = {};
     if (auth) headers['Authorization'] = auth;
 
-    const url = `${this.baseUrl()}${path}`;
+    const url = this.apiPath(path);
     const response = await fetch(url, {
       headers,
       signal: AbortSignal.timeout(20_000),
