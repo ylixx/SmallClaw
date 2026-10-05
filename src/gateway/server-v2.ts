@@ -3208,6 +3208,60 @@ interface HandleChatResult {
   toolResults?: ToolResult[];
 }
 
+/**
+ * Convert a user message into multimodal content when it carries image
+ * attachments (front-end format: "\n\n[attached file] <path>"). Image files
+ * are read, base64-encoded and sent as image_url parts — the llama.cpp
+ * backend (openai-compat) passes them through to the mmproj vision encoder.
+ * Non-image attachments and unreadable paths stay as plain text (the agent
+ * reads those via doc_inspect / read_file as before).
+ */
+function buildMultimodalUserContent(rawMessage: string, workspacePath: string): string | any[] {
+  const markerRe = /\[attached file\]\s+([^\n]+)/g;
+  const attached: string[] = [];
+  const text = rawMessage.replace(markerRe, (_, p: string) => {
+    attached.push(String(p || '').trim());
+    return '';
+  }).trim();
+
+  const IMAGE_EXT = /\.(png|jpe?g|gif|webp|bmp)$/i;
+  const MAX_IMAGES = 3;
+  const MAX_BYTES = 8 * 1024 * 1024;
+  const wsNorm = String(workspacePath || '').toLowerCase().replace(/[\\/]+$/, '');
+
+  const imageParts: any[] = [];
+  for (const rawPath of attached.slice(0, MAX_IMAGES)) {
+    if (!rawPath) continue;
+    // Relative paths must stay inside the workspace (path-escape guard).
+    if (!path.isAbsolute(rawPath)) {
+      const resolved = path.resolve(workspacePath || '', rawPath);
+      if (
+        wsNorm &&
+        resolved.toLowerCase() !== wsNorm &&
+        !resolved.toLowerCase().startsWith(wsNorm + path.sep)
+      ) continue;
+    }
+    if (!IMAGE_EXT.test(rawPath)) continue; // non-image attachment -> keep as text
+    const candidate = path.isAbsolute(rawPath) ? rawPath : path.join(workspacePath || '', rawPath);
+    let buf: Buffer;
+    try {
+      buf = fs.readFileSync(candidate);
+    } catch { continue; }
+    if (!buf.length || buf.length > MAX_BYTES) continue;
+    const ext = path.extname(candidate).toLowerCase().replace(/^\./, '');
+    const mime = ext === 'jpg' ? 'jpeg' : ext;
+    imageParts.push({
+      type: 'image_url',
+      image_url: { url: `data:image/${mime};base64,${buf.toString('base64')}` },
+    });
+  }
+
+  if (!imageParts.length) return text;
+  const parts: any[] = [{ type: 'text', text: text || '请描述这张图片。' }];
+  parts.push(...imageParts);
+  return parts;
+}
+
 async function handleChat(
   message: string,
   sessionId: string,
@@ -3621,7 +3675,7 @@ async function handleChat(
   for (const msg of history) {
     messages.push({ role: msg.role === 'user' ? 'user' : 'assistant', content: msg.content });
   }
-  messages.push({ role: 'user', content: message });
+  messages.push({ role: 'user', content: buildMultimodalUserContent(message, workspacePath) });
 
   const replaceCurrentUserPromptWithAdvisorObjective = (objective: string): boolean => {
     const objectiveText = String(objective || '').trim();
@@ -3629,7 +3683,11 @@ async function handleChat(
     for (let i = messages.length - 1; i >= 0; i--) {
       const msg = messages[i];
       if (msg?.role !== 'user') continue;
-      if (String(msg?.content || '') !== message) continue;
+      // content may be a ContentPart[] when the message carried images
+      const msgText = Array.isArray(msg?.content)
+        ? msg.content.filter((p: any) => p?.type === 'text').map((p: any) => String(p.text || '')).join('\n')
+        : String(msg?.content || '');
+      if (msgText !== message) continue;
       messages.splice(i, 1);
       break;
     }
