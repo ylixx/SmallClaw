@@ -2300,8 +2300,13 @@ async function executeToolImpl(name: string, args: any, workspacePath: string, s
         // Verify the target file exists BEFORE launching the GUI. A bad path
         // (typo, wrong drive, wrong join) must never reach Word/Excel as a
         // popup error - return a helpful error the agent can self-correct from.
+        // Remember the workspace root: relative paths must resolve against it
+        // when the command actually runs (exec cwd), not just during the
+        // existence check. Otherwise `start "" "report.xlsx"` silently fails
+        // when the gateway's own cwd is not the workspace.
+        const wsRoot = getConfig().getWorkspacePath();
+
         if (targetFile) {
-          const wsRoot = getConfig().getWorkspacePath();
           const absolute = path.isAbsolute(targetFile) ? targetFile : path.join(wsRoot, targetFile);
           if (!fs.existsSync(absolute)) {
             let docs: string[] = [];
@@ -2324,7 +2329,7 @@ async function executeToolImpl(name: string, args: any, workspacePath: string, s
 
         try {
           const { exec } = await import('child_process');
-          exec(execCmd);
+          exec(execCmd, { cwd: wsRoot });
           return { name, args, result: `Executed: ${execCmd}`, error: false };
         } catch (err: any) {
           return { name, args, result: `Failed: ${err.message}`, error: true };

@@ -57,6 +57,12 @@ describe('open file with default app (start <file> / open <file>)', () => {
     expect(resolveRunCommand('open deck.pptx').execCmd).toBe('start "" "deck.pptx"');
     expect(resolveRunCommand('start manual.pdf').execCmd).toBe('start "" "manual.pdf"');
   });
+  it('excel / powerpoint launch Office apps with files', () => {
+    expect(resolveRunCommand('excel FULLPLAN.xlsx').execCmd).toBe('start excel "FULLPLAN.xlsx"');
+    expect(resolveRunCommand('excel').execCmd).toBe('start excel');
+    expect(resolveRunCommand('powerpoint new-deck.pptx').execCmd).toBe('start powerpnt "new-deck.pptx"');
+    expect(resolveRunCommand('powerpnt').execCmd).toBe('start powerpnt');
+  });
   it('rejects shell metacharacters in the target', () => {
     expect(resolveRunCommand('start a&calc.exe').execCmd).toBe('');
     expect(resolveRunCommand('open x|cmd').execCmd).toBe('');

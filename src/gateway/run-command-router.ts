@@ -28,6 +28,9 @@ export const SAFE_COMMANDS: Record<string, string> = isWindows
       'powershell': 'start powershell',
       'word': 'start winword',
       'winword': 'start winword',
+      'excel': 'start excel',
+      'powerpoint': 'start powerpnt',
+      'powerpnt': 'start powerpnt',
     }
   : isMac
     ? {
@@ -64,7 +67,7 @@ export const BLOCKED_PATTERNS = ['del ', 'rm ', 'format', 'shutdown', 'restart',
 // shell binary is equivalent to arbitrary code execution. Browsers are excluded
 // too - they have their own dedicated URL branch in resolveRunCommand.
 export const ARG_SAFE_COMMANDS: ReadonlySet<string> = isWindows
-  ? new Set(['notepad', 'code', 'explorer', 'word', 'winword'])
+  ? new Set(['notepad', 'code', 'explorer', 'word', 'winword', 'excel', 'powerpoint', 'powerpnt'])
   : new Set(['notepad', 'code']);
 
 export function quoteShellArg(value: string): string {
