@@ -446,8 +446,33 @@ export interface LMStudioProviderConfig  { endpoint: string; model: string; api_
 export interface OpenAIProviderConfig    { api_key: string;  model: string; }
 export interface OpenAICodexProviderConfig { model: string; } // token managed by auth/openai-oauth.ts
 
+/**
+ * llama.cpp server launch parameters for a model preset.
+ * Only used when a preset's provider is 'llama_cpp' — switching to such a
+ * preset restarts llama-server with these settings (model load takes ~30-60s).
+ */
+export interface ModelPresetServer {
+  model_path: string;      // absolute path to the *.gguf model file
+  mmproj_path?: string;    // optional multimodal projector (*.gguf)
+  alias?: string;          // model alias exposed by llama-server
+  ngl?: number;            // GPU layers offloaded (default 99)
+  ctx_size?: number;       // context size (default 49152)
+}
+
+/** A saved model configuration the user can switch to with one click. */
+export interface ModelPreset {
+  id: string;              // stable slug (e.g. "qwen9b-vision")
+  name: string;            // display name
+  provider: ProviderID;
+  providers: LLMConfig['providers'];
+  server?: ModelPresetServer; // required when provider === 'llama_cpp'
+  builtin?: boolean;       // built-in presets cannot be deleted
+}
+
 export interface LLMConfig {
   provider: ProviderID;
+  active_preset?: string;  // id of the currently active preset (if any)
+  presets?: Record<string, ModelPreset>;
   providers: {
     ollama?:       OllamaProviderConfig;
     llama_cpp?:    LlamaCppProviderConfig;

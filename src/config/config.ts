@@ -113,6 +113,44 @@ export const DEFAULT_CONFIG: SmallClawConfig = {
         model: process.env.CODEX_MODEL ?? 'gpt-5.3-codex',
       },
     },
+    // Saved model presets the user can switch between with one click.
+    // loadConfig deep-merges these with config.json's llm.presets.
+    active_preset: 'qwen9b-vision',
+    presets: {
+      'qwen9b-vision': {
+        id: 'qwen9b-vision',
+        name: '9B 视觉版 (llama.cpp)',
+        provider: 'llama_cpp',
+        providers: {
+          llama_cpp: {
+            endpoint: process.env.LLAMA_CPP_ENDPOINT ?? 'http://localhost:8080',
+            model:    process.env.LLAMA_CPP_MODEL    ?? 'Qwen3.8-9B-heretic-uncensored.Q4_K_M',
+          },
+        },
+        server: {
+          model_path:  process.env.LLAMA_CPP_MODEL_PATH
+            ?? 'D:\\models\\Qwen3.8-9B-heretic-uncensored.Q4_K_M\\Qwen3.8-9B-heretic-uncensored.Q4_K_M.gguf',
+          mmproj_path: process.env.LLAMA_CPP_MMPROJ_PATH
+            ?? 'D:\\models\\Qwen3.8-9B-heretic-uncensored.Q4_K_M\\mmproj-Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-BF16.gguf',
+          alias:     'qwen3.8-9b',
+          ngl:       99,
+          ctx_size:  49152,
+        },
+        builtin: true,
+      },
+      'qwen3-4b': {
+        id: 'qwen3-4b',
+        name: '4B 轻量版 (Ollama)',
+        provider: 'ollama',
+        providers: {
+          ollama: {
+            endpoint: process.env.OLLAMA_HOST ?? 'http://localhost:11434',
+            model:    'qwen3:4b',
+          },
+        },
+        builtin: true,
+      },
+    },
   } as any,
   models: {
     primary: 'qwen3:4b',
@@ -385,6 +423,11 @@ export class ConfigManager {
               providers: {
                 ...(DEFAULT_CONFIG.llm as any)?.providers,
                 ...loaded.llm.providers,
+              },
+              // Keep built-in presets even if config.json no longer lists them.
+              presets: {
+                ...(DEFAULT_CONFIG.llm as any)?.presets,
+                ...(loaded.llm as any)?.presets,
               },
             }
           : DEFAULT_CONFIG.llm;

@@ -31,6 +31,7 @@ import { hookBus } from './hooks';
 import { loadWorkspaceHooks } from './hook-loader';
 import { runBootMd } from './boot';
 import { resolveRunCommand, suggestRunCommandFix, SAFE_COMMANDS, ARG_SAFE_COMMANDS } from './run-command-router';
+import { LlamaServerManager } from './llama-server-manager';
 import { TaskRunner, runTask, TaskTool, TaskState } from './task-runner';
 import { setupErrorResponseEndpoint } from './error-response-endpoint-integrated';
 import { initCredentialHandler, getCredentialHandler } from '../security/credential-handler';
@@ -3216,8 +3217,36 @@ interface HandleChatResult {
  * Non-image attachments and unreadable paths stay as plain text (the agent
  * reads those via doc_inspect / read_file as before).
  */
-function buildMultimodalUserContent(rawMessage: string, workspacePath: string): string | any[] {
-  const markerRe = /\[attached file\]\s+([^\n]+)/g;
+/**
+ * One-shot, per-session nudge: if the user has multiple model presets and the
+ * current request looks heavy (large accumulated context or bulk-task wording),
+ * send an SSE info hint pointing at the preset switcher. Never throws.
+ */
+const modelSwitchHintedSessions = new Set<string>();
+function maybeSuggestModelSwitch(
+  sessionId: string,
+  message: string,
+  history: Array<{ role: string; content: any }>,
+  sendSSE: (event: string, data: any) => void,
+): void {
+  try {
+    const cfg = getConfig().getConfig() as any;
+    const presets = Object.values(cfg?.llm?.presets || {});
+    if (presets.length < 2) return;
+    if (modelSwitchHintedSessions.has(sessionId)) return;
+    const approxChars = String(message || '').length
+      + (history || []).reduce((n: number, h) => n + String(h?.content || '').length, 0);
+    const heavyWording = /整个项目|全部文件|整个工作区|大规模|批量|分析所有|全量|超长|几万字|几百个文件|几千行/i.test(String(message || ''));
+    if (approxChars > 18000 || heavyWording) {
+      modelSwitchHintedSessions.add(sessionId);
+      sendSSE('info', {
+        message: '当前请求上下文较大或较复杂。若回答质量不足，可在「设置 → 模型档案」一键切换到更强模型。',
+      });
+    }
+  } catch { /* never break the turn */ }
+}
+
+function buildMultimodalUserContent(rawMessage: string, workspacePath: string): string | any[] {  const markerRe = /\[attached file\]\s+([^\n]+)/g;
   const attached: string[] = [];
   const text = rawMessage.replace(markerRe, (_, p: string) => {
     attached.push(String(p || '').trim());
@@ -3676,6 +3705,11 @@ async function handleChat(
     messages.push({ role: msg.role === 'user' ? 'user' : 'assistant', content: msg.content });
   }
   messages.push({ role: 'user', content: buildMultimodalUserContent(message, workspacePath) });
+
+  // ── Lightweight model-switch suggestion ──────────────────────────────────
+  // If the request is heavy (large context / obvious bulk-task wording) and
+  // the user has more than one model preset, nudge them once per session.
+  maybeSuggestModelSwitch(sessionId, message, history, sendSSE);
 
   const replaceCurrentUserPromptWithAdvisorObjective = (objective: string): boolean => {
     const objectiveText = String(objective || '').trim();
@@ -8828,6 +8862,137 @@ app.post('/api/models/test', async (req, res) => {
     res.json({ success: ok, models, error: ok ? undefined : 'Could not connect' });
   } catch (err: any) {
     res.json({ success: false, models: [], error: err.message });
+  }
+});
+
+// ─── Model presets (multi-model switching) ──────────────────────────────────────
+
+/** The masked value the UI shows for secrets — treated as "unchanged" on save. */
+const PRESET_MASK = '••••••••';
+
+function getPresetsState(): { llm: any; presets: Record<string, any>; active: string } {
+  const cfg = getConfig().getConfig() as any;
+  const llm = cfg.llm || {};
+  return { llm, presets: llm.presets || {}, active: String(llm.active_preset || '') };
+}
+
+function presetSummary(preset: any, active: boolean): any {
+  const prov = preset?.providers?.[preset?.provider] || {};
+  const out: any = {
+    id: preset?.id,
+    name: preset?.name,
+    provider: preset?.provider,
+    model: String(prov?.model || ''),
+    endpoint: String(prov?.endpoint || ''),
+    active,
+    builtin: !!preset?.builtin,
+  };
+  if (preset?.provider === 'llama_cpp' && preset?.server) {
+    out.server = {
+      model_path: preset.server.model_path,
+      mmproj_path: preset.server.mmproj_path || '',
+      alias: preset.server.alias || '',
+      ngl: preset.server.ngl ?? 99,
+      ctx_size: preset.server.ctx_size ?? 49152,
+    };
+  }
+  return out;
+}
+
+/** Strip masked secrets so they never overwrite real keys on save. */
+function sanitizePresetForSave(preset: any): any {
+  const copy = JSON.parse(JSON.stringify(preset || {}));
+  const prov = copy.providers?.[copy.provider];
+  if (prov && typeof prov === 'object') {
+    for (const k of Object.keys(prov)) {
+      if (SENSITIVE_KEY_PATTERNS.test(k) && prov[k] === PRESET_MASK) delete prov[k];
+    }
+  }
+  return copy;
+}
+
+// GET /api/models/presets — list all presets + the active one
+app.get('/api/models/presets', (_req, res) => {
+  const { presets, active } = getPresetsState();
+  const list = Object.values(presets).map((p: any) => presetSummary(p, p?.id === active));
+  res.json({ success: true, presets: list, active_preset: active });
+});
+
+// POST /api/models/presets — create or update a preset
+app.post('/api/models/presets', (req, res) => {
+  try {
+    const raw = sanitizePresetForSave(req.body?.preset);
+    if (!raw || typeof raw !== 'object') { res.status(400).json({ success: false, error: 'preset object required' }); return; }
+    const id = String(raw.id || '').trim().replace(/[^a-zA-Z0-9_-]/g, '').toLowerCase();
+    if (!id) { res.status(400).json({ success: false, error: 'preset.id required (a-z0-9_-)' }); return; }
+    if (!raw.name || !raw.provider) { res.status(400).json({ success: false, error: 'preset.name and preset.provider required' }); return; }
+
+    const { llm } = getPresetsState();
+    const presets = { ...(llm.presets || {}) };
+    const existing = presets[id] || {};
+    presets[id] = { ...existing, ...raw, id, builtin: !!existing.builtin }; // builtin flag preserved
+    const updatedLlm = { ...llm, presets };
+    getConfig().updateConfig({ llm: updatedLlm } as any);
+    res.json({ success: true, preset: presetSummary(presets[id], id === llm.active_preset) });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// DELETE /api/models/presets/:id — remove a non-builtin, non-active preset
+app.delete('/api/models/presets/:id', (req, res) => {
+  try {
+    const id = String(req.params?.id || '').trim();
+    const { llm, presets, active } = getPresetsState();
+    const target = presets[id];
+    if (!target) { res.status(404).json({ success: false, error: 'Preset not found' }); return; }
+    if (target.builtin) { res.status(400).json({ success: false, error: 'Built-in presets cannot be deleted' }); return; }
+    if (id === active) { res.status(400).json({ success: false, error: 'Switch away from the active preset before deleting it' }); return; }
+    const next = { ...presets };
+    delete next[id];
+    const updatedLlm = { ...llm, presets: next };
+    getConfig().updateConfig({ llm: updatedLlm } as any);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/models/presets/switch — activate a preset (restarts llama-server if needed)
+app.post('/api/models/presets/switch', async (req, res) => {
+  const presetId = String(req.body?.preset_id || '').trim();
+  const { llm, presets } = getPresetsState();
+  const preset = presets[presetId];
+  if (!preset) { res.status(404).json({ success: false, error: 'Preset not found' }); return; }
+
+  try {
+    // 1) Persist: switch provider + merge this preset's provider config (others untouched)
+    const mergedProviders = { ...(llm.providers || {}) };
+    for (const [k, v] of Object.entries(preset.providers || {})) mergedProviders[k] = v;
+    const updatedLlm = { ...llm, provider: preset.provider, active_preset: presetId, providers: mergedProviders };
+    // Sync models.primary — reactor uses it to detect small models (native
+    // tool-call channel on/off). Use the preset's model name so the regex works.
+    // Keep existing models.roles untouched (shallow merge would drop them).
+    const cfgNow = getConfig().getConfig() as any;
+    const primaryModel = String(preset.providers?.[preset.provider]?.model || preset.id || '');
+    getConfig().updateConfig({
+      llm: updatedLlm,
+      models: { ...(cfgNow.models || {}), primary: primaryModel },
+    } as any);
+    resetProvider();
+
+    // 2) llama.cpp presets need a server restart to load the new weights
+    if (preset.provider === 'llama_cpp') {
+      const endpoint = preset.providers?.llama_cpp?.endpoint || 'http://localhost:8080';
+      const mgr = new LlamaServerManager(endpoint);
+      const result = await mgr.switch(preset.server);
+      res.json({ success: result.ok, preset_id: presetId, restart_ms: result.restartMs, error: result.ok ? undefined : 'llama-server did not become ready in time' });
+      return;
+    }
+
+    res.json({ success: true, preset_id: presetId, restart_ms: 0 });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 

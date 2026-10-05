@@ -2922,6 +2922,61 @@
         </select>
       </div>
 
+      <!-- Model presets: save multiple models, switch with one click -->
+      <div style="border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:14px">
+        <div class="right-section-title" style="margin-bottom:4px">模型档案（一键切换）</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.6">把「后端 + 模型 + 参数」存成多套档案，点一下切换当前生效模型。切到 llama.cpp 档案会重启本地 server 加载新权重（约 30-60 秒）。</div>
+        <div id="presets-list" style="display:flex;flex-direction:column;gap:6px"></div>
+        <div id="presets-status" style="font-size:12px;color:var(--muted);margin-top:8px"></div>
+        <div style="margin-top:10px;display:flex;gap:8px">
+          <button class="btn btn-sm" onclick="openPresetEditor()" style="background:var(--brand);color:#fff;border:none">＋ 新建档案</button>
+          <button class="btn btn-sm" onclick="loadPresets()" style="background:#fff;border:1px solid var(--line);color:var(--text)">刷新</button>
+        </div>
+        <!-- Inline editor (hidden unless editing) -->
+        <div id="preset-editor" style="display:none;margin-top:12px;border:1px dashed var(--line-strong);border-radius:10px;padding:12px">
+          <div class="right-section-title" style="margin-bottom:8px" id="preset-editor-title">新建档案</div>
+          <input id="preset-id" type="hidden" />
+          <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px">档案名称</label>
+          <input id="preset-name" type="text" placeholder="例如：9B 视觉版 / 4B 轻量版" style="width:100%;border:1px solid var(--line);border-radius:10px;padding:8px;font-size:12px" />
+          <label style="display:block;font-size:12px;color:var(--muted);margin:10px 0 6px">后端</label>
+          <select id="preset-provider" class="settings-input" onchange="onPresetProviderChange()" style="font-size:13px">
+            <option value="llama_cpp">llama.cpp (local)</option>
+            <option value="ollama">Ollama (local)</option>
+            <option value="lm_studio">LM Studio (local)</option>
+            <option value="openai">OpenAI — API Key</option>
+            <option value="openai_codex">OpenAI — GPT Plus / Codex (OAuth)</option>
+          </select>
+          <label style="display:block;font-size:12px;color:var(--muted);margin:10px 0 6px">Endpoint</label>
+          <input id="preset-endpoint" type="text" placeholder="http://localhost:8080" style="width:100%;border:1px solid var(--line);border-radius:10px;padding:8px;font-size:12px;font-family:'IBM Plex Mono',monospace" />
+          <label style="display:block;font-size:12px;color:var(--muted);margin:10px 0 6px">模型名（llama.cpp 填别名，与模型路径对应）</label>
+          <input id="preset-model" type="text" placeholder="Qwen3.8-9B-heretic-uncensored.Q4_K_M" style="width:100%;border:1px solid var(--line);border-radius:10px;padding:8px;font-size:12px;font-family:'IBM Plex Mono',monospace" />
+          <div id="preset-llamacpp-fields" style="margin-top:4px">
+            <label style="display:block;font-size:12px;color:var(--muted);margin:10px 0 6px">GGUF 模型文件路径（.gguf）</label>
+            <input id="preset-model-path" type="text" placeholder="D:\models\...\model.gguf" style="width:100%;border:1px solid var(--line);border-radius:10px;padding:8px;font-size:12px;font-family:'IBM Plex Mono',monospace" />
+            <label style="display:block;font-size:12px;color:var(--muted);margin:10px 0 6px">mmproj 视觉投影路径（可选，多模态用）</label>
+            <input id="preset-mmproj-path" type="text" placeholder="D:\models\...\mmproj-*.gguf" style="width:100%;border:1px solid var(--line);border-radius:10px;padding:8px;font-size:12px;font-family:'IBM Plex Mono',monospace" />
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
+              <div>
+                <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px">上下文 (ctx)</label>
+                <input id="preset-ctx" type="number" value="49152" style="width:100%;border:1px solid var(--line);border-radius:10px;padding:8px;font-size:12px" />
+              </div>
+              <div>
+                <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px">GPU 层数 (-ngl)</label>
+                <input id="preset-ngl" type="number" value="99" style="width:100%;border:1px solid var(--line);border-radius:10px;padding:8px;font-size:12px" />
+              </div>
+            </div>
+          </div>
+          <div id="preset-openai-fields" style="display:none">
+            <label style="display:block;font-size:12px;color:var(--muted);margin:10px 0 6px">API Key（留空则保留原值）</label>
+            <input id="preset-openai-key" type="password" placeholder="sk-..." style="width:100%;border:1px solid var(--line);border-radius:10px;padding:8px;font-size:12px;font-family:'IBM Plex Mono',monospace" />
+          </div>
+          <div style="margin-top:12px;display:flex;gap:8px">
+            <button class="btn btn-sm" onclick="savePreset()" style="background:var(--brand);color:#fff;border:none">保存档案</button>
+            <button class="btn btn-sm" onclick="closePresetEditor()" style="background:#fff;border:1px solid var(--line);color:var(--text)">取消</button>
+          </div>
+        </div>
+      </div>
+
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
 
         <!-- Left col: provider-specific connection fields -->
@@ -6293,8 +6348,183 @@ async function loadModelSettings() {
 
     // Auto-load model list for list-capable providers
     if (['ollama', 'lm_studio', 'llama_cpp'].includes(prov)) await refreshProviderModels();
+
+    // Load model presets
+    await loadPresets();
   } catch (e) {
     console.warn('loadModelSettings error:', e);
+  }
+}
+
+// ─── Model presets UI ──────────────────────────────────────────────────────────
+
+let presetEditingId = null;
+
+async function loadPresets() {
+  const listEl = document.getElementById('presets-list');
+  const statusEl = document.getElementById('presets-status');
+  if (!listEl) return;
+  try {
+    const data = await api('/api/models/presets');
+    const presets = data?.presets || [];
+    const active = String(data?.active_preset || '');
+    listEl.innerHTML = presets.length ? '' : '<div style="font-size:12px;color:var(--muted)">暂无档案，点击下方「新建档案」创建。</div>';
+    presets.forEach(function (p) {
+      const card = document.createElement('div');
+      card.style.cssText = 'display:flex;align-items:center;gap:10px;border:1px solid ' + (p.active ? 'var(--brand)' : 'var(--line)') + ';border-radius:10px;padding:8px 10px;background:' + (p.active ? 'var(--bg-soft)' : 'transparent');
+      const badge = p.active
+        ? '<span style="font-size:10px;font-weight:800;color:#fff;background:var(--brand);border-radius:6px;padding:2px 6px">当前</span>'
+        : '';
+      const builtinTag = p.builtin ? '<span style="font-size:10px;color:var(--muted)">内置</span>' : '';
+      card.innerHTML =
+        '<div style="flex:1;min-width:0">' +
+          '<div style="font-size:13px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:6px">' + escHtml(p.name) + ' ' + badge + ' ' + builtinTag + '</div>' +
+          '<div style="font-size:11px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(p.provider) + (p.model ? ' · ' + escHtml(p.model) : '') + (p.server ? ' · ctx ' + p.server.ctx_size : '') + '</div>' +
+        '</div>' +
+        '<div style="display:flex;gap:6px;flex-shrink:0">' +
+          (p.active ? '' : '<button class="btn btn-sm" onclick="switchPreset(\'' + escHtml(p.id) + '\')" style="background:var(--brand);color:#fff;border:none">切换</button>') +
+          '<button class="btn btn-sm" onclick="openPresetEditor(\'' + escHtml(p.id) + '\')" style="background:#fff;border:1px solid var(--line);color:var(--text)">编辑</button>' +
+          (p.builtin ? '' : '<button class="btn btn-sm" onclick="deletePreset(\'' + escHtml(p.id) + '\')" style="background:#fff;border:1px solid var(--err);color:var(--err)">删除</button>') +
+        '</div>';
+      listEl.appendChild(card);
+    });
+    if (statusEl) statusEl.textContent = '';
+  } catch (e) {
+    if (statusEl) statusEl.textContent = '加载档案失败: ' + (e.message || e);
+  }
+}
+
+async function switchPreset(id) {
+  const statusEl = document.getElementById('presets-status');
+  if (!statusEl) return;
+  statusEl.textContent = '正在切换模型，请稍候…（llama.cpp 需重启加载约 30-60 秒）';
+  statusEl.style.color = 'var(--warn)';
+  try {
+    const data = await api('/api/models/presets/switch', { method: 'POST', body: JSON.stringify({ preset_id: id }) });
+    if (data && data.success) {
+      statusEl.style.color = 'var(--ok)';
+      statusEl.textContent = data.restart_ms ? ('切换成功，llama-server 重启耗时 ' + Math.round(data.restart_ms / 1000) + ' 秒') : '切换成功';
+      await loadPresets();
+    } else {
+      statusEl.style.color = 'var(--err)';
+      statusEl.textContent = '切换失败: ' + (data?.error || '未知错误');
+    }
+  } catch (e) {
+    statusEl.style.color = 'var(--err)';
+    statusEl.textContent = '切换失败: ' + (e.message || e);
+  }
+}
+
+function onPresetProviderChange() {
+  const p = document.getElementById('preset-provider').value;
+  const lf = document.getElementById('preset-llamacpp-fields');
+  const of = document.getElementById('preset-openai-fields');
+  if (lf) lf.style.display = p === 'llama_cpp' ? 'block' : 'none';
+  if (of) of.style.display = p === 'openai' ? 'block' : 'none';
+}
+
+function openPresetEditor(id) {
+  const editor = document.getElementById('preset-editor');
+  const title = document.getElementById('preset-editor-title');
+  if (!editor) return;
+  presetEditingId = id || null;
+  editor.style.display = 'block';
+  if (title) title.textContent = id ? '编辑档案' : '新建档案';
+  const setV = (elId, val) => { const el = document.getElementById(elId); if (el) el.value = val || ''; };
+  setV('preset-id', id || '');
+  if (!id) {
+    setV('preset-name', '');
+    setV('preset-endpoint', 'http://localhost:8080');
+    setV('preset-model', '');
+    setV('preset-model-path', '');
+    setV('preset-mmproj-path', '');
+    setV('preset-ctx', '49152');
+    setV('preset-ngl', '99');
+    setV('preset-openai-key', '');
+    const sel = document.getElementById('preset-provider');
+    if (sel) sel.value = 'llama_cpp';
+    onPresetProviderChange();
+    return;
+  }
+  // Load preset data for editing
+  api('/api/models/presets').then(function (data) {
+    const p = (data?.presets || []).find(x => String(x.id) === id);
+    if (!p) return;
+    setV('preset-name', p.name);
+    const psel = document.getElementById('preset-provider');
+    if (psel) psel.value = p.provider;
+    onPresetProviderChange();
+    setV('preset-endpoint', p.endpoint);
+    setV('preset-model', p.model);
+    if (p.server) {
+      setV('preset-model-path', p.server.model_path);
+      setV('preset-mmproj-path', p.server.mmproj_path);
+      setV('preset-ctx', p.server.ctx_size);
+      setV('preset-ngl', p.server.ngl);
+    }
+  });
+}
+
+function closePresetEditor() {
+  const editor = document.getElementById('preset-editor');
+  if (editor) editor.style.display = 'none';
+  presetEditingId = null;
+}
+
+async function savePreset() {
+  const statusEl = document.getElementById('presets-status');
+  const gv = id => { const el = document.getElementById(id); return el ? String(el.value || '').trim() : ''; };
+  const provider = gv('preset-provider');
+  if (!gv('preset-name')) { if (statusEl) { statusEl.style.color = 'var(--err)'; statusEl.textContent = '请填写档案名称'; } return; }
+  const id = presetEditingId || gv('preset-name').replace(/[^a-zA-Z0-9_-]/g, '').toLowerCase() || ('preset-' + Date.now());
+  const preset = {
+    id: id,
+    name: gv('preset-name'),
+    provider: provider,
+    providers: {},
+  };
+  preset.providers[provider] = { endpoint: gv('preset-endpoint'), model: gv('preset-model') };
+  if (provider === 'openai') {
+    const key = gv('preset-openai-key');
+    if (key) preset.providers[provider].api_key = key;
+  }
+  if (provider === 'llama_cpp') {
+    if (!gv('preset-model-path')) { if (statusEl) { statusEl.style.color = 'var(--err)'; statusEl.textContent = 'llama.cpp 档案必须填写 GGUF 模型文件路径'; } return; }
+    preset.server = {
+      model_path: gv('preset-model-path'),
+      mmproj_path: gv('preset-mmproj-path') || undefined,
+      ngl: Number(gv('preset-ngl')) || 99,
+      ctx_size: Number(gv('preset-ctx')) || 49152,
+    };
+    const alias = gv('preset-model');
+    if (alias) preset.server.alias = alias;
+  }
+  try {
+    const data = await api('/api/models/presets', { method: 'POST', body: JSON.stringify({ preset }) });
+    if (data && data.success) {
+      if (statusEl) { statusEl.style.color = 'var(--ok)'; statusEl.textContent = '档案已保存'; }
+      closePresetEditor();
+      await loadPresets();
+    } else {
+      if (statusEl) { statusEl.style.color = 'var(--err)'; statusEl.textContent = '保存失败: ' + (data?.error || '未知错误'); }
+    }
+  } catch (e) {
+    if (statusEl) { statusEl.style.color = 'var(--err)'; statusEl.textContent = '保存失败: ' + (e.message || e); }
+  }
+}
+
+async function deletePreset(id) {
+  const statusEl = document.getElementById('presets-status');
+  try {
+    const data = await api('/api/models/presets/' + encodeURIComponent(id), { method: 'DELETE' });
+    if (data && data.success) {
+      if (statusEl) { statusEl.style.color = 'var(--ok)'; statusEl.textContent = '档案已删除'; }
+      await loadPresets();
+    } else {
+      if (statusEl) { statusEl.style.color = 'var(--err)'; statusEl.textContent = '删除失败: ' + (data?.error || '未知错误'); }
+    }
+  } catch (e) {
+    if (statusEl) { statusEl.style.color = 'var(--err)'; statusEl.textContent = '删除失败: ' + (e.message || e); }
   }
 }
 
@@ -7199,15 +7429,13 @@ async function saveSettings() {
     natural_language_tool_router: document.getElementById('settings-nl-tool-router').checked,
     retrieval_mode: document.getElementById('settings-retrieval-mode').value,
   };
-  const primaryModel = (document.getElementById('settings-primary-model') || {}).value || '';
+  // NOTE: we deliberately do NOT send primary_model / role_models here anymore.
+  // Saving the general settings panel used to overwrite models.primary and all
+  // three role models with a single value. Model switching now happens through
+  // model presets (/api/models/presets/switch), which updates models.primary
+  // consistently. Only the Ollama endpoint is synced from this panel.
   const modelPayload = {
     ollama_endpoint: (document.getElementById('settings-ollama-endpoint') || {}).value || 'http://localhost:11434',
-    primary_model: primaryModel,
-    role_models: {
-      manager: primaryModel,
-      executor: primaryModel,
-      verifier: primaryModel,
-    }
   };
   const providerPayload = buildProviderPayload();
   try {
