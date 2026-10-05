@@ -6471,7 +6471,7 @@ async function onChatModelSwitch(sel) {
         q.style.display = 'inline';
         setTimeout(function () { q.style.display = 'none'; }, 6000);
       }
-      await refreshStatus();
+      await checkStatus();
       await refreshChatModelSwitch();
     } else {
       alert('切换失败: ' + (data?.error || '未知错误'));
