@@ -2313,6 +2313,7 @@
         <select id="chat-model-switch" onchange="onChatModelSwitch(this)" title="随时切换模型" style="background:transparent;border:1px solid var(--line);border-radius:8px;color:var(--text);font-size:12px;padding:2px 6px;cursor:pointer;max-width:280px"></select>
         <span style="color:var(--muted)">via</span>
         <span id="chat-provider-name">SmallClaw</span>
+        <span id="chat-switch-err" style="display:none;color:var(--err);font-size:12px;font-weight:700"></span>
         <span id="queued-prompts-indicator" style="display:none;margin-left:8px;color:var(--brand);font-weight:700"></span>
       </div>
     </div>
@@ -6463,6 +6464,10 @@ async function onChatModelSwitch(sel) {
   if (!id || sel.disabled) return;
   sel.disabled = true;
   const q = document.getElementById('queued-prompts-indicator');
+  const errEl = document.getElementById('chat-switch-err');
+  const showErr = function (msg) {
+    if (errEl) { errEl.textContent = msg; errEl.style.display = 'inline'; setTimeout(function () { errEl.style.display = 'none'; }, 8000); }
+  };
   try {
     const data = await api('/api/models/presets/switch', { method: 'POST', body: JSON.stringify({ preset_id: id }) });
     if (data && data.success) {
@@ -6474,11 +6479,11 @@ async function onChatModelSwitch(sel) {
       await checkStatus();
       await refreshChatModelSwitch();
     } else {
-      alert('切换失败: ' + (data?.error || '未知错误'));
+      showErr('切换失败：' + (data?.error || '未知错误') + '（仍在使用当前模型）');
       await refreshChatModelSwitch();
     }
   } catch (e) {
-    alert('切换失败: ' + (e.message || e));
+    showErr('切换失败：' + (e.message || e) + '（仍在使用当前模型）');
     await refreshChatModelSwitch();
   } finally {
     sel.disabled = false;
