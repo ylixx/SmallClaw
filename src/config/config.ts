@@ -462,6 +462,16 @@ export class ConfigManager {
 
   public updateConfig(updates: Partial<SmallClawConfig>): void {
     this.config = { ...this.config, ...updates };
+    // Model presets are managed exclusively through /api/models/presets*.
+    // A generic settings save (e.g. provider panel) must NEVER wipe them:
+    // preserve presets when an update touches llm but does not carry them.
+    // (active_preset is owned by the callers — switch sets it, the settings
+    // panel clears it when the saved provider diverges from the preset.)
+    const upd = updates as any;
+    const curLlm = (this.config as any).llm;
+    if (upd?.llm && typeof upd.llm === 'object' && curLlm?.presets && !upd.llm.presets) {
+      (this.config as any).llm = { ...upd.llm, presets: curLlm.presets };
+    }
     this.saveConfig();
   }
 

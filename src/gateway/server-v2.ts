@@ -8844,7 +8844,21 @@ app.post('/api/settings/provider', (req, res) => {
     const llm = sanitizeLLMConfig(req.body?.llm);
     if (!llm?.provider) { res.status(400).json({ success: false, error: 'Missing llm.provider' }); return; }
     const configManager = getConfig();
-    configManager.updateConfig({ llm } as any);
+    const current = (configManager.getConfig() as any)?.llm || {};
+    // Merge with the current llm node and explicitly keep presets: the generic
+    // settings panel does not manage model presets and must not clobber them
+    // (config-level updateConfig also guards this).
+    const merged = { ...current, ...llm, presets: current.presets };
+    // Consistency: if the active preset's provider no longer matches the newly
+    // saved provider, the user has manually diverged from the preset — clear
+    // active_preset (switching via a preset restores both fields together).
+    let activePreset = String(current.active_preset || '');
+    if (activePreset) {
+      const ap = current.presets?.[activePreset];
+      if (!ap || ap.provider !== merged.provider) activePreset = '';
+    }
+    merged.active_preset = activePreset;
+    configManager.updateConfig({ llm: merged } as any);
     resetProvider();
     res.json({ success: true });
   } catch (err: any) {
