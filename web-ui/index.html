@@ -2309,7 +2309,10 @@
         </button>
       </div>
       <div class="chat-hint">
-        Chatting with <span id="chat-model-name">your model</span> via <span id="chat-provider-name">SmallClaw</span>.
+        <span style="color:var(--muted)">Chatting with</span>
+        <select id="chat-model-switch" onchange="onChatModelSwitch(this)" title="随时切换模型" style="background:transparent;border:1px solid var(--line);border-radius:8px;color:var(--text);font-size:12px;padding:2px 6px;cursor:pointer;max-width:280px"></select>
+        <span style="color:var(--muted)">via</span>
+        <span id="chat-provider-name">SmallClaw</span>
         <span id="queued-prompts-indicator" style="display:none;margin-left:8px;color:var(--brand);font-weight:700"></span>
       </div>
     </div>
@@ -6358,6 +6361,9 @@ async function loadModelSettings() {
 
     // Load model presets
     await loadPresets();
+
+    // Populate the always-visible chat-area model switcher
+    await refreshChatModelSwitch();
   } catch (e) {
     console.warn('loadModelSettings error:', e);
   }
@@ -6396,6 +6402,8 @@ async function loadPresets() {
       listEl.appendChild(card);
     });
     if (statusEl) statusEl.textContent = '';
+    // Keep the chat-area switcher in sync with the preset list
+    refreshChatModelSwitch();
   } catch (e) {
     if (statusEl) statusEl.textContent = '加载档案失败: ' + (e.message || e);
   }
@@ -6419,6 +6427,61 @@ async function switchPreset(id) {
   } catch (e) {
     statusEl.style.color = 'var(--err)';
     statusEl.textContent = '切换失败: ' + (e.message || e);
+  }
+}
+
+// --- Chat-area model switcher ----------------------------------------------
+// Lets the user change the active model preset without leaving the chat view.
+
+async function refreshChatModelSwitch() {
+  const sel = document.getElementById('chat-model-switch');
+  if (!sel) return;
+  try {
+    const data = await api('/api/models/presets');
+    const presets = data?.presets || [];
+    const active = String(data?.active_preset || '');
+    const prev = sel.value;
+    sel.innerHTML = '';
+    presets.forEach(function (p) {
+      const opt = document.createElement('option');
+      opt.value = String(p.id);
+      opt.textContent = p.name + (p.active ? '（当前）' : '');
+      if (String(p.id) === active) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    if (!presets.length) {
+      const opt = document.createElement('option');
+      opt.value = '';
+      opt.textContent = '暂无档案（到设置添加）';
+      sel.appendChild(opt);
+    }
+  } catch (e) { /* keep previous options */ }
+}
+
+async function onChatModelSwitch(sel) {
+  const id = sel.value;
+  if (!id || sel.disabled) return;
+  sel.disabled = true;
+  const q = document.getElementById('queued-prompts-indicator');
+  try {
+    const data = await api('/api/models/presets/switch', { method: 'POST', body: JSON.stringify({ preset_id: id }) });
+    if (data && data.success) {
+      if (q) {
+        q.textContent = data.restart_ms ? ('已切换（llama-server 重启 ' + Math.round(data.restart_ms / 1000) + 's）') : '已切换 ✓';
+        q.style.display = 'inline';
+        setTimeout(function () { q.style.display = 'none'; }, 6000);
+      }
+      await refreshStatus();
+      await refreshChatModelSwitch();
+    } else {
+      alert('切换失败: ' + (data?.error || '未知错误'));
+      await refreshChatModelSwitch();
+    }
+  } catch (e) {
+    alert('切换失败: ' + (e.message || e));
+    await refreshChatModelSwitch();
+  } finally {
+    sel.disabled = false;
   }
 }
 
@@ -7856,7 +7919,8 @@ async function checkStatus() {
     const rm = document.getElementById('r-model');
     if (rm) rm.textContent = modelName;
     document.getElementById('current-model').textContent = modelName;
-    document.getElementById('chat-model-name').textContent = modelName;
+    const cmn = document.getElementById('chat-model-name');
+    if (cmn) cmn.textContent = modelName;
     const badge = document.getElementById('current-provider-badge');
     if (badge) badge.textContent = isCloud ? providerLabel.toUpperCase() : '';
     const cpn = document.getElementById('chat-provider-name');
@@ -9052,6 +9116,7 @@ setupProcessAndRightScrollTracking();
 updateHeartbeatUI();
 connectWS();
 refreshAll();
+refreshChatModelSwitch(); // fill the always-visible chat-area model switcher
 updateQuickModeUI();
 updateQueuedPromptUI();
 setInterval(checkStatus, 10000);
