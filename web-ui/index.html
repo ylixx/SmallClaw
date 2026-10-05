@@ -6437,7 +6437,7 @@ function onPresetProviderChange() {
 function resetPresetDetect() {
   const listEl = document.getElementById('preset-model-list');
   const statusEl = document.getElementById('preset-detect-status');
-  if (listEl) { listEl.style.display = 'none'; listEl.innerHTML = '<div style="font-size:11px;color:var(--muted);margin-bottom:6px">勾选模型 → 自动填入模型名</div>'; }
+  if (listEl) { listEl.style.display = 'none'; listEl.innerHTML = '<div style="font-size:11px;color:var(--muted);margin-bottom:6px">勾选模型（可多选）→ 填入模型名，保存时每个勾选模型创建独立档案</div>'; }
   if (statusEl) { statusEl.style.color = 'var(--muted)'; statusEl.textContent = ''; }
 }
 
@@ -6463,10 +6463,17 @@ async function presetDetectModels() {
       if (statusEl) { statusEl.style.color = 'var(--err)'; statusEl.textContent = data?.error || '未获取到模型列表'; }
       return;
     }
-    if (statusEl) { statusEl.style.color = 'var(--ok)'; statusEl.textContent = '找到 ' + data.models.length + ' 个模型，勾选自动填入模型名'; }
+    if (statusEl) { statusEl.style.color = 'var(--ok)'; statusEl.textContent = '找到 ' + data.models.length + ' 个模型，可勾选多个（保存时每个勾选模型创建独立档案）'; }
     if (listEl) {
       listEl.style.display = 'block';
-      listEl.innerHTML = '<div style="font-size:11px;color:var(--muted);margin-bottom:6px">勾选模型 → 自动填入模型名</div>';
+      listEl.innerHTML = '<div style="font-size:11px;color:var(--muted);margin-bottom:6px">勾选模型（可多选）→ 填入模型名，保存时每个勾选模型创建独立档案</div>';
+      const refreshModelInput = function () {
+        const modelInput = document.getElementById('preset-model');
+        if (!modelInput) return;
+        const picked = [];
+        listEl.querySelectorAll('.preset-model-check').forEach(function (c) { if (c.checked) picked.push(c.value); });
+        modelInput.value = picked.join(', ');
+      };
       data.models.forEach(function (m) {
         const id = String(m.id || m.name || '');
         if (!id) return;
@@ -6474,12 +6481,7 @@ async function presetDetectModels() {
         row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:4px 6px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--text)';
         row.innerHTML = '<input type="checkbox" class="preset-model-check" value="' + escHtml(id) + '">' + escHtml(id);
         const cb = row.querySelector('input');
-        cb.addEventListener('change', function (ev) {
-          const modelInput = document.getElementById('preset-model');
-          if (!modelInput) return;
-          if (ev.target.checked) modelInput.value = ev.target.value;
-          else if (modelInput.value === ev.target.value) modelInput.value = '';
-        });
+        cb.addEventListener('change', refreshModelInput);
         listEl.appendChild(row);
       });
     }
@@ -6542,38 +6544,49 @@ async function savePreset() {
   const gv = id => { const el = document.getElementById(id); return el ? String(el.value || '').trim() : ''; };
   const provider = gv('preset-provider');
   if (!gv('preset-name')) { if (statusEl) { statusEl.style.color = 'var(--err)'; statusEl.textContent = '请填写档案名称'; } return; }
-  const id = presetEditingId || gv('preset-name').replace(/[^a-zA-Z0-9_-]/g, '').toLowerCase() || ('preset-' + Date.now());
-  const preset = {
-    id: id,
-    name: gv('preset-name'),
-    provider: provider,
-    providers: {},
-  };
-  preset.providers[provider] = { endpoint: gv('preset-endpoint'), model: gv('preset-model') };
-  if (provider === 'openai') {
-    const key = gv('preset-openai-key');
-    if (key) preset.providers[provider].api_key = key;
-  }
-  if (provider === 'llama_cpp') {
-    if (!gv('preset-model-path')) { if (statusEl) { statusEl.style.color = 'var(--err)'; statusEl.textContent = 'llama.cpp 档案必须填写 GGUF 模型文件路径'; } return; }
-    preset.server = {
-      model_path: gv('preset-model-path'),
-      mmproj_path: gv('preset-mmproj-path') || undefined,
-      ngl: Number(gv('preset-ngl')) || 99,
-      ctx_size: Number(gv('preset-ctx')) || 49152,
+  const slug = s => String(s || '').replace(/[^a-zA-Z0-9_-]/g, '').toLowerCase();
+  const shortHash = s => { let h = 0; for (const c of String(s || '')) h = (h * 31 + c.codePointAt(0)) >>> 0; return h.toString(36); };
+  // 模型名支持多选（逗号/换行分隔）：勾选多个时每个模型保存为一个独立档案
+  const rawModels = gv('preset-model').split(/[,，\n]+/).map(s => s.trim()).filter(Boolean);
+  if (!rawModels.length) { if (statusEl) { statusEl.style.color = 'var(--err)'; statusEl.textContent = '请填写模型名'; } return; }
+  const baseName = gv('preset-name');
+  const baseId = presetEditingId || slug(baseName) || ('preset-' + Date.now());
+  const presetsToSave = rawModels.map(function (m) {
+    const preset = {
+      id: rawModels.length > 1 ? (slug(baseName) || 'preset') + '-' + (slug(m) || shortHash(m)) : baseId,
+      name: rawModels.length > 1 ? baseName + ' (' + m + ')' : baseName,
+      provider: provider,
+      providers: {},
     };
-    const alias = gv('preset-model');
-    if (alias) preset.server.alias = alias;
-  }
-  try {
-    const data = await api('/api/models/presets', { method: 'POST', body: JSON.stringify({ preset }) });
-    if (data && data.success) {
-      if (statusEl) { statusEl.style.color = 'var(--ok)'; statusEl.textContent = '档案已保存'; }
-      closePresetEditor();
-      await loadPresets();
-    } else {
-      if (statusEl) { statusEl.style.color = 'var(--err)'; statusEl.textContent = '保存失败: ' + (data?.error || '未知错误'); }
+    preset.providers[provider] = { endpoint: gv('preset-endpoint'), model: m };
+    if (provider === 'openai') {
+      const key = gv('preset-openai-key');
+      if (key) preset.providers[provider].api_key = key;
     }
+    if (provider === 'llama_cpp') {
+      if (!gv('preset-model-path')) return null;
+      preset.server = {
+        model_path: gv('preset-model-path'),
+        mmproj_path: gv('preset-mmproj-path') || undefined,
+        ngl: Number(gv('preset-ngl')) || 99,
+        ctx_size: Number(gv('preset-ctx')) || 49152,
+      };
+      if (m) preset.server.alias = m;
+    }
+    return preset;
+  }).filter(Boolean);
+  if (!presetsToSave.length) { if (statusEl) { statusEl.style.color = 'var(--err)'; statusEl.textContent = 'llama.cpp 档案必须填写 GGUF 模型文件路径'; } return; }
+  try {
+    for (const p of presetsToSave) {
+      const data = await api('/api/models/presets', { method: 'POST', body: JSON.stringify({ preset: p }) });
+      if (!data || !data.success) {
+        if (statusEl) { statusEl.style.color = 'var(--err)'; statusEl.textContent = '保存失败: ' + (data?.error || '未知错误'); }
+        return;
+      }
+    }
+    if (statusEl) { statusEl.style.color = 'var(--ok)'; statusEl.textContent = '已保存 ' + presetsToSave.length + ' 个档案'; }
+    closePresetEditor();
+    await loadPresets();
   } catch (e) {
     if (statusEl) { statusEl.style.color = 'var(--err)'; statusEl.textContent = '保存失败: ' + (e.message || e); }
   }
