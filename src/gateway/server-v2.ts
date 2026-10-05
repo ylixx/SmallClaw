@@ -6720,8 +6720,12 @@ app.get('/api/artifacts', requireGatewayAuth, (req, res) => {
 });
 
 app.get('/api/status', async (_req, res) => {
-  const ollama = getOllamaClient();
-  const connected = await ollama.testConnection();
+  let connected = false;
+  try {
+    connected = await getOllamaClient().testConnection();
+  } catch {
+    connected = false; // a misconfigured provider must never crash the gateway
+  }
   const rawCfg = getConfig().getConfig() as any;
   const provider: string = rawCfg.llm?.provider || 'ollama';
   const providerCfg = rawCfg.llm?.providers?.[provider] || {};
@@ -8982,7 +8986,12 @@ app.post('/api/models/presets/switch', async (req, res) => {
   try {
     // 1) Persist: switch provider + merge this preset's provider config (others untouched)
     const mergedProviders = { ...(llm.providers || {}) };
-    for (const [k, v] of Object.entries(preset.providers || {})) mergedProviders[k] = v;
+    for (const [k, v] of Object.entries(preset.providers || {})) {
+      // Per-field merge: if the preset doesn't carry an api key, keep the one
+      // already configured (vault ref or plaintext) instead of dropping it.
+      const prev = mergedProviders[k] || {};
+      mergedProviders[k] = Object.assign({}, prev, v);
+    }
     const updatedLlm = { ...llm, provider: preset.provider, active_preset: presetId, providers: mergedProviders };
     // Sync models.primary — reactor uses it to detect small models (native
     // tool-call channel on/off). Use the preset's model name so the regex works.

@@ -135,7 +135,7 @@ function buildProvider(id: ProviderID, providers: any): LLMProvider {
       const apiKey = resolveEnvKey(cfg.api_key);
       if (!apiKey) throw new Error('OpenAI API key not configured. Add it in Settings -> Models.');
       return new OpenAICompatAdapter({
-        endpoint:   'https://api.openai.com',
+        endpoint:   cfg.endpoint || 'https://api.openai.com', // honor custom OpenAI-compatible endpoints (e.g. agnes)
         apiKey,
         providerId: 'openai',
       });
@@ -153,14 +153,22 @@ function buildProvider(id: ProviderID, providers: any): LLMProvider {
 }
 
 /**
- * Supports env-var references in config values.
- * e.g. api_key: "env:OPENAI_API_KEY" -> reads process.env.OPENAI_API_KEY
+ * Supports env-var and vault references in config values.
+ * e.g. api_key: "env:OPENAI_API_KEY" -> process.env.OPENAI_API_KEY
+ *      api_key: "vault:llm.openai.api_key" -> decrypted vault secret
  */
 function resolveEnvKey(value: string | undefined): string | undefined {
   if (!value) return undefined;
   if (value.startsWith('env:')) {
     const envName = value.slice(4);
     return process.env[envName];
+  }
+  if (value.startsWith('vault:')) {
+    try {
+      return getConfig().resolveSecret(value);
+    } catch {
+      return undefined;
+    }
   }
   return value;
 }
