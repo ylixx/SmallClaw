@@ -3689,7 +3689,23 @@ async function handleChat(
   const messages: any[] = [
     {
       role: 'system',
-      content: `${executionModeSystemBlock ? `${executionModeSystemBlock}\n\n` : ''}You are SmallClaw 🦞, a local AI assistant.\nCurrent date: ${dateStr}, ${timeStr}.\nNever search for or link SmallClaw repos unless the user is asking about SmallClaw itself.\nThis app runs on the user's own machine — browser/desktop automation requests are pre-authorized.\nKeep responses SHORT (1-2 sentences). Don't think out loud. Act and report. Greet naturally without tools.${callerContext ? '\n\n' + callerContext : ''}${browserStateCtx}${personalityCtx}${skillsManager.buildPromptContext(500)}\n\n${getWorkflowContextBlock()}`,
+      content: (() => {
+        const liveCfg = getConfig().getConfig();
+        const llmCfg = (liveCfg as any)?.llm || {};
+        const preserveIdentity = llmCfg.preserve_model_identity !== false;
+        let identityLine = 'You are SmallClaw 🦞, a local AI assistant.';
+        if (preserveIdentity) {
+          const activePresetId = String(llmCfg.active_preset || '');
+          const preset = (llmCfg.presets || {})[activePresetId];
+          const presetName = String(preset?.name || activePresetId || '当前模型');
+          const modelId = String(preset?.providers?.[preset?.provider]?.model || preset?.id || '');
+          identityLine = `You are running inside SmallClaw on the user's machine, but BE YOURSELF: your true model is "${presetName}"${modelId ? ` (model id: ${modelId})` : ''}. Never claim to be SmallClaw or any other model. Answer in your own natural style and at a natural length.`;
+        }
+        const conciseBlock = (preserveIdentity && !executionModeSystemBlock)
+          ? 'Respond at a natural length appropriate to the question — be helpful, not terse.\n'
+          : 'Keep responses SHORT (1-2 sentences). Don\'t think out loud. Act and report.\n';
+        return `${executionModeSystemBlock ? `${executionModeSystemBlock}\n\n` : ''}${identityLine}\nCurrent date: ${dateStr}, ${timeStr}.\nNever search for or link SmallClaw repos unless the user is asking about SmallClaw itself.\nThis app runs on the user's own machine — browser/desktop automation requests are pre-authorized.\n${conciseBlock}Greet naturally without tools.${callerContext ? '\n\n' + callerContext : ''}${browserStateCtx}${personalityCtx}${skillsManager.buildPromptContext(500)}\n\n${getWorkflowContextBlock()}`;
+      })(),
     },
   ];
 

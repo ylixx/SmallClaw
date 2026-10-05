@@ -90,6 +90,9 @@ export const DEFAULT_CONFIG: SmallClawConfig = {
   // Any values in config.json will override these at load time.
   llm: {
     provider: (process.env.SMALLCLAW_PROVIDER as any) ?? 'ollama',
+    // Let each active model keep its own identity and style instead of the
+    // generic "SmallClaw" persona. Set false to restore the old behavior.
+    preserve_model_identity: true,
     providers: {
       ollama: {
         endpoint: process.env.OLLAMA_HOST ?? 'http://localhost:11434',

@@ -472,6 +472,8 @@ export interface ModelPreset {
 export interface LLMConfig {
   provider: ProviderID;
   active_preset?: string;  // id of the currently active preset (if any)
+  /** Let each model answer as its true self instead of the generic SmallClaw persona (default true). */
+  preserve_model_identity?: boolean;
   presets?: Record<string, ModelPreset>;
   providers: {
     ollama?:       OllamaProviderConfig;
