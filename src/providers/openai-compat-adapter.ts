@@ -47,23 +47,39 @@ export class OpenAICompatAdapter implements LLMProvider {
   }
 
   private async post(path: string, body: object): Promise<any> {
-    const auth = await this.getAuthHeader();
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (auth) headers['Authorization'] = auth;
+    // Chat against a remote OpenAI-compatible service can occasionally stall
+    // (server-side load / cold routing). Use a generous timeout and retry once
+    // on timeouts / network errors — HTTP error responses are NOT retried.
+    const MAX_ATTEMPTS = 2;
+    let lastErr: unknown;
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      try {
+        const auth = await this.getAuthHeader();
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (auth) headers['Authorization'] = auth;
 
-    const url = `${this.baseUrl()}${path}`;
-    const response = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(120_000),
-    });
+        const url = `${this.baseUrl()}${path}`;
+        const response = await fetch(url, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(300_000),
+        });
 
-    if (!response.ok) {
-      const text = await response.text().catch(() => '');
-      throw new Error(`${this.id} API error ${response.status}: ${text.slice(0, 200)}`);
+        if (!response.ok) {
+          const text = await response.text().catch(() => '');
+          throw new Error(`${this.id} API error ${response.status}: ${text.slice(0, 200)}`);
+        }
+        return response.json();
+      } catch (err: any) {
+        lastErr = err;
+        const msg = String(err?.message || err || '');
+        const retryable = /aborted due to timeout|fetch failed|ECONNRESET|ECONNREFUSED|ENOTFOUND|ETIMEDOUT|socket hang up|temporary redirect/i.test(msg);
+        if (!retryable || attempt === MAX_ATTEMPTS) throw err;
+        await new Promise(r => setTimeout(r, 1500 * attempt));
+      }
     }
-    return response.json();
+    throw lastErr;
   }
 
   private async get(path: string): Promise<any> {
@@ -74,7 +90,7 @@ export class OpenAICompatAdapter implements LLMProvider {
     const url = `${this.baseUrl()}${path}`;
     const response = await fetch(url, {
       headers,
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.timeout(20_000),
     });
 
     if (!response.ok) throw new Error(`${this.id} API error ${response.status}`);
