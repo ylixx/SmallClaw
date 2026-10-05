@@ -26,6 +26,8 @@ export const SAFE_COMMANDS: Record<string, string> = isWindows
       'terminal': 'start cmd',
       'cmd': 'start cmd',
       'powershell': 'start powershell',
+      'word': 'start winword',
+      'winword': 'start winword',
     }
   : isMac
     ? {
@@ -55,14 +57,14 @@ export const SAFE_COMMANDS: Record<string, string> = isWindows
         'powershell': 'pwsh',
       };
 
-export const BLOCKED_PATTERNS = ['del ', 'rm ', 'format', 'shutdown', 'restart', 'rmdir', 'rd ', 'taskkill', 'reg '];
+export const BLOCKED_PATTERNS = ['del ', 'rm ', 'format', 'shutdown', 'restart', 'rmdir', 'rd /s', 'taskkill', 'reg '];
 
 // Allowlisted apps that may receive a user-supplied argument.
 // Deliberately excludes cmd / powershell / terminal: handing an argument to a
 // shell binary is equivalent to arbitrary code execution. Browsers are excluded
 // too - they have their own dedicated URL branch in resolveRunCommand.
 export const ARG_SAFE_COMMANDS: ReadonlySet<string> = isWindows
-  ? new Set(['notepad', 'code', 'explorer'])
+  ? new Set(['notepad', 'code', 'explorer', 'word', 'winword'])
   : new Set(['notepad', 'code']);
 
 export function quoteShellArg(value: string): string {
@@ -98,7 +100,7 @@ export function suggestRunCommandFix(rawCmd: string): string {
   const urlLike = trimmed.match(/https?:\/\/\S+|www\.\S+/i);
   if (urlLike) return `Did you mean: chrome ${urlLike[0]}`;
   const fileLike = trimmed.match(/[^\s"']+\.[A-Za-z0-9]{1,8}\b/);
-  if (fileLike) return `Did you mean: code ${fileLike[0]}`;
+  if (fileLike) return `Did you mean: start ${fileLike[0]}`;
   return '';
 }
 
@@ -170,6 +172,23 @@ export function resolveRunCommand(rawCmdInput: string): RunCommandResolution {
   //    (bare "explorer" is already handled by branch 1)
   if (isWindows && cmd.startsWith('explorer ')) {
     return { execCmd: rawCmd };
+  }
+
+  // 8. Windows-only: open a local file with its default app:
+  //    "start <file>" / "open <file>" -> `start "" "<path>"`
+  //    (URLs are handled earlier; this is for documents, images, etc.)
+  if (isWindows) {
+    const fileOpen = rawCmd.match(/^(start|open)\s+(.+)$/i);
+    if (fileOpen) {
+      const target = fileOpen[2].trim();
+      // Reject URLs (already covered above) and anything with shell metacharacters.
+      // "D:\..." drive paths are not URLs.
+      if (/^[a-z][a-z0-9+.-]*:/i.test(target) && !/^[a-zA-Z]:[\\/]/.test(target)) {
+        return { execCmd: '' };
+      }
+      if (/[\x00&|<>^%`]/.test(target)) return { execCmd: '' };
+      return { execCmd: `start "" ${quoteShellArg(target)}` };
+    }
   }
 
   return { execCmd: '' };

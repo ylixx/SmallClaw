@@ -939,7 +939,7 @@ const TOOL_BLOCKS: Record<string, string> = {
 
   schedule: `SCHEDULE TOOL: schedule_job(action,...) actions: list/create/update/pause/resume/delete/run_now. Always confirm before create/update/delete. Keep schedule timing separate from instruction_prompt content.`,
 
-  shell: `SHELL TOOL: run_command(command) → opens app for user to see (chrome, notepad, vscode). For web automation use browser_* not run_command. For desktop interaction use desktop_* not run_command.`,
+  shell: `SHELL TOOL: run_command(command) → opens app for user to see (chrome, notepad, vscode, word/winword). To open a document with its default program: start <file>. For web automation use browser_* not run_command. For desktop interaction use desktop_* not run_command.`,
 
   memory: `MEMORY TOOLS: memory_browse(file) → list categories in user.md or soul.md. memory_write(file,category,content) → add/update a fact (creates category if new). memory_read(file) → full file contents. File is "user" or "soul". Browse first to find the right category. Write immediately when you learn something — don't wait.`,
 
@@ -1252,11 +1252,11 @@ function buildTools() {
       type: 'function',
       function: {
         name: 'run_command',
-        description: 'Open apps for the USER to see on their screen. This is a GUI launcher, NOT a shell: it cannot run pipelines, globs, redirects, switches or arbitrary commands, and it returns no output. NEVER use this to open Chrome or Edge for web automation — those windows have no debug port and are invisible to browser_open/snapshot/click. For any web browsing, always use browser_open instead. Use run_command only for: launching GUI apps like notepad or VS Code.',
+        description: 'Open apps for the USER to see on their screen. This is a GUI launcher, NOT a shell: it cannot run pipelines, globs, redirects, switches or arbitrary commands, and it returns no output. NEVER use this to open Chrome or Edge for web automation — those windows have no debug port and are invisible to browser_open/snapshot/click. For any web browsing, always use browser_open instead. Use run_command only for: launching GUI apps (notepad, calc, word, winword), opening a local file with the system default program (start <file>), or opening a path in VS Code / Explorer.',
         parameters: {
           type: 'object', required: ['command'],
           properties: {
-            command: { type: 'string', description: 'Accepted: a bare app name ("notepad", "calc"), an app plus a file path ("code D:\\project", "notepad notes.txt" - only notepad/code/explorer take a path), or a URL. Rejected: "start <file>", "powershell <cmd>", anything with switches or pipes. Do NOT use "chrome" or "msedge" here — use browser_open instead.' },
+            command: { type: 'string', description: 'Accepted: a bare app name ("notepad", "calc", "word", "winword"); an app plus a file path ("code D:\\project", "notepad notes.txt", "word report.docx" - only notepad/code/explorer/word/winword take a path); a local file opened with the system default program ("start report.docx", "open report.docx"); or a URL. Rejected: "powershell <cmd>", anything with switches, pipes or shell metacharacters. Do NOT use "chrome" or "msedge" here — use browser_open instead.' },
           },
         },
       },

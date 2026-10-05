@@ -130,6 +130,8 @@ export interface ToolPermissions {
   shell: {
     workspace_only: boolean;
     confirm_destructive: boolean;
+    /** Expose a real terminal to the agent as the "shell_exec" tool (default off). */
+    expose_to_agent?: boolean;
     blocked_patterns: string[];
   };
   files: {
