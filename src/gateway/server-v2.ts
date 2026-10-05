@@ -2269,7 +2269,7 @@ async function executeToolImpl(name: string, args: any, workspacePath: string, s
 
       case 'run_command': {
         const rawCmd = (args.command || '').trim();
-        const { execCmd, blocked } = resolveRunCommand(rawCmd);
+        const { execCmd, blocked, targetFile } = resolveRunCommand(rawCmd);
 
         if (blocked) {
           return { name, args, result: `Blocked: "${rawCmd.toLowerCase()}" contains unsafe pattern "${blocked}"`, error: true };
@@ -2285,6 +2285,7 @@ async function executeToolImpl(name: string, args: any, workspacePath: string, s
             'Supported forms:',
             `  - bare app name: ${Object.keys(SAFE_COMMANDS).join(', ')}`,
             `  - app + file path: ${Array.from(ARG_SAFE_COMMANDS).map(a => `${a} <path>`).join(', ')}`,
+            '  - open a local file with the default app: start <file> / open <file>',
             '  - open a URL: chrome <url>, or just a URL / bare domain',
           ];
           if (fix) lines.push('', fix);
@@ -2295,6 +2296,32 @@ async function executeToolImpl(name: string, args: any, workspacePath: string, s
             error: true,
           };
         }
+
+        // Verify the target file exists BEFORE launching the GUI. A bad path
+        // (typo, wrong drive, wrong join) must never reach Word/Excel as a
+        // popup error - return a helpful error the agent can self-correct from.
+        if (targetFile) {
+          const wsRoot = getConfig().getWorkspacePath();
+          const absolute = path.isAbsolute(targetFile) ? targetFile : path.join(wsRoot, targetFile);
+          if (!fs.existsSync(absolute)) {
+            let docs: string[] = [];
+            try {
+              docs = fs.readdirSync(wsRoot)
+                .filter(f => /\.(docx?|xlsx?|pptx?|pdf)$/i.test(f))
+                .slice(0, 12);
+            } catch { /* ignore listing errors */ }
+            const hint = docs.length
+              ? `Office files available in the workspace (${wsRoot}): ${docs.join(', ')}`
+              : `The workspace (${wsRoot}) has no office documents.`;
+            return {
+              name,
+              args,
+              result: `Cannot open "${targetFile}": no such file. ${hint}`,
+              error: true,
+            };
+          }
+        }
+
         try {
           const { exec } = await import('child_process');
           exec(execCmd);

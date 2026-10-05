@@ -109,6 +109,20 @@ export interface RunCommandResolution {
   execCmd: string;
   /** Set when the command matched a hard-blocked pattern. */
   blocked?: string;
+  /**
+   * Local file path (unquoted, possibly relative) that the command opens.
+   * Present for app+file / start / open / explorer forms. The caller should
+   * verify it exists (resolving relative paths against the workspace) BEFORE
+   * exec() — a bad path must never reach the GUI as a popup error.
+   */
+  targetFile?: string;
+}
+
+function stripQuotes(value: string): string {
+  const v = String(value || '').trim();
+  if (v.length >= 2 && v.startsWith('"') && v.endsWith('"')) return v.slice(1, -1);
+  if (v.length >= 2 && v.startsWith("'") && v.endsWith("'")) return v.slice(1, -1);
+  return v;
 }
 
 /**
@@ -133,7 +147,10 @@ export function resolveRunCommand(rawCmdInput: string): RunCommandResolution {
   const rest = tokens.slice(1);
   const base = SAFE_COMMANDS[head];
   if (base && (rest.length === 0 || ARG_SAFE_COMMANDS.has(head))) {
-    return { execCmd: [base, ...rest.map(quoteShellArg)].join(' ') };
+    return {
+      execCmd: [base, ...rest.map(quoteShellArg)].join(' '),
+      targetFile: rest.length > 0 ? stripQuotes(rest[0]) : undefined,
+    };
   }
 
   // 2. "chrome <url>" or "browser <url>" -> open browser with URL
@@ -160,7 +177,7 @@ export function resolveRunCommand(rawCmdInput: string): RunCommandResolution {
 
   // 5. "code <path>" -> VS Code
   if (cmd.startsWith('code ')) {
-    return { execCmd: rawCmd };
+    return { execCmd: rawCmd, targetFile: stripQuotes(rawCmd.slice(5)) };
   }
 
   // 6. Windows-only: "start <url>" -> pass through
@@ -171,7 +188,7 @@ export function resolveRunCommand(rawCmdInput: string): RunCommandResolution {
   // 7. Windows-only: "explorer <path>"
   //    (bare "explorer" is already handled by branch 1)
   if (isWindows && cmd.startsWith('explorer ')) {
-    return { execCmd: rawCmd };
+    return { execCmd: rawCmd, targetFile: stripQuotes(rawCmd.slice(9)) };
   }
 
   // 8. Windows-only: open a local file with its default app:
@@ -187,7 +204,7 @@ export function resolveRunCommand(rawCmdInput: string): RunCommandResolution {
         return { execCmd: '' };
       }
       if (/[\x00&|<>^%`]/.test(target)) return { execCmd: '' };
-      return { execCmd: `start "" ${quoteShellArg(target)}` };
+      return { execCmd: `start "" ${quoteShellArg(target)}`, targetFile: stripQuotes(target) };
     }
   }
 

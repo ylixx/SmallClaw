@@ -34,13 +34,28 @@ describe('blocked patterns (no false positives)', () => {
 
 describe('open file with default app (start <file> / open <file>)', () => {
   it('start <file> opens with default app', () => {
-    expect(resolveRunCommand('start FULLPLAN.docx').execCmd).toBe('start "" "FULLPLAN.docx"');
+    const r = resolveRunCommand('start FULLPLAN.docx');
+    expect(r.execCmd).toBe('start "" "FULLPLAN.docx"');
+    expect(r.targetFile).toBe('FULLPLAN.docx');
   });
   it('open <file> maps to default app on Windows', () => {
-    expect(resolveRunCommand('open report.docx').execCmd).toBe('start "" "report.docx"');
+    const r = resolveRunCommand('open report.docx');
+    expect(r.execCmd).toBe('start "" "report.docx"');
+    expect(r.targetFile).toBe('report.docx');
   });
   it('supports paths with directories', () => {
     expect(resolveRunCommand('start D:\\docs\\plan.docx').execCmd).toBe('start "" "D:\\docs\\plan.docx"');
+  });
+  it('word/winword/notepad/code expose targetFile', () => {
+    expect(resolveRunCommand('word FULLPLAN.docx').targetFile).toBe('FULLPLAN.docx');
+    expect(resolveRunCommand('winword fullplan.docx').targetFile).toBe('fullplan.docx');
+    expect(resolveRunCommand('notepad "FULLPLAN.docx"').targetFile).toBe('FULLPLAN.docx');
+    expect(resolveRunCommand('code D:\\proj\\plan.docx').targetFile).toBe('D:\\proj\\plan.docx');
+  });
+  it('xlsx/pptx/pdf all route to default app opening', () => {
+    expect(resolveRunCommand('start budget.xlsx').execCmd).toBe('start "" "budget.xlsx"');
+    expect(resolveRunCommand('open deck.pptx').execCmd).toBe('start "" "deck.pptx"');
+    expect(resolveRunCommand('start manual.pdf').execCmd).toBe('start "" "manual.pdf"');
   });
   it('rejects shell metacharacters in the target', () => {
     expect(resolveRunCommand('start a&calc.exe').execCmd).toBe('');
