@@ -2948,7 +2948,14 @@
           </select>
           <label style="display:block;font-size:12px;color:var(--muted);margin:10px 0 6px">Endpoint</label>
           <input id="preset-endpoint" type="text" placeholder="http://localhost:8080" style="width:100%;border:1px solid var(--line);border-radius:10px;padding:8px;font-size:12px;font-family:'IBM Plex Mono',monospace" />
-          <label style="display:block;font-size:12px;color:var(--muted);margin:10px 0 6px">模型名（llama.cpp 填别名，与模型路径对应）</label>
+          <div id="preset-detect-wrap" style="margin-top:8px;display:flex;gap:8px;align-items:center">
+            <button class="btn btn-sm" onclick="presetDetectModels()" style="background:#fff;border:1px solid var(--line);color:var(--text)">检测模型</button>
+            <span id="preset-detect-status" style="font-size:11px;color:var(--muted)"></span>
+          </div>
+          <div id="preset-model-list" style="display:none;margin-top:8px;max-height:180px;overflow-y:auto;border:1px solid var(--line);border-radius:10px;padding:8px">
+            <div style="font-size:11px;color:var(--muted);margin-bottom:6px">勾选模型 → 自动填入模型名</div>
+          </div>
+          <label style="display:block;font-size:12px;color:var(--muted);margin:10px 0 6px">模型名（也可点上方「检测模型」后勾选自动填入）</label>
           <input id="preset-model" type="text" placeholder="Qwen3.8-9B-heretic-uncensored.Q4_K_M" style="width:100%;border:1px solid var(--line);border-radius:10px;padding:8px;font-size:12px;font-family:'IBM Plex Mono',monospace" />
           <div id="preset-llamacpp-fields" style="margin-top:4px">
             <label style="display:block;font-size:12px;color:var(--muted);margin:10px 0 6px">GGUF 模型文件路径（.gguf）</label>
@@ -6421,6 +6428,64 @@ function onPresetProviderChange() {
   const of = document.getElementById('preset-openai-fields');
   if (lf) lf.style.display = p === 'llama_cpp' ? 'block' : 'none';
   if (of) of.style.display = p === 'openai' ? 'block' : 'none';
+  // "Detect models" needs a real API — hidden for OAuth-only codex.
+  const dw = document.getElementById('preset-detect-wrap');
+  if (dw) dw.style.display = p === 'openai_codex' ? 'none' : 'flex';
+  resetPresetDetect();
+}
+
+function resetPresetDetect() {
+  const listEl = document.getElementById('preset-model-list');
+  const statusEl = document.getElementById('preset-detect-status');
+  if (listEl) { listEl.style.display = 'none'; listEl.innerHTML = '<div style="font-size:11px;color:var(--muted);margin-bottom:6px">勾选模型 → 自动填入模型名</div>'; }
+  if (statusEl) { statusEl.style.color = 'var(--muted)'; statusEl.textContent = ''; }
+}
+
+async function presetDetectModels() {
+  const statusEl = document.getElementById('preset-detect-status');
+  const listEl = document.getElementById('preset-model-list');
+  const gv = id => { const el = document.getElementById(id); return el ? String(el.value || '').trim() : ''; };
+  const provider = gv('preset-provider');
+  const endpoint = gv('preset-endpoint');
+  if (!endpoint) { if (statusEl) { statusEl.style.color = 'var(--err)'; statusEl.textContent = '请先填写 Endpoint'; } return; }
+  const providers = {};
+  providers[provider] = { endpoint };
+  if (provider === 'openai') {
+    const key = gv('preset-openai-key');
+    if (!key) { if (statusEl) { statusEl.style.color = 'var(--err)'; statusEl.textContent = '请先填写 API Key'; } return; }
+    providers[provider].api_key = key;
+  }
+  if (statusEl) { statusEl.style.color = 'var(--muted)'; statusEl.textContent = '检测中…'; }
+  if (listEl) { listEl.style.display = 'none'; listEl.innerHTML = ''; }
+  try {
+    const data = await api('/api/models/test', { method: 'POST', body: JSON.stringify({ llm: { provider, providers } }) });
+    if (!data || !data.success || !Array.isArray(data.models) || data.models.length === 0) {
+      if (statusEl) { statusEl.style.color = 'var(--err)'; statusEl.textContent = data?.error || '未获取到模型列表'; }
+      return;
+    }
+    if (statusEl) { statusEl.style.color = 'var(--ok)'; statusEl.textContent = '找到 ' + data.models.length + ' 个模型，勾选自动填入模型名'; }
+    if (listEl) {
+      listEl.style.display = 'block';
+      listEl.innerHTML = '<div style="font-size:11px;color:var(--muted);margin-bottom:6px">勾选模型 → 自动填入模型名</div>';
+      data.models.forEach(function (m) {
+        const id = String(m.id || m.name || '');
+        if (!id) return;
+        const row = document.createElement('label');
+        row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:4px 6px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--text)';
+        row.innerHTML = '<input type="checkbox" class="preset-model-check" value="' + escHtml(id) + '">' + escHtml(id);
+        const cb = row.querySelector('input');
+        cb.addEventListener('change', function (ev) {
+          const modelInput = document.getElementById('preset-model');
+          if (!modelInput) return;
+          if (ev.target.checked) modelInput.value = ev.target.value;
+          else if (modelInput.value === ev.target.value) modelInput.value = '';
+        });
+        listEl.appendChild(row);
+      });
+    }
+  } catch (e) {
+    if (statusEl) { statusEl.style.color = 'var(--err)'; statusEl.textContent = '检测失败: ' + (e.message || e); }
+  }
 }
 
 function openPresetEditor(id) {
@@ -6469,6 +6534,7 @@ function closePresetEditor() {
   const editor = document.getElementById('preset-editor');
   if (editor) editor.style.display = 'none';
   presetEditingId = null;
+  resetPresetDetect();
 }
 
 async function savePreset() {
