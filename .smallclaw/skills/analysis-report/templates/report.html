@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{报告主题}}分析报告 — {{对象名}} {{日期}}</title>
+<style>
+  /* ===== 深度分析报告通用样式体系（保持稳定，内容替换即可） ===== */
+  body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; max-width: 900px; margin: 0 auto; padding: 32px 24px; color: #1a1a1a; background: #fdfdfd; line-height: 1.75; font-size: 15px; }
+  h1 { font-size: 22px; border-bottom: 3px solid #2c5f8a; padding-bottom: 10px; color: #2c5f8a; }
+  h2 { font-size: 18px; color: #2c5f8a; margin-top: 32px; border-left: 5px solid #2c5f8a; padding-left: 10px; }
+  h3 { font-size: 15.5px; color: #1a1a1a; margin-top: 20px; }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 13.5px; }
+  th, td { border: 1px solid #c9d4de; padding: 6px 10px; text-align: left; vertical-align: top; }
+  th { background: #eef3f8; color: #2c5f8a; }
+  tr:nth-child(even) td { background: #f8fafc; }
+  .box { border-radius: 8px; padding: 14px 18px; margin: 14px 0; }
+  .conclusion { background: #eaf4ea; border: 1px solid #9fc99f; }
+  .warn { background: #fdf3e7; border: 1px solid #e8c48a; }
+  .note { background: #eef3f8; border: 1px solid #b8cee2; }
+  .tag { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px; font-weight: bold; margin-right: 4px; }
+  .up { background: #fdeaea; color: #b03030; }
+  .down { background: #e8f1fd; color: #2a5caa; }
+  .hl { background: #fff3cd; }
+  ul li, ol li { margin: 4px 0; }
+  .disc { font-size: 13px; color: #666; border-top: 1px solid #ccc; margin-top: 36px; padding-top: 12px; }
+</style>
+</head>
+<body>
+
+<!-- ==================== 头部：标题 + 对象/资料/问题 ==================== -->
+<h1>{{报告主题}}分析报告</h1>
+<p><b>对象：</b>{{对象：姓名/公司/项目等，性别年龄等可选}}　<b>资料来源：</b>{{资料名称、时间范围、页数/份数}}<br>
+<b>问题：</b>{{要回答的核心问题 / 背景一句}}</p>
+
+<!-- ==================== 一、时间线与关键数据 ==================== -->
+<h2>一、{{时间范围}}时间线与关键数据</h2>
+<table>
+<tr><th style="width:110px">日期</th><th>关键发现</th></tr>
+<tr><td>{{日期 1}}<br>{{备注}}</td><td>{{关键发现：数值变化、事件、结论，重点用 <b> 或 <span class="hl"> 标注}}</td></tr>
+<!-- 按材料中的真实时间点逐行填充；材料没有的日期不得编造 -->
+</table>
+
+<!-- ==================== 二、核心分析 ==================== -->
+<h2>二、核心分析</h2>
+
+<h3>1. {{格局判断标题}}</h3>
+<p>{{整体机制 vs 局部现象；为什么这个格局比单项数据更重要}}</p>
+
+<h3>2. {{关键数据解释标题}}</h3>
+<p>{{重要数值、比率、边界值、矛盾点的解释；<span class="hl">高亮</span>关键数字}}</p>
+
+<h3>3. {{排除法标题}}</h3>
+<p>{{列出可排除的解释及证据；证据链不完整的说明缺口}}</p>
+
+<h3>4. {{动态趋势标题}}</h3>
+<p>{{时间序列变化说明什么；与事件/现象的吻合度}}</p>
+
+<h3>5. {{核心画像标题}}</h3>
+<p>{{最可能的解释 2-3 句；指出被低估的线索}}</p>
+
+<!-- ==================== 三、结论与置信度 ==================== -->
+<h2>三、结论与置信度</h2>
+
+<div class="box conclusion">
+<h3>结论 A（{{机制/层面}}，置信度 ≈XX%）</h3>
+<p><b>{{核心判断}}</b>{{依据：证据链简述}}</p>
+</div>
+
+<div class="box conclusion">
+<h3>结论 B（{{对象/具体层面}}，置信度 ≈XX%）</h3>
+<p><b>{{具体判断}}</b>{{依据}}</p>
+<p>{{剩余概率落在哪些可能；要达到更高置信度必须补做什么——诚实标注，不过度断言}}</p>
+</div>
+
+<div class="box note">
+<h3>已可基本排除的解释（置信度 ≥XX%）</h3>
+<ul>
+<li><b>{{排除项 1}}</b>：{{证据}}</li>
+<!-- 逐条列出，每条必须给证据；证据不足的标注"倾向排除，需 XX 补证" -->
+</ul>
+</div>
+
+<!-- ==================== 四、建议 ==================== -->
+<h2>四、建议（按优先级）</h2>
+
+<h3>① 明确结论的补证动作（把置信度从 XX% 提到 XX%+）</h3>
+<table>
+<tr><th style="width:240px">动作</th><th>目的</th></tr>
+<tr><td><b>{{动作 1}}</b></td><td>{{为什么做、能改变什么}}</td></tr>
+<!-- 按性价比排序 -->
+</table>
+
+<h3>② 立即可处理的问题</h3>
+<ul>
+<li><b>{{问题 1}}</b>：{{可执行的处理 + 注意点}}</li>
+<!-- 低风险、马上能做的动作 -->
+</ul>
+
+<!-- ==================== 五、总结 ==================== -->
+<h2>五、{{给决策者/相关方}}的三句话总结</h2>
+<div class="box warn">
+<ol>
+<li>{{本质是什么——一句话}}</li>
+<li>{{最关键的一句判断——一句话}}</li>
+<li>{{下一步最有性价比的动作——一句话}}</li>
+</ol>
+</div>
+
+<!-- ==================== 六、（可选）后续路径 ==================== -->
+<h2>六、{{若结论成立：后续路径/展望}}</h2>
+<table>
+<tr><th style="width:200px">层面</th><th>说明</th></tr>
+<tr><td><b>{{层面 1}}</b></td><td>{{可预期走向}}</td></tr>
+</table>
+
+<p class="disc"><b>免责声明：</b>{{本报告为基于书面资料的独立分析意见，置信度为主观估计，供参考沟通使用，不构成专业结论/诊断/法律意见，不能替代面诊、查体或专业人士的综合判断。重大决策请咨询对应领域专业人士。}}</p>
+
+</body>
+</html>

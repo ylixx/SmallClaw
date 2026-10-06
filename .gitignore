@@ -43,7 +43,9 @@
 .smallclaw/task-heartbeat.json
 .smallclaw/cron/runs/
 .smallclaw/cron/jobs.json
-.smallclaw/skills/
+.smallclaw/skills/*
+!.smallclaw/skills/analysis-report/
+!.smallclaw/skills/analysis-report/**
 .smallclaw/skills_state.json
 .smallclaw/workspace_state.json
 .smallclaw/.migrated-from-localclaw
@@ -112,7 +114,3 @@ desktop.ini
 
 # --- WORKBUDDY WORKSPACE DATA ---
 .workbuddy/
-
-# Built-in analysis-report skill ships with the project (keep trackable)
-!.smallclaw/skills/analysis-report/
-!.smallclaw/skills/analysis-report/**
