@@ -432,6 +432,7 @@
 
   #jobs-list,
   #skills-list,
+  #flows-list,
   #skills-search-results { flex: 1; min-height: 0; overflow-y: auto; padding: 10px; }
 
   .job-item,
@@ -2194,6 +2195,7 @@
   <div id="sidebar-tabs">
     <button class="sidebar-tab active" id="tab-jobs" onclick="setSidebarTab('jobs')">Sessions</button>
     <button class="sidebar-tab" id="tab-skills" onclick="setSidebarTab('skills')">🧩 Skills</button>
+    <button class="sidebar-tab" id="tab-flows" onclick="setSidebarTab('flows')">⚡ Flows</button>
   </div>
 
   <!-- SESSIONS TAB -->
@@ -2218,6 +2220,20 @@
     </div>
     <div id="skills-list" style="flex:1;min-height:0;overflow-y:auto;padding:10px">
       <div class="empty-state" style="padding:16px">Loading skills...</div>
+    </div>
+  </div>
+
+  <!-- FLOWS TAB (one-click process templates) -->
+  <div id="sidebar-flows" style="display:none">
+    <div class="sidebar-section" style="border-top:none">
+      <span>Flows</span>
+      <span style="font-size:11px;color:var(--muted)">一键流程</span>
+    </div>
+    <div style="padding:0 14px 4px;font-size:11px;color:var(--muted);line-height:1.5">
+      点击 ▶ 运行流程；或在聊天里直接说触发词（如"生成周报"）。
+    </div>
+    <div id="flows-list" style="flex:1;min-height:0;overflow-y:auto;padding:10px">
+      <div class="empty-state" style="padding:16px">Loading flows...</div>
     </div>
   </div>
 </aside>
@@ -4135,9 +4151,12 @@ function setSidebarTab(tab) {
   sidebarTab = tab;
   document.getElementById('tab-jobs').classList.toggle('active', tab === 'jobs');
   document.getElementById('tab-skills').classList.toggle('active', tab === 'skills');
+  document.getElementById('tab-flows').classList.toggle('active', tab === 'flows');
   document.getElementById('sidebar-jobs').style.display = tab === 'jobs' ? 'flex' : 'none';
   document.getElementById('sidebar-skills').style.display = tab === 'skills' ? 'flex' : 'none';
+  document.getElementById('sidebar-flows').style.display = tab === 'flows' ? 'flex' : 'none';
   if (tab === 'skills') loadInstalledSkills();
+  if (tab === 'flows') loadFlows();
 }
 
 // ---- Agent mode toggle ----
@@ -8340,6 +8359,83 @@ function timeAgo(ts) {
 }
 
 function openOllamaInfo() { window.open('http://localhost:11434','_blank'); }
+
+// ---- Flow templates (one-click process fix) ----
+let flowsCache = [];
+
+async function loadFlows() {
+  const el = document.getElementById('flows-list');
+  el.innerHTML = '<div style="padding:12px;color:var(--muted);font-size:11px"><span class="spinner"></span> Loading...</div>';
+  try {
+    const data = await api('/api/flows');
+    const flows = data.flows || [];
+    flowsCache = flows;
+    if (flows.length === 0) {
+      el.innerHTML = '<div class="empty-state" style="padding:16px">No flows yet.<br>Drop a JSON template into .smallclaw/flows/</div>';
+      return;
+    }
+    el.innerHTML = flows.map(f => `
+      <div class="skill-card" data-flow-id="${escHtml(f.id)}">
+        <div class="skill-card-top">
+          <div class="skill-card-emoji">⚡</div>
+          <div class="skill-card-info">
+            <div class="skill-card-name">${escHtml(f.name)}</div>
+            <div class="skill-card-desc">${escHtml(f.description || '')}</div>
+            <div class="skill-card-desc" style="font-size:10px;opacity:.75">触发词：${escHtml((f.triggers || []).join(' / '))}</div>
+          </div>
+          <div class="skill-card-actions">
+            <button class="skill-mini-btn" onclick="event.stopPropagation();runFlow('${escHtml(f.id)}')" title="运行流程" aria-label="Run flow">▶</button>
+          </div>
+        </div>
+      </div>
+    `).join('');
+  } catch (err) {
+    el.innerHTML = `<div style="padding:12px;color:var(--err);font-size:11px">Error: ${err.message}</div>`;
+  }
+}
+
+async function runFlow(id) {
+  const flow = (flowsCache || []).find(f => f.id === id);
+  addProcessEntry('info', `▶ 运行流程「${flow ? flow.name : id}」...`);
+  try {
+    const res = await fetch('/api/flows/' + encodeURIComponent(id) + '/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: typeof currentSessionId === 'string' && currentSessionId ? currentSessionId : 'default' }),
+    });
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      addProcessEntry('error', `流程运行失败 (${res.status}): ${errText.slice(0, 200)}`);
+      return;
+    }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      let idx;
+      while ((idx = buf.indexOf('\n\n')) >= 0) {
+        const block = buf.slice(0, idx); buf = buf.slice(idx + 2);
+        const ev = /^event: (.+)$/m.exec(block);
+        const dt = /^data: (.+)$/m.exec(block);
+        if (!ev || !dt) continue;
+        if (ev[1] === 'done') {
+          let reply = dt[1];
+          try { reply = (JSON.parse(dt[1]).reply || '').slice(0, 120); } catch {}
+          addProcessEntry('final', '流程完成 ✓');
+          addProcessEntry('final', String(reply).slice(0, 200));
+        } else if (ev[1] === 'error') {
+          addProcessEntry('error', '流程失败: ' + dt[1].slice(0, 200));
+        }
+      }
+    }
+    addProcessEntry('info', '流程运行结束');
+  } catch (err) {
+    addProcessEntry('error', '流程运行错误: ' + err.message);
+  }
+}
 
 // ---- Skills management (v2 - local skills system) ----
 let skillsCache = [];
