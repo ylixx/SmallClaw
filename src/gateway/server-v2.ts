@@ -1632,6 +1632,7 @@ const FILE_TOOL_NAMES = new Set([
   'list_files', 'read_file', 'create_file', 'replace_lines',
   'insert_after', 'delete_lines', 'find_replace', 'delete_file',
   'doc_inspect', 'doc_read', 'doc_write', 'doc_chart', 'doc_convert',
+  'doc_ocr', 'doc_parse_lab',
   'image_render', 'image_generate', 'file_batch',
 ]);
 const SHELL_TOOL_NAMES = new Set(['run_command', 'shell_exec']);
@@ -2179,7 +2180,9 @@ async function executeToolImpl(name: string, args: any, workspacePath: string, s
       case 'doc_read':
       case 'doc_write':
       case 'doc_chart':
-      case 'doc_convert': {
+      case 'doc_convert':
+      case 'doc_ocr':
+      case 'doc_parse_lab': {
         const outcome = await executeOfficeTool(name, args, workspacePath, sessionId, resolveToolFilePath);
         recordArtifact(sessionId, name, outcome);
         return { name, args, result: outcome.result, error: outcome.error };
