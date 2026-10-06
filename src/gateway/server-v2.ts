@@ -201,11 +201,13 @@ import {
   AGENT_BUILDER_TOOL_NAMES,
   getWorkflowContextBlock,
 } from './agent-builder-integration';
+import { FlowsManager } from './flows-manager';
 
 // ─── Config ────────────────────────────────────────────────────────────────────
 
 const config = getConfig().getConfig();
 const CONFIG_DIR_PATH = getConfig().getConfigDir();
+const flowsManager = new FlowsManager(CONFIG_DIR_PATH);
 const PORT = config.gateway.port || (process.env.GATEWAY_PORT ? parseInt(process.env.GATEWAY_PORT, 10) : 18789);
 const HOST = config.gateway.host || process.env.GATEWAY_HOST || (process.env.DOCKER_CONTAINER ? '0.0.0.0' : '127.0.0.1');
 const MAX_TOOL_ROUNDS = 20;
@@ -3317,7 +3319,8 @@ async function handleChat(
   abortSignal?: { aborted: boolean },
   callerContext?: string,
   modelOverride?: string,
-  executionMode: ExecutionMode = 'interactive'
+  executionMode: ExecutionMode = 'interactive',
+  suppressFlowTrigger = false,
 ): Promise<HandleChatResult> {
   const ollama = getOllamaClient();
   const isBootStartupTurn = /\bBOOT\.md\b/i.test(String(callerContext || ''));
@@ -3740,6 +3743,19 @@ async function handleChat(
     messages.push({ role: msg.role === 'user' ? 'user' : 'assistant', content: msg.content });
   }
   messages.push({ role: 'user', content: buildMultimodalUserContent(message, workspacePath) });
+
+  // ── One-click flow: if the message matches a flow trigger, inject the
+  //    flow instruction so the model follows the fixed process end-to-end. ──
+  const matchedFlow = suppressFlowTrigger || isBootStartupTurn ? null : flowsManager.matchTrigger(message);
+  if (matchedFlow) {
+    console.log(`[v2] FLOW: "${matchedFlow.id}" (${matchedFlow.name}) triggered by message`);
+    messages.push({
+      role: 'user',
+      content:
+        `【已启用流程模板「${matchedFlow.name}」】请严格按以下执行规范完成用户任务，不要省略步骤，完成后按规范交付产物：\n${matchedFlow.instruction}`,
+    });
+    sendSSE('flow_start', { flow_id: matchedFlow.id, name: matchedFlow.name });
+  }
 
   // ── Lightweight model-switch suggestion ──────────────────────────────────
   // If the request is heavy (large context / obvious bulk-task wording) and
@@ -6787,6 +6803,98 @@ app.get('/api/status', async (_req, res) => {
       secondary: orchCfg.secondary,
     } : null,
   });
+});
+
+// ─── Flow templates (one-click process fix) ───────────────────────────────────
+// GET /api/flows — list all flow templates
+app.get('/api/flows', (_req, res) => {
+  const flows = flowsManager.list();
+  res.json({
+    success: true,
+    count: flows.length,
+    flows: flows.map((f) => ({
+      id: f.id,
+      name: f.name,
+      triggers: f.triggers,
+      description: f.description,
+      skill: f.skill || null,
+      output_note: f.output_note,
+    })),
+  });
+});
+
+// GET /api/flows/:id — single flow template
+app.get('/api/flows/:id', (req, res) => {
+  const flow = flowsManager.get(String(req.params.id));
+  if (!flow) { res.status(404).json({ success: false, error: 'Flow not found' }); return; }
+  res.json({ success: true, flow });
+});
+
+// POST /api/flows/:id/run — execute a flow explicitly (SSE stream, same
+// pipeline as /api/chat: agent loop + tools + skills + retries)
+app.post('/api/flows/:id/run', async (req, res) => {
+  const flow = flowsManager.get(String(req.params.id || ''));
+  if (!flow) { res.status(404).json({ success: false, error: 'Flow not found' }); return; }
+  const sessionId = String(req.body?.sessionId || 'default');
+  const extra = String(req.body?.message || '').trim();
+
+  if (isModelBusy) {
+    res.status(429).json({ success: false, error: 'Model is busy, try again in a moment' });
+    return;
+  }
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+
+  const sendSSE = createSSESender(res);
+  const heartbeat = setInterval(() => sendSSE('heartbeat', { state: 'processing' }), 5000);
+  isModelBusy = true;
+  const abortSignal = { aborted: false };
+  let requestCompleted = false;
+  res.on('close', () => {
+    if (!requestCompleted && !abortSignal.aborted) {
+      abortSignal.aborted = true;
+      console.log(`[v2] Flow run aborted — session ${sessionId}, flow ${flow.id}`);
+    }
+  });
+
+  try {
+    const message =
+      `请执行流程「${flow.name}」并交付产物。${extra ? `\n用户补充要求：${extra}` : ''}\n\n【执行规范】\n${flow.instruction}`;
+    console.log(`[v2] FLOW RUN: ${flow.id} (${flow.name}) session=${sessionId}`);
+    const result = await handleChat(
+      message,
+      sessionId,
+      sendSSE,
+      undefined,
+      abortSignal,
+      undefined,
+      undefined,
+      'interactive',
+      true, // suppressFlowTrigger — instruction already injected
+    );
+    requestCompleted = true;
+    if (!abortSignal.aborted) {
+      addMessage(sessionId, { role: 'assistant', content: result.text, timestamp: Date.now() });
+      sendSSE('final', { text: result.text });
+      sendSSE('done', {
+        reply: result.text,
+        mode: result.type,
+        sections: [{ type: result.type === 'execute' ? 'tool_results' : 'text', content: result.text }],
+        thinking: result.thinking,
+        results: result.toolResults,
+      });
+    }
+  } catch (err: any) {
+    requestCompleted = true;
+    console.error('[v2] Flow run error:', err?.message || err);
+    if (!abortSignal.aborted) sendSSE('error', { message: String(err?.message || err) });
+  } finally {
+    clearInterval(heartbeat);
+    isModelBusy = false;
+  }
 });
 
 app.post('/api/chat', async (req, res) => {
