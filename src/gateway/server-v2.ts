@@ -110,6 +110,11 @@ import {
   executeFileBatchTool,
 } from '../tools/file-batch';
 import {
+  getKnowledgeToolDefinitions,
+  executeKnowledgeTool,
+  KNOWLEDGE_TOOL_NAMES,
+} from '../tools/knowledge';
+import {
   planToolDefinitions,
   isPlanGateActive,
   isPlanModeEnabledFor,
@@ -1556,6 +1561,8 @@ function buildTools() {
   toolDefs.push(...getOfficeToolDefinitions());
   toolDefs.push(...getImageToolDefinitions());
   toolDefs.push(...getFileBatchToolDefinitions());
+  const knowledgeDir = path.join(__dirname, '..', '..', 'knowledge');
+  toolDefs.push(...getKnowledgeToolDefinitions(knowledgeDir));
   if (agentShellEnabled()) toolDefs.push(shellExecToolDefinition());
   toolDefs.push(...planToolDefinitions());
   toolDefs.push(...buildMcpToolDefinitions(new Set(toolDefs.map((t: any) => String(t?.function?.name || '')))));
@@ -1637,6 +1644,7 @@ const FILE_TOOL_NAMES = new Set([
   'doc_inspect', 'doc_read', 'doc_write', 'doc_chart', 'doc_convert',
   'doc_ocr', 'doc_parse_lab',
   'image_render', 'image_generate', 'file_batch',
+  ...KNOWLEDGE_TOOL_NAMES,
 ]);
 const SHELL_TOOL_NAMES = new Set(['run_command', 'shell_exec']);
 
@@ -2189,6 +2197,30 @@ async function executeToolImpl(name: string, args: any, workspacePath: string, s
         const outcome = await executeOfficeTool(name, args, workspacePath, sessionId, resolveToolFilePath);
         recordArtifact(sessionId, name, outcome);
         return { name, args, result: outcome.result, error: outcome.error };
+      }
+
+      case 'knowledge_add':
+      case 'knowledge_search':
+      case 'knowledge_list':
+      case 'knowledge_status':
+      case 'knowledge_remove': {
+        const kbDir = path.join(__dirname, '..', '..', 'knowledge');
+        if (name === 'knowledge_add') {
+          const raw = String(args?.path || args?.filename || '').trim();
+          const resolved = raw ? resolveToolFilePath(workspacePath, raw) : null;
+          if (resolved && !resolved.ok) {
+            return { name, args, result: '', error: true };
+          }
+          args = { ...args, path: resolved ? resolved.path : raw };
+        }
+        const outcome = await executeKnowledgeTool(name, args, kbDir);
+        recordArtifact(sessionId, name, outcome);
+        return {
+          name,
+          args,
+          result: outcome.ok ? JSON.stringify(outcome, null, 1) : (outcome.error || 'knowledge tool failed'),
+          error: !!outcome.error,
+        };
       }
 
       case 'image_render':

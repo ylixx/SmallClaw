@@ -114,3 +114,6 @@ desktop.ini
 
 # --- WORKBUDDY WORKSPACE DATA ---
 .workbuddy/
+
+# local knowledge base runtime data (user documents + index)
+knowledge/
