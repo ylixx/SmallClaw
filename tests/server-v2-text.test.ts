@@ -25,6 +25,7 @@ import {
   isHighStakesFile,
   requestedFullTemplate,
   logToolCall,
+  isToolArgParseFailure,
 } from '../src/gateway/server-v2-text';
 
 describe('separateThinkingFromContent', () => {
@@ -148,5 +149,17 @@ describe('logToolCall', () => {
     expect(content).toContain('read_file');
     expect(content).toContain('OK');
     fs.rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+describe('isToolArgParseFailure', () => {
+  it('flags llama.cpp tool-call argument parse errors', () => {
+    expect(isToolArgParseFailure(new Error('Failed to parse tool call arguments as JSON: [json.exception.parse_error.101] parse error at line 1, column 11269: syntax error while parsing value - invalid string: mi'))).toBe(true);
+    expect(isToolArgParseFailure({ message: 'llama_cpp API error 500: tool call arguments invalid JSON' })).toBe(true);
+  });
+  it('does not flag unrelated errors', () => {
+    expect(isToolArgParseFailure(new Error('openai API error 429: rate limit exceeded'))).toBe(false);
+    expect(isToolArgParseFailure(new Error('network timeout'))).toBe(false);
+    expect(isToolArgParseFailure(null)).toBe(false);
   });
 });

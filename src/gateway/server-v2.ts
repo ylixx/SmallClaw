@@ -60,6 +60,7 @@ import {
   isDesktopToolName,
   isHighStakesFile,
   requestedFullTemplate,
+  isToolArgParseFailure,
 } from './server-v2-text';
 import { getContextInjectionManager } from './context-injection';
 import { SkillsManager } from './skills-manager';
@@ -3294,6 +3295,20 @@ function buildMultimodalUserContent(rawMessage: string, workspacePath: string): 
   return parts;
 }
 
+// ── Tool-call argument parse failure: corrective retry ──────────────────────────
+// Small/local models (e.g. llama.cpp 9B) sometimes emit tool-call arguments that
+// are not valid JSON (long payloads truncated or escaping broken). llama.cpp
+// rejects them server-side with a 500. Instead of surfacing the error directly,
+// feed the model one corrective hint and retry once.
+const MAX_TOOL_ARG_PARSE_RETRIES = 1;
+const TOOL_ARG_PARSE_RETRY_HINT =
+  '你的上一条工具调用参数（arguments）不是合法 JSON，模型服务端解析失败，该调用未被执行。\n' +
+  '请重新发起该工具调用，并遵守：\n' +
+  '1. arguments 必须是严格合法的 JSON 对象：键和字符串值都用双引号，无尾随逗号；\n' +
+  '2. 参数值内的引号、换行、反斜杠必须正确转义；\n' +
+  '3. 如果某个参数内容非常长（例如整个 HTML 文件全文），不要一次性塞进工具参数——先用 create_file 写入骨架，再分几步追加或整文件重写；\n' +
+  '4. 不要重复调用已经成功完成的工具，直接继续下一步。';
+
 async function handleChat(
   message: string,
   sessionId: string,
@@ -3322,6 +3337,7 @@ async function handleChat(
     sessionId,
   );
   const allToolResults: ToolResult[] = [];
+  let toolArgParseRetries = 0;
   let allThinking = '';
   let preflightRoute: 'primary_direct' | 'primary_with_plan' | 'secondary_chat' | 'background_task' | null = null;
   let preflightReasonForTurn = '';
@@ -5030,6 +5046,16 @@ RULES:
         response.content = explicitThink.cleaned;
       }
     } catch (err: any) {
+      // ── Tool-call argument parse failure: one corrective retry ──
+      if (isToolArgParseFailure(err) && toolArgParseRetries < MAX_TOOL_ARG_PARSE_RETRIES) {
+        toolArgParseRetries++;
+        console.warn(
+          `[v2] Tool-arg parse failure (round ${round}); corrective retry ${toolArgParseRetries}/${MAX_TOOL_ARG_PARSE_RETRIES}: ${String(err?.message || '').slice(0, 160)}`,
+        );
+        sendSSE('info', { message: '工具调用参数解析失败，已请模型修正后重试…' });
+        messages.push({ role: 'user', content: TOOL_ARG_PARSE_RETRY_HINT });
+        continue;
+      }
       console.error('[v2] Chat error:', err.message);
       return { type: 'chat', text: `Error: ${err.message}` };
     }

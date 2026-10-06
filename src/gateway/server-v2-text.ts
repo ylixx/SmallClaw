@@ -248,6 +248,19 @@ function requestedFullTemplate(message: string): boolean {
     .test(String(message || ''));
 }
 
+/**
+ * Detects model-tool-call failures where the model emitted tool-call
+ * arguments that the provider could not parse as JSON (common with small /
+ * local models on llama.cpp: long payloads truncated or escaping broken).
+ * The gateway retries such failures once with a corrective hint instead of
+ * surfacing the raw provider error.
+ */
+function isToolArgParseFailure(err: any): boolean {
+  const msg = String(err?.message || err || '');
+  return /failed to parse tool call arguments/i.test(msg)
+    || (/(tool|arguments)/i.test(msg) && /(json|parse)/i.test(msg) && /invalid/i.test(msg));
+}
+
 export {
   logToolCall,
   separateThinkingFromContent,
@@ -266,4 +279,5 @@ export {
   isDesktopToolName,
   isHighStakesFile,
   requestedFullTemplate,
+  isToolArgParseFailure,
 };
