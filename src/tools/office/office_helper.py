@@ -761,6 +761,144 @@ def pdf_read(path, target=None, limit=5000):
     return {"format": "pdf", "path": path, "pages": total, "markdown": joined, "text": joined}
 
 
+def pdf_scanned_pages(path, threshold=50):
+    """Return page numbers whose text layer is empty/near-empty (scanned pages)."""
+    from pypdf import PdfReader
+    reader = PdfReader(path)
+    scanned = []
+    for i, page in enumerate(reader.pages, start=1):
+        try:
+            text = page.extract_text() or ""
+        except Exception:
+            text = ""
+        if len(text.strip()) < threshold:
+            scanned.append(i)
+    return scanned
+
+
+def pdf_ocr_pages(path, pages=None, dpi=300):
+    """OCR scanned pages of a PDF with RapidOCR. pages: 'auto' (default, detect scanned),
+    a comma list like '2,3,5', or 'all'."""
+    try:
+        import pymupdf  # PyMuPDF >= 1.28 (import fitz prints a deprecation warning to stdout)
+    except ImportError:
+        try:
+            import fitz as pymupdf
+        except ImportError:
+            raise OfficeError("OCR requires PyMuPDF (pip install pymupdf)")
+    try:
+        from rapidocr_onnxruntime import RapidOCR
+    except ImportError:
+        raise OfficeError("OCR requires rapidocr-onnxruntime (pip install rapidocr-onnxruntime)")
+
+    total = 0
+    try:
+        doc = pymupdf.open(path)
+        total = len(doc)
+    except Exception as exc:
+        raise OfficeError("Cannot open PDF for OCR: %s" % exc)
+
+    sel = str(pages or "auto").strip().lower()
+    if sel in ("", "auto"):
+        wanted = pdf_scanned_pages(path)
+        if not wanted:
+            doc.close()
+            raise OfficeError("No scanned pages detected - every page has extractable text; pass pages='all' to force OCR.")
+    elif sel == "all":
+        wanted = list(range(1, total + 1))
+    else:
+        wanted = []
+        for part in sel.replace("page", "").split(","):
+            part = part.strip()
+            if not part:
+                continue
+            try:
+                n = int(part)
+            except ValueError:
+                doc.close()
+                raise OfficeError("pages must be numbers like '2,3,5', 'all' or 'auto'")
+            if n < 1 or n > total:
+                doc.close()
+                raise OfficeError("page %d out of range (document has %d pages)" % (n, total))
+            wanted.append(n)
+        wanted = sorted(set(wanted))
+
+    engine = RapidOCR()
+    results = []
+    import tempfile
+    for n in wanted:
+        page = doc[n - 1]
+        pix = page.get_pixmap(matrix=pymupdf.Matrix(dpi / 72.0, dpi / 72.0))
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tf:
+            tmp_path = tf.name
+        try:
+            pix.save(tmp_path)
+            res, _ = engine(tmp_path)
+        finally:
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
+        lines = [text for _, text, _ in (res or [])] if res else []
+        results.append({"page": n, "text": "\n".join(lines)})
+    doc.close()
+
+    parts = []
+    for r in results:
+        parts.append("### Page %d / %d (OCR)" % (r["page"], total))
+        parts.append(r["text"].strip() or "_(OCR returned no text on this page)_")
+        parts.append("")
+    joined = "\n".join(parts)
+    return {
+        "format": "pdf",
+        "path": path,
+        "pages": total,
+        "ocr_pages": [r["page"] for r in results],
+        "markdown": joined,
+        "text": joined,
+    }
+
+
+def parse_lab_report(path):
+    """Parse a hospital lab report PDF into structured JSON (patient, dated batches, abnormal items)."""
+    try:
+        import medical.lab_parser as lp
+    except ImportError:
+        parent = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        if parent not in sys.path:
+            sys.path.insert(0, parent)
+        import medical.lab_parser as lp
+    data = lp.parse_pdf(path)
+    # compact markdown summary for the calling model
+    lines = []
+    p = data.get("patient", {})
+    lines.append("**患者：** %s / %s / %s岁 / 病历号 %s" % (
+        p.get("name") or "?", p.get("sex") or "?", p.get("age") or "?", p.get("history_no") or "?"))
+    lines.append("**时间线（%d 个检查日，%d 个批次，%d 项检验）：** %s" % (
+        len(data.get("dates", [])), data.get("batch_count", 0), data.get("item_count", 0),
+        "、".join(data.get("dates", []))))
+    abn = data.get("abnormal", [])
+    if abn:
+        lines.append("**异常项目（%d 项）：**" % len(abn))
+        for a in abn:
+            lines.append("- %s %s = %s %s（参考 %s）→ %s" % (
+                a["date"], a["name"], a["value"], a["unit"], a["ref"], "偏高" if a["flag"] == "high" else "偏低"))
+    else:
+        lines.append("（未发现异常项目）")
+    return {
+        "format": "lab_json",
+        "path": path,
+        "patient": p,
+        "dates": data.get("dates", []),
+        "batch_count": data.get("batch_count", 0),
+        "item_count": data.get("item_count", 0),
+        "batches": data.get("batches", []),
+        "abnormal": abn,
+        "markdown": "\n".join(lines),
+        "text": "\n".join(lines),
+    }
+
+
 def csv_inspect(path):
     delimiter = "\t" if os.path.splitext(path)[1].lower() == ".tsv" else ","
     with open(path, "r", encoding="utf-8-sig", errors="replace", newline="") as fh:
@@ -795,7 +933,7 @@ def csv_read(path, target=None, limit=200):
 
 def op_capabilities():
     caps = {"python": sys.version.split()[0], "formats": {}, "libs": {}}
-    for name in ("openpyxl", "docx", "pptx", "pypdf", "matplotlib"):
+    for name in ("openpyxl", "docx", "pptx", "pypdf", "matplotlib", "pymupdf", "rapidocr_onnxruntime"):
         try:
             __import__(name)
             caps["libs"][name] = True
@@ -807,6 +945,7 @@ def op_capabilities():
     caps["formats"]["pdf"] = caps["libs"].get("pypdf") is True
     caps["formats"]["csv"] = True
     caps["formats"]["chart"] = caps["libs"].get("matplotlib") is True
+    caps["formats"]["ocr"] = caps["libs"].get("pymupdf") is True and caps["libs"].get("rapidocr_onnxruntime") is True
     caps["formats"]["create"] = True
     caps["soffice"] = _find_soffice()
     caps["formats"]["convert"] = bool(caps["soffice"])
@@ -2428,6 +2567,10 @@ def main():
             data = op_inspect(payload)
         elif op == "read":
             data = op_read(payload)
+        elif op == "ocr":
+            data = pdf_ocr_pages(payload.get("path"), payload.get("pages"))
+        elif op == "parse_lab":
+            data = parse_lab_report(payload.get("path"))
         elif op == "write":
             data = op_write(payload)
         elif op == "convert":
@@ -2435,7 +2578,7 @@ def main():
         elif op == "chart":
             data = op_chart(payload)
         else:
-            raise OfficeError("Unknown op '%s'. Expected: capabilities, inspect, read, write, convert, chart" % op)
+            raise OfficeError("Unknown op '%s'. Expected: capabilities, inspect, read, write, convert, chart, ocr, parse_lab" % op)
         emit({"ok": True, "data": data})
         return 0
     except OfficeError as exc:

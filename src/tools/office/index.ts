@@ -22,6 +22,7 @@ const MAX_RESULT_CHARS = 60000;
 const DEFAULT_TIMEOUT_MS = 60000;
 const WRITE_TIMEOUT_MS = 120000;
 const CONVERT_TIMEOUT_MS = 200000;
+const OCR_TIMEOUT_MS = 300000;
 const CAPS_TIMEOUT_MS = 45000;
 const PROBE_RETRY_MS = 60000;
 const PREVIEW_TTL_MS = 15 * 60 * 1000;
@@ -648,6 +649,47 @@ export function getOfficeToolDefinitions(): any[] {
     });
   }
 
+  if (cachedCaps.formats.ocr) {
+    defs.push({
+      type: 'function',
+      function: {
+        name: 'doc_ocr',
+        description:
+          'OCR scanned pages of a PDF (medical/imaging reports are often scanned with no text layer) and return the recognized text as Markdown. Use when doc_read on a PDF returns "(no extractable text - this may be a scanned PDF; use OCR)".',
+        parameters: {
+          type: 'object',
+          required: ['filename'],
+          properties: {
+            filename: { type: 'string', description: 'PDF path' },
+            pages: {
+              type: 'string',
+              description:
+                'Pages to OCR: "auto" (default) = detect pages with no text layer; "all" = every page; or a comma list like "2,3,5".',
+            },
+          },
+        },
+      },
+    });
+  }
+
+  if (cachedCaps.formats.pdf) {
+    defs.push({
+      type: 'function',
+      function: {
+        name: 'doc_parse_lab',
+        description:
+          'Parse a hospital lab report PDF (检验报告单) into structured data: patient header, dated batches of lab items (code/name/value/reference/unit), abnormal flags (偏高/偏低) and the full timeline of test dates. Returns a Markdown summary; the structured JSON is also embedded in the result. Use for 化验单/检验报告 analysis.',
+        parameters: {
+          type: 'object',
+          required: ['filename'],
+          properties: {
+            filename: { type: 'string', description: 'Lab report PDF path' },
+          },
+        },
+      },
+    });
+  }
+
   return defs;
 }
 
@@ -743,6 +785,25 @@ export async function executeOfficeTool(
     if (!res.ok) return { result: describeError(res), error: true };
     const data = res.data || {};
     return { result: clipResult(String(data.markdown || `${filePath} -> ${data.out || to}`)), error: false };
+  }
+
+  if (name === 'doc_ocr') {
+    const payload: Record<string, any> = { op: 'ocr', path: filePath };
+    if (args.pages !== undefined && args.pages !== null && String(args.pages).trim() !== '') {
+      payload.pages = String(args.pages).trim();
+    }
+    const res = await runOfficeHelper(payload, { timeoutMs: OCR_TIMEOUT_MS });
+    if (!res.ok) return { result: describeError(res), error: true };
+    const data = res.data || {};
+    const pages = Array.isArray(data.ocr_pages) ? data.ocr_pages.join(', ') : '?';
+    return { result: clipResult(String(data.markdown || `OCR complete (${pages})`)), error: false };
+  }
+
+  if (name === 'doc_parse_lab') {
+    const res = await runOfficeHelper({ op: 'parse_lab', path: filePath }, { timeoutMs: OCR_TIMEOUT_MS });
+    if (!res.ok) return { result: describeError(res), error: true };
+    const data = res.data || {};
+    return { result: clipResult(String(data.markdown || '(empty)')), error: false };
   }
 
   if (name === 'doc_write') {
