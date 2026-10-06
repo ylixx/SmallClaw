@@ -112,3 +112,7 @@ desktop.ini
 
 # --- WORKBUDDY WORKSPACE DATA ---
 .workbuddy/
+
+# Built-in analysis-report skill ships with the project (keep trackable)
+!.smallclaw/skills/analysis-report/
+!.smallclaw/skills/analysis-report/**
