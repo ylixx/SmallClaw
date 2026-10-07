@@ -4927,6 +4927,25 @@ RULES:
   sendSSE('info', { message: 'Thinking...' });
   console.log(`\n[v2] ── CHAT (native tools) ──`);
 
+  // Report generation throughput (tokens/s) over SSE so the UI can show the
+  // model's output speed. llama.cpp's OpenAI-compat endpoint returns usage
+  // { prompt_tokens, completion_tokens }, and we time the call locally.
+  const reportGenerationStats = (result: any, startedAt: number): void => {
+    const usage = (result as any)?.usage;
+    const completionTokens = Number(usage?.completion_tokens) || 0;
+    const elapsedMs = Math.max(1, Date.now() - startedAt);
+    const tps = completionTokens > 0 ? completionTokens / (elapsedMs / 1000) : 0;
+    console.log(`[v2] GEN: ${completionTokens} tok in ${elapsedMs}ms = ${tps.toFixed(1)} tok/s (prompt ${Number(usage?.prompt_tokens) || 0})`);
+    if (completionTokens > 0) {
+      sendSSE('stats', {
+        tokens_per_second: Math.round(tps * 10) / 10,
+        completion_tokens: completionTokens,
+        prompt_tokens: Number(usage?.prompt_tokens) || 0,
+        elapsed_ms: elapsedMs,
+      });
+    }
+  };
+
   for (let round = 0; ; round++) {
     if (round >= MAX_TOOL_ROUNDS) {
       const allowExtendedFileOpLoop =
@@ -5126,6 +5145,7 @@ RULES:
         )
       );
       const primaryThinkMode: boolean | 'high' | 'medium' | 'low' = (multiAgentActive && !isActiveAutomationOp) ? true : false;
+      const genStartedAt = Date.now();
       const generationPromise = ollama.chatWithThinking(messages, 'executor', {
         tools,
         temperature: 0.3,
@@ -5272,6 +5292,7 @@ RULES:
         // Generation finished before watchdog
         const result = watchdogOutcome.result;
         response = result.message;
+        reportGenerationStats(result, genStartedAt);
         if (result.thinking) {
           console.log(`[v2] THINK (${result.thinking.length} chars): ${result.thinking.slice(0, 150)}...`);
           allThinking += (allThinking ? '\n\n' : '') + result.thinking;
@@ -5281,6 +5302,7 @@ RULES:
         // Watchdog not active — normal await
         const result = await generationPromise;
         response = result.message;
+        reportGenerationStats(result, genStartedAt);
         if (result.thinking) {
           console.log(`[v2] THINK (${result.thinking.length} chars): ${result.thinking.slice(0, 150)}...`);
           allThinking += (allThinking ? '\n\n' : '') + result.thinking;

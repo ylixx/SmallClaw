@@ -136,7 +136,9 @@ export class OpenAICompatAdapter implements LLMProvider {
       content: choice?.message?.content ?? '',
       tool_calls: choice?.message?.tool_calls,
     };
-    return { message };
+    // Pass usage through (llama-server & OpenAI-compat backends report
+    // prompt/completion token counts) so callers can compute tokens/sec.
+    return { message, usage: data?.usage };
   }
 
   async generate(prompt: string, model: string, options?: GenerateOptions): Promise<GenerateResult> {

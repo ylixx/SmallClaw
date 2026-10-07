@@ -55,6 +55,9 @@ export interface GenerateOptions {
 export interface ChatResult {
   message: ChatMessage;
   thinking?: string;
+  // OpenAI-compat backends (incl. llama.cpp) return usage { prompt_tokens,
+  // completion_tokens, total_tokens }; surfaced so callers can show token speed.
+  usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
 }
 
 export interface GenerateResult {

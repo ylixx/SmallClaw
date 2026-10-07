@@ -21,6 +21,7 @@ export interface GenerateOutput {
 export interface ChatOutput {
   message: any;
   thinking?: string;
+  usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
 }
 
 export class OllamaClient {
@@ -51,7 +52,7 @@ export class OllamaClient {
       tools:       options?.tools,
       think:       options?.think,
     });
-    return { message: result.message, thinking: result.thinking };
+    return { message: result.message, thinking: result.thinking, usage: (result as any)?.usage };
   }
 
   // ─── Generate ───────────────────────────────────────────────────────────────

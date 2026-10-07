@@ -2778,7 +2778,10 @@
   </div>
 
   <div style="padding:10px 16px 8px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between">
-    <div class="right-section-title" style="margin:0">Quick Actions</div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <div class="right-section-title" style="margin:0">Quick Actions</div>
+      <span id="gen-stats" style="font-size:11px;color:var(--muted);font-family:'IBM Plex Mono',monospace;white-space:nowrap"></span>
+    </div>
     <div style="display:flex;gap:6px">
       <button class="btn btn-sm" style="background:var(--bg3);color:var(--muted);border:1px solid var(--border);padding:3px 8px" onclick="clearChat()">✕ Chat</button>
       <button class="btn btn-sm" style="background:var(--bg3);color:var(--muted);border:1px solid var(--border);padding:3px 8px" onclick="newChatSession()">+</button>
@@ -5590,6 +5593,18 @@ async function sendChat(queuedMessage = null) {
 
           case 'info':
             if (event.message) addProcessEntry('info', String(event.message));
+            break;
+
+          case 'stats':
+            if (event && Number(event.tokens_per_second) > 0) {
+              const el = document.getElementById('gen-stats');
+              if (el) {
+                const tps = Number(event.tokens_per_second).toFixed(1);
+                const ct = Number(event.completion_tokens) || 0;
+                const pt = Number(event.prompt_tokens) || 0;
+                el.textContent = `${tps} tok/s · ${ct} tok 出 · ${pt} tok 入`;
+              }
+            }
             break;
 
           case 'heartbeat': {
