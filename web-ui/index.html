@@ -35,6 +35,8 @@
     --radius-lg: 18px;
     --shadow-sm: 0 2px 6px rgba(16, 32, 64, 0.06);
     --shadow-md: 0 8px 24px rgba(16, 32, 64, 0.08);
+    --col-sidebar: 280px;
+    --col-right: max(380px, 34vw);
   }
 
   :root[data-theme="dark"] {
@@ -68,13 +70,14 @@
       var(--bg);
     display: grid;
     grid-template-rows: 64px 1fr;
-    grid-template-columns: var(--col-sidebar, 280px) 1fr var(--col-right, minmax(380px, 34vw));
+    grid-template-columns: var(--col-sidebar) 1fr var(--col-right);
     grid-template-areas:
       "header header header"
       "sidebar main right";
     gap: 14px;
     padding: 12px;
     overflow: hidden;
+    position: relative;
   }
   :root[data-theme="dark"] body {
     background:
@@ -213,13 +216,14 @@
     min-width: 0;
   }
 
-  /* Draggable column dividers (sidebar|main|right) — always-visible 1px line,
-     hover/active widens and highlights. Hit area covers the whole 14px grid gap
-     plus the chat column's edge so the divider line is always clickable. */
+  /* Draggable column dividers (sidebar|main|right) — live at BODY level so the
+     panels' overflow:hidden can never clip them. Positioned with calc() over the
+     14px grid gap: the visible 1px line sits centered on the gap, the 16px hit
+     area covers the whole seam plus 1px into the chat column on each side. */
   .col-resizer {
     position: absolute;
-    top: 0;
-    bottom: 0;
+    top: 76px;
+    bottom: 12px;
     width: 16px;
     cursor: col-resize;
     z-index: 90;
@@ -243,6 +247,8 @@
     width: 2px;
     margin-left: -1px;
   }
+  #resizer-sidebar { left: calc(12px + var(--col-sidebar) - 1px); }
+  #resizer-right { left: calc(100% - 12px - var(--col-right) - 15px); }
 
   #sidebar-tabs {
     display: flex;
@@ -2337,7 +2343,6 @@
       <div class="empty-state" style="padding:16px">Loading knowledge base...</div>
     </div>
   </div>
-  <div class="col-resizer" id="resizer-sidebar" data-side="sidebar" style="right:-14px" title="拖动调整侧边栏宽度"></div>
 </aside>
 
 <!-- MAIN -->
@@ -2439,6 +2444,10 @@
     </div>
   </div>
 </main>
+
+<!-- Column drag handles live at body level (never clipped by panel overflow) -->
+<div class="col-resizer" id="resizer-sidebar" data-side="sidebar" title="拖动调整侧边栏宽度"></div>
+<div class="col-resizer" id="resizer-right" data-side="right" title="拖动调整右侧面板宽度"></div>
 
 <!-- Task Modal -->
 <div id="task-modal" style="display:none"></div>
@@ -2592,7 +2601,6 @@
 
 <!-- RIGHT PANEL -->
   <div class="right-panel" id="right-panel" style="position:relative">
-  <div class="col-resizer" id="resizer-right" data-side="right" style="left:-14px" title="拖动调整右侧面板宽度"></div>
   <!-- Right panel topbar with canvas toggle -->
   <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 12px;border-bottom:1px solid var(--line);flex-shrink:0;background:var(--panel);min-height:38px">
     <span style="font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em">Context</span>
@@ -6104,11 +6112,12 @@ document.getElementById('chat-input').addEventListener('keydown', e => {
   });
   document.addEventListener('mouseup', () => {
     if (!drag) return;
-    const s = getComputedStyle(root);
-    const sw = parseFloat(s.getPropertyValue('--col-sidebar')) || 0;
-    const rw = parseFloat(s.getPropertyValue('--col-right')) || 0;
-    if (sw > 0) localStorage.setItem(KEY_S, String(Math.round(sw)));
-    if (rw > 0) localStorage.setItem(KEY_R, String(Math.round(rw)));
+    const el = drag.side === 'sidebar' ? document.querySelector('aside') : document.getElementById('right-panel');
+    if (el) {
+      const w = Math.round(el.getBoundingClientRect().width);
+      if (drag.side === 'sidebar') localStorage.setItem(KEY_S, String(w));
+      else localStorage.setItem(KEY_R, String(w));
+    }
     if (drag.bar) drag.bar.classList.remove('active');
     drag = null;
     document.body.style.cursor = '';
@@ -6118,10 +6127,9 @@ document.getElementById('chat-input').addEventListener('keydown', e => {
     bar.addEventListener('mousedown', (e) => {
       e.preventDefault();
       const side = bar.getAttribute('data-side');
-      const cs = getComputedStyle(root);
-      const cur = side === 'sidebar'
-        ? (parseFloat(cs.getPropertyValue('--col-sidebar')) || 280)
-        : (parseFloat(cs.getPropertyValue('--col-right')) || 520);
+      // Read the panel's real rendered width (defaults may be calc/max() expressions)
+      const el = side === 'sidebar' ? document.querySelector('aside') : document.getElementById('right-panel');
+      const cur = el ? el.getBoundingClientRect().width : (side === 'sidebar' ? 280 : 520);
       drag = { side, startX: e.clientX, start: cur, bar };
       bar.classList.add('active');
       document.body.style.cursor = 'col-resize';
