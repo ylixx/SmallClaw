@@ -8737,6 +8737,16 @@ function renderKnowledgeList() {
 }
 
 async function loadKnowledge() {
+  // Debounce: multiple triggers within 300ms (startup preload + tab click +
+  // @-menu + post-mutation refresh) collapse into one request, avoiding the
+  // burst of identical "KB load: API 返回 …" log entries.
+  if (kbLoadTimer) clearTimeout(kbLoadTimer);
+  kbLoadTimer = setTimeout(() => { void doLoadKnowledge(); }, 300);
+}
+
+let kbLoadTimer = null;
+
+async function doLoadKnowledge() {
   const el = document.getElementById('knowledge-list');
   const statusLine = document.getElementById('kb-status-line');
   if (el) el.innerHTML = '<div style="padding:12px;color:#aeb9cb;font-size:11px"><span class="spinner"></span> Loading...</div>';
