@@ -3333,7 +3333,36 @@ const TOOL_ARG_PARSE_RETRY_HINT =
  * nothing is hard-locked: a 128K model gets a large history, a 48K local model
  * gets a smaller one automatically.
  */
-function resolveHistoryBudgetTokens(): number {
+// Live n_ctx probe cache: llama.cpp context follows the RUNNING server, never a
+// hard-coded preset value. Keyed by endpoint+model so switching models re-probes.
+// 30s TTL keeps per-chat overhead at zero after the first probe.
+let nctxProbe: { key: string; value: number; at: number } | null = null;
+const NCTX_PROBE_TTL_MS = 30_000;
+
+async function probeLlamaNctx(endpoint: string, modelPath: string): Promise<number | null> {
+  const key = `${endpoint}|${modelPath}`;
+  if (nctxProbe && nctxProbe.key === key && Date.now() - nctxProbe.at < NCTX_PROBE_TTL_MS) {
+    return nctxProbe.value > 0 ? nctxProbe.value : null;
+  }
+  let value = 0;
+  try {
+    const url = String(endpoint || 'http://localhost:8080').replace(/\/+$/, '');
+    const res = await fetch(`${url}/props`, { signal: AbortSignal.timeout(2000) });
+    if (res.ok) {
+      const props: any = await res.json();
+      // llama-server exposes n_ctx inside default_generation_settings; tolerate
+      // a top-level n_ctx too in case the schema moves.
+      const nctx = Number(props?.default_generation_settings?.n_ctx ?? props?.n_ctx);
+      if (Number.isFinite(nctx) && nctx > 0) value = nctx;
+    }
+  } catch {
+    // probe failure (server down / not llama.cpp) → fall back to config below
+  }
+  nctxProbe = { key, value, at: Date.now() };
+  return value > 0 ? value : null;
+}
+
+async function resolveHistoryBudgetTokens(): Promise<number> {
   const explicit = Number(process.env.SMALLCLAW_HISTORY_BUDGET_TOKENS);
   if (Number.isFinite(explicit) && explicit > 0) return explicit;
   const raw = getConfig().getConfig() as any;
@@ -3341,12 +3370,28 @@ function resolveHistoryBudgetTokens(): number {
   const preset = llm.presets?.[String(llm.active_preset || '')];
   let window = 131072;
   if (preset) {
-    const explicitWindow = Number(preset.context_window);
-    if (Number.isFinite(explicitWindow) && explicitWindow > 0) {
-      window = explicitWindow;
+    if (preset.provider === 'llama_cpp') {
+      // Context follows the LIVE llama-server (e.g. -c 128000), not a stale
+      // preset ctx_size. The preset value is only the fallback when the
+      // server cannot be probed.
+      const endpoint = String(preset.providers?.llama_cpp?.endpoint || 'http://localhost:8080');
+      const modelPath = String(preset.server?.model_path || preset.providers?.llama_cpp?.model || '');
+      const liveNctx = await probeLlamaNctx(endpoint, modelPath);
+      if (liveNctx) {
+        window = liveNctx;
+        console.log(`[v2] CTX: active preset "${String(llm.active_preset)}" probed n_ctx=${liveNctx} from live llama-server`);
+      } else {
+        const serverCtx = Number(preset.server?.ctx_size);
+        if (Number.isFinite(serverCtx) && serverCtx > 0) window = serverCtx;
+      }
     } else {
-      const serverCtx = Number(preset.server?.ctx_size);
-      if (Number.isFinite(serverCtx) && serverCtx > 0) window = serverCtx;
+      const explicitWindow = Number(preset.context_window);
+      if (Number.isFinite(explicitWindow) && explicitWindow > 0) {
+        window = explicitWindow;
+      } else {
+        const serverCtx = Number(preset.server?.ctx_size);
+        if (Number.isFinite(serverCtx) && serverCtx > 0) window = serverCtx;
+      }
     }
   }
   const budget = Math.round(window * 0.5);
@@ -3789,7 +3834,7 @@ async function handleChat(
   //    hard-coded number: a 128K cloud model gets a large history budget while
   //    a 48K local llama.cpp model gets a smaller one. Override with
   //    SMALLCLAW_HISTORY_BUDGET_TOKENS. ──
-  const HISTORY_BUDGET_TOKENS = resolveHistoryBudgetTokens();
+  const HISTORY_BUDGET_TOKENS = await resolveHistoryBudgetTokens();
   let budgetChars = HISTORY_BUDGET_TOKENS * 3.5; // ~3.5 chars/token for mixed zh/en
   const historyKept: Array<{ role: string; content: any }> = [];
   for (let i = history.length - 1; i >= 0; i--) {
