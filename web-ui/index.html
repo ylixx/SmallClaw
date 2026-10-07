@@ -213,14 +213,14 @@
     min-width: 0;
   }
 
-  /* Draggable column dividers (sidebar|main|right) */
+  /* Draggable column dividers (sidebar|main|right) — 16px hit area covers the 14px grid gap */
   .col-resizer {
     position: absolute;
     top: 0;
     bottom: 0;
-    width: 8px;
+    width: 16px;
     cursor: col-resize;
-    z-index: 80;
+    z-index: 90;
     background: transparent;
     transition: background 0.15s ease;
     user-select: none;
@@ -2293,7 +2293,7 @@
       <div class="empty-state" style="padding:16px">Loading knowledge base...</div>
     </div>
   </div>
-  <div class="col-resizer" id="resizer-sidebar" data-side="sidebar" style="right:-4px" title="拖动调整侧边栏宽度"></div>
+  <div class="col-resizer" id="resizer-sidebar" data-side="sidebar" style="right:-8px" title="拖动调整侧边栏宽度"></div>
 </aside>
 
 <!-- MAIN -->
@@ -2547,7 +2547,7 @@
 
 <!-- RIGHT PANEL -->
   <div class="right-panel" id="right-panel" style="position:relative">
-  <div class="col-resizer" id="resizer-right" data-side="right" style="left:-4px" title="拖动调整右侧面板宽度"></div>
+  <div class="col-resizer" id="resizer-right" data-side="right" style="left:-8px" title="拖动调整右侧面板宽度"></div>
   <!-- Right panel topbar with canvas toggle -->
   <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 12px;border-bottom:1px solid var(--line);flex-shrink:0;background:var(--panel);min-height:38px">
     <span style="font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em">Context</span>
