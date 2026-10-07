@@ -213,7 +213,9 @@
     min-width: 0;
   }
 
-  /* Draggable column dividers (sidebar|main|right) — 16px hit area covers the 14px grid gap */
+  /* Draggable column dividers (sidebar|main|right) — always-visible 1px line,
+     hover/active widens and highlights. Hit area covers the whole 14px grid gap
+     plus the chat column's edge so the divider line is always clickable. */
   .col-resizer {
     position: absolute;
     top: 0;
@@ -222,12 +224,24 @@
     cursor: col-resize;
     z-index: 90;
     background: transparent;
-    transition: background 0.15s ease;
     user-select: none;
   }
-  .col-resizer:hover,
-  .col-resizer.active {
-    background: rgba(22, 104, 227, 0.22);
+  .col-resizer::after {
+    content: '';
+    position: absolute;
+    top: 8px;
+    bottom: 8px;
+    left: 50%;
+    width: 1px;
+    margin-left: -0.5px;
+    background: rgba(127, 140, 160, 0.28);
+    transition: background 0.15s ease, width 0.15s ease;
+  }
+  .col-resizer:hover::after,
+  .col-resizer.active::after {
+    background: rgba(22, 104, 227, 0.95);
+    width: 2px;
+    margin-left: -1px;
   }
 
   #sidebar-tabs {
@@ -2293,7 +2307,7 @@
       <div class="empty-state" style="padding:16px">Loading knowledge base...</div>
     </div>
   </div>
-  <div class="col-resizer" id="resizer-sidebar" data-side="sidebar" style="right:-8px" title="拖动调整侧边栏宽度"></div>
+  <div class="col-resizer" id="resizer-sidebar" data-side="sidebar" style="right:-14px" title="拖动调整侧边栏宽度"></div>
 </aside>
 
 <!-- MAIN -->
@@ -2547,7 +2561,7 @@
 
 <!-- RIGHT PANEL -->
   <div class="right-panel" id="right-panel" style="position:relative">
-  <div class="col-resizer" id="resizer-right" data-side="right" style="left:-8px" title="拖动调整右侧面板宽度"></div>
+  <div class="col-resizer" id="resizer-right" data-side="right" style="left:-14px" title="拖动调整右侧面板宽度"></div>
   <!-- Right panel topbar with canvas toggle -->
   <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 12px;border-bottom:1px solid var(--line);flex-shrink:0;background:var(--panel);min-height:38px">
     <span style="font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em">Context</span>
