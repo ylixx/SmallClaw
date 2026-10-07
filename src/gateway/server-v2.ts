@@ -1016,6 +1016,31 @@ async function buildPersonalityContext(
   historyLength: number,
 ): Promise<string> {
 
+  // ── Recent conversation recall ─────────────────────────────────────────────
+  // Daily conversation logs live in memory/<date>.md (written by logToDaily
+  // every turn) but were never injected, so the model had no idea what was
+  // discussed on previous days or in other sessions — "the last conversation"
+  // could not be located. Inject the tail of the most recent days so the model
+  // can actually recall recent discussions. Tail-heavy: recent talk is what
+  // matters for recall.
+  const RECENT_CONV_DAYS = 2;
+  const RECENT_CONV_TAIL_CHARS = 1400;
+  const recentConversations: string[] = [];
+  for (let i = RECENT_CONV_DAYS; i >= 1; i--) {
+    const d = new Date(Date.now() - i * 86_400_000).toISOString().split('T')[0];
+    const p = path.join(workspacePath, 'memory', `${d}.md`);
+    try {
+      if (!fs.existsSync(p)) continue;
+      const content = fs.readFileSync(p, 'utf-8').trim();
+      if (!content) continue;
+      const tail = content.slice(-RECENT_CONV_TAIL_CHARS);
+      recentConversations.push(`[${d} 对话记录]\n${tail}`);
+    } catch { /* missing/unreadable daily log is not fatal */ }
+  }
+  const recentConvBlock = recentConversations.length > 0
+    ? `\n\n[RECENT_CONVERSATIONS — 这是此前几天的对话记录，若用户提到"上次/最后一次对话"，据此回答]\n${recentConversations.join('\n\n')}`
+    : '';
+
   // ── Path B: autonomous execution — full prompt, no changes ─────────────────
   const isAutonomous = executionMode === 'background_task' || executionMode === 'cron' || executionMode === 'heartbeat';
   if (isAutonomous) {
@@ -1030,6 +1055,7 @@ async function buildPersonalityContext(
       soul ? `[SOUL]\n${soul}` : '',
       user ? `[USER]\n${user}` : '',
       intradayNotes ? `[TODAY_NOTES]\n${intradayNotes}` : '',
+      recentConvBlock || '',
     ].filter(Boolean);
     await hookBus.fire({ type: 'agent:bootstrap', sessionId, workspacePath, bootstrapFiles: [], timestamp: Date.now() });
     return parts.length > 0 ? '\n\n' + parts.join('\n\n') : '';
@@ -1048,6 +1074,7 @@ async function buildPersonalityContext(
       identity ? `[IDENTITY]\n${identity}` : '',
       user ? `[USER]\n${user}` : '',
       intradayNotes ? `[TODAY_NOTES]\n${intradayNotes}` : '',
+      recentConvBlock || '',
     ].filter(Boolean);
     await hookBus.fire({ type: 'agent:bootstrap', sessionId, workspacePath, bootstrapFiles: [], timestamp: Date.now() });
     return parts.length > 0 ? '\n\n' + parts.join('\n\n') : '';
@@ -1085,6 +1112,7 @@ async function buildPersonalityContext(
     user ? `[USER]\n${user}` : '',
     soul ? `[SOUL]\n${soul}` : '',
     intradayNotes ? `[TODAY_NOTES]\n${intradayNotes}` : '',
+    recentConvBlock || '',
     toolBlockParts.length > 0 ? `[TOOLS]\n${toolBlockParts.join('\n\n')}${toolsHint}` : (toolsHint ? `[TOOLS]${toolsHint}` : ''),
     memorySnippets ? `[RELEVANT_MEMORY]\n${memorySnippets}` : '',
     self ? `[SELF]\n${self}` : '',
