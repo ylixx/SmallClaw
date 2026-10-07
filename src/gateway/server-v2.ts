@@ -2208,6 +2208,7 @@ async function executeToolImpl(name: string, args: any, workspacePath: string, s
 
       case 'knowledge_add':
       case 'knowledge_search':
+      case 'knowledge_get':
       case 'knowledge_list':
       case 'knowledge_status':
       case 'knowledge_remove': {
@@ -3827,6 +3828,37 @@ async function handleChat(
       }
     } catch (err: any) {
       console.log(`[v2] KB auto-inject skipped: ${err?.message || err}`);
+    }
+  }
+
+  // ── @-reference injection: "@filename" in the message pulls that stored
+  //    file's content into context so the model answers from that file. ──
+  const atRefMatch = !isBootStartupTurn && /@([^\s@，。；、！？?？\n]{1,80})/.exec(message);
+  if (atRefMatch && atRefMatch[1]) {
+    try {
+      const getPromise = executeKnowledgeTool(
+        'knowledge_get',
+        { name: String(atRefMatch[1]).trim(), max_chunks: 8 },
+        KNOWLEDGE_DIR,
+      );
+      const timeoutPromise = new Promise<{ ok: boolean; chunks?: any[]; name?: string }>((resolve) => {
+        setTimeout(() => resolve({ ok: false }), 6000);
+      });
+      const refOutcome = await Promise.race([getPromise, timeoutPromise]);
+      if (refOutcome.ok && Array.isArray(refOutcome.chunks) && refOutcome.chunks.length > 0) {
+        const refText = String(refOutcome.chunks.join('\n---\n')).slice(0, 9000);
+        messages.push({
+          role: 'user',
+          content:
+            `【@引用文件：${refOutcome.name}】用户 @ 引用了知识库文件「${refOutcome.name}」，其内容如下。回答请优先依据该文件内容，并注明这是来自该文件的信息：\n\n${refText}`,
+        });
+        console.log(`[v2] KB @-ref: ${refOutcome.name} (${refOutcome.chunks.length} chunks)`);
+        sendSSE('knowledge_referenced', { file: refOutcome.name });
+      } else if (refOutcome.ok) {
+        console.log(`[v2] KB @-ref: "${atRefMatch[1]}" matched nothing`);
+      }
+    } catch (err: any) {
+      console.log(`[v2] KB @-ref skipped: ${err?.message || err}`);
     }
   }
 

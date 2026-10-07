@@ -791,7 +791,10 @@
 
   .agent-toggle,
   .mission-input-row,
-  .chat-input-row { display: flex; align-items: center; gap: 10px; }
+  .chat-input-row { display: flex; align-items: center; gap: 10px; position: relative; }
+  .kb-at-menu { position: absolute; bottom: calc(100% + 8px); left: 0; right: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 6px 20px rgba(0,0,0,.18); z-index: 60; max-height: 220px; overflow-y: auto; padding: 4px; }
+  .kb-at-item { display: flex; align-items: center; gap: 4px; padding: 7px 10px; border-radius: 8px; cursor: pointer; font-size: 12px; color: var(--text); }
+  .kb-at-item:hover { background: var(--panel-2); }
   .queued-prompts-panel {
     display: none;
     margin-bottom: 10px;
@@ -2351,6 +2354,7 @@
           <svg id="stop-icon" width="13" height="13" viewBox="0 0 14 14" fill="currentColor" style="display:none"><rect x="2" y="2" width="10" height="10" rx="1.5"/></svg>
         </button>
       </div>
+      <div id="kb-at-menu" class="kb-at-menu" style="display:none"></div>
       <div class="chat-hint">
         <span style="color:var(--muted)">Chatting with</span>
         <select id="chat-model-switch" onchange="onChatModelSwitch(this)" title="随时切换模型" style="background:transparent;border:1px solid var(--line);border-radius:8px;color:var(--text);font-size:12px;padding:2px 6px;cursor:pointer;max-width:280px"></select>
@@ -5977,6 +5981,70 @@ document.getElementById('chat-input').addEventListener('input', function() {
   this.style.height = Math.min(this.scrollHeight, 140) + 'px';
 });
 
+// ---- Knowledge base @-picker ----
+// Clicking "@ 引用" on a KB file card drops "@name " into the chat input.
+function insertKbRef(name) {
+  const inp = document.getElementById('chat-input');
+  if (!inp) return;
+  const base = String(name || '').replace(/\.[^.]+$/, '');
+  inp.value = (inp.value ? inp.value.replace(/\s*$/, '') + ' ' : '') + '@' + base + ' ';
+  inp.focus();
+  inp.dispatchEvent(new Event('input'));
+}
+
+// Typing @ in the chat input shows a picker of knowledge base files.
+const kbAtMenu = document.getElementById('kb-at-menu');
+const kbAtInput = document.getElementById('chat-input');
+
+function updateKbAtMenu() {
+  if (!kbAtMenu || !kbAtInput) return;
+  const v = kbAtInput.value;
+  const lastAt = v.lastIndexOf('@');
+  if (lastAt < 0) { kbAtMenu.style.display = 'none'; return; }
+  const after = v.slice(lastAt + 1);
+  if (!after || /[\s，。；、！？?？\n]/.test(after.slice(0, 1))) { kbAtMenu.style.display = 'none'; return; }
+  if (!knowledgeFiles || knowledgeFiles.length === 0) { loadKnowledge(); kbAtMenu.style.display = 'none'; return; }
+  const q = after.trim();
+  const list = knowledgeFiles.filter((f) => !q || String(f.name).toLowerCase().includes(q.toLowerCase()));
+  if (list.length === 0) { kbAtMenu.style.display = 'none'; return; }
+  kbAtMenu.innerHTML = list.slice(0, 8).map((f) => {
+    const base = String(f.name).replace(/\.[^.]+$/, '');
+    return '<div class="kb-at-item" data-kb="' + escHtml(base) + '" title="' + escHtml(f.name) + '">' +
+      '<span style="font-size:11px;color:var(--accent)">@</span> ' + escHtml(base) +
+      '<span style="font-size:10px;color:var(--muted);margin-left:6px">' + (f.chunks || 0) + ' 分块</span>' +
+      '</div>';
+  }).join('');
+  kbAtMenu.style.display = 'block';
+}
+
+function pickKbAt(item) {
+  if (!kbAtInput || !item) return;
+  const base = item.getAttribute('data-kb');
+  const v = kbAtInput.value;
+  const lastAt = v.lastIndexOf('@');
+  kbAtInput.value = v.slice(0, lastAt) + '@' + base + ' ';
+  kbAtInput.focus();
+  kbAtMenu.style.display = 'none';
+  kbAtInput.dispatchEvent(new Event('input'));
+}
+
+if (kbAtInput) {
+  kbAtInput.addEventListener('input', updateKbAtMenu);
+  kbAtInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { if (kbAtMenu) kbAtMenu.style.display = 'none'; return; }
+    if (kbAtMenu && kbAtMenu.style.display !== 'none' && e.key === 'Tab') {
+      const sel = kbAtMenu.querySelector('.kb-at-item');
+      if (sel) { e.preventDefault(); pickKbAt(sel); }
+    }
+  });
+}
+if (kbAtMenu) {
+  kbAtMenu.addEventListener('mousedown', (e) => {
+    const item = e.target && e.target.closest ? e.target.closest('.kb-at-item') : null;
+    if (item) { e.preventDefault(); pickKbAt(item); }
+  });
+}
+
 // ---- WebSocket ----
 function connectWS() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -8492,6 +8560,7 @@ async function loadKnowledge() {
             <div class="skill-card-desc">${f.chunks} 分块 · ${escHtml(f.added_at || '')}</div>
           </div>
           <div class="skill-card-actions">
+            <button class="skill-mini-btn" onclick="event.stopPropagation();insertKbRef('${escHtml(f.name)}')" title="在聊天中引用该文件" style="display:flex;align-items:center;gap:3px;padding:3px 8px;font-size:11px">@ 引用</button>
             <button class="skill-remove-btn" onclick="event.stopPropagation();removeKnowledgeFile('${escHtml(f.name)}')" title="从知识库删除" aria-label="Delete from KB">✕</button>
             <div class="skill-card-dot"></div>
           </div>

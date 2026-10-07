@@ -10,6 +10,7 @@ describe('knowledge tool wiring', () => {
     expect(KNOWLEDGE_TOOL_NAMES).toEqual([
       'knowledge_add',
       'knowledge_search',
+      'knowledge_get',
       'knowledge_list',
       'knowledge_status',
       'knowledge_remove',
@@ -18,7 +19,7 @@ describe('knowledge tool wiring', () => {
 
   it('builds OpenAI-style function definitions', () => {
     const defs = getKnowledgeToolDefinitions('E:/kb');
-    expect(defs).toHaveLength(5);
+    expect(defs).toHaveLength(6);
     for (const def of defs) {
       expect(def.type).toBe('function');
       expect(def.function.name).toMatch(/^knowledge_/);
