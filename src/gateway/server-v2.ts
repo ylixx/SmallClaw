@@ -3457,6 +3457,18 @@ async function resolveHistoryBudgetTokens(): Promise<number> {
   return Math.min(60000, Math.max(8000, budget));
 }
 
+// ── In-round context budget: cross-turn shared state ───────────────────────
+// Calibration + adaptive budget live at MODULE level so they persist across
+// chat turns (per-turn state would reset every request and never learn the
+// real chars→tokens density of the active model).
+const INROUND_SLOW_TPS = 8;    // below this → shrink budget (small-model friendly)
+const INROUND_FAST_TPS = 20;   // above this → relax budget back toward base
+const INROUND_MIN_BUDGET = 4000;
+let inRoundCtxCharPerToken = 1.0;  // conservative start: 1 CJK char ≈ 1 token
+let inRoundLastSentChars = 0;      // chars actually sent in the last generation
+let inRoundAdaptiveBudget = 0;     // 0 = not initialized for the active model yet
+let inRoundBudgetModelKey = '';    // resets calibration when the model changes
+
 async function handleChat(
   message: string,
   sessionId: string,
@@ -4927,6 +4939,92 @@ RULES:
   sendSSE('info', { message: 'Thinking...' });
   console.log(`\n[v2] ── CHAT (native tools) ──`);
 
+  // ── In-round context budget ────────────────────────────────────────────────
+  // The cross-turn history is pruned above, but the tool-call loop appends
+  // every assistant/tool round to `messages`, so a multi-step task can still
+  // grow the prompt to 10K+ tokens. llama.cpp's --context-shift keeps the KV
+  // cache alive but does NOT shrink the prompt we resend every round. So we cap
+  // the in-round payload: keep the system message + the latest 2 full rounds
+  // intact, compress the middle to one-liners.
+  // The budget FOLLOWS THE MODEL WINDOW (≈25% of it, clamped 4K–40K): a 128K
+  // model starts at ~32K, a 48K model at ~12K, an 8K model at 4K — nothing
+  // hard-coded. On top of that a runtime adaptive loop shrinks the budget when
+  // the model slows down and relaxes it when speed recovers (small models lose
+  // throughput on long contexts, so they self-tighten). Override the starting
+  // value with SMALLCLAW_INROUND_BUDGET_TOKENS.
+  const baseInRoundBudget = (() => {
+    const explicit = Number(process.env.SMALLCLAW_INROUND_BUDGET_TOKENS);
+    if (Number.isFinite(explicit) && explicit > 0) return explicit;
+    return Math.min(40000, Math.max(4000, Math.round(HISTORY_BUDGET_TOKENS * 0.5)));
+  })();
+  const budgetKey = `${String((getConfig().getConfig() as any)?.llm?.active_preset || '')}|${modelOverride || ''}`;
+  if (inRoundBudgetModelKey !== budgetKey) {
+    // Model changed → recalibrate from scratch for the new model.
+    inRoundBudgetModelKey = budgetKey;
+    inRoundAdaptiveBudget = 0;
+    inRoundCtxCharPerToken = 1.0;
+    inRoundLastSentChars = 0;
+    console.log(`[v2] CTX: in-round calibration reset (model key "${budgetKey}")`);
+  }
+  if (inRoundAdaptiveBudget <= 0) {
+    inRoundAdaptiveBudget = baseInRoundBudget;
+    console.log(`[v2] CTX: in-round budget base=${baseInRoundBudget} tok (env ${process.env.SMALLCLAW_INROUND_BUDGET_TOKENS || 'unset'})`);
+  }
+  let inRoundTrimNotified = false;
+  const trimInRoundMessages = (msgs: any[]): any[] => {
+    let chars = 0;
+    for (const m of msgs) {
+      const raw = m?.content;
+      chars += (typeof raw === 'string' ? raw : JSON.stringify(raw ?? '')).length;
+      if (m?.tool_calls) chars += 80;
+    }
+    const total = Math.ceil(chars * inRoundCtxCharPerToken) + msgs.length * 8;
+    if (total <= inRoundAdaptiveBudget) {
+      inRoundLastSentChars = chars;
+      return msgs;
+    }
+
+    const kept: any[] = [msgs[0]]; // system stays intact
+    // Keep the latest 3 full rounds so a long tool chain's recent state stays
+    // coherent for small models (2 rounds was enough for trimming but left a
+    // 3-round chain without enough recent context and answers drifted).
+    const TAIL_ROUNDS = 3;
+    const tail = msgs.length > TAIL_ROUNDS ? msgs.slice(-TAIL_ROUNDS) : msgs.slice(1);
+    const middle = msgs.slice(1, msgs.length - tail.length);
+    // Nothing to drop in the middle → the budget warning was a false
+    // positive (e.g. an oversized system block); send as-is.
+    if (middle.length === 0) {
+      inRoundLastSentChars = chars;
+      return msgs;
+    }
+    // Drop the middle rounds entirely, then tell the model what happened.
+    // (Compressing each round into "[compressed role] ..." one-liners was tried
+    // first but small models mimic that format and stop calling tools — plain
+    // dropping keeps the remaining history natural and predictable.)
+    const dropped = middle.length;
+    kept.push({
+      role: 'user',
+      content: `[上下文预算] 为控制模型上下文长度，较早的 ${dropped} 条中间消息已被省略；如果确实需要其中的细节，请询问用户。请基于最近保留的对话继续，用自己的自然风格回答。`,
+    });
+    for (const m of tail) kept.push(m);
+    // Message count genuinely shrank (dropped > 0) — no extra gain check needed.
+    let keptChars = 0;
+    for (const m of kept) {
+      const raw = m?.content;
+      keptChars += (typeof raw === 'string' ? raw : JSON.stringify(raw ?? '')).length;
+      if (m?.tool_calls) keptChars += 80;
+    }
+    // Calibration baseline must match what was ACTUALLY sent (the trimmed copy).
+    inRoundLastSentChars = keptChars;
+
+    if (!inRoundTrimNotified) {
+      inRoundTrimNotified = true;
+      console.log(`[v2] CTX: in-round trimmed ${msgs.length} -> ${kept.length} msgs (dropped ${dropped}, est ${total} tok > budget ${inRoundAdaptiveBudget})`);
+      sendSSE('info', { message: `[上下文预算] 本轮工具链较长，已省略中间 ${dropped} 条消息，保留最近 3 轮完整上下文。` });
+    }
+    return kept;
+  };
+
   // Report generation throughput (tokens/s) over SSE so the UI can show the
   // model's output speed. llama.cpp's OpenAI-compat endpoint returns usage
   // { prompt_tokens, completion_tokens }, and we time the call locally.
@@ -4937,12 +5035,37 @@ RULES:
     const tps = completionTokens > 0 ? completionTokens / (elapsedMs / 1000) : 0;
     console.log(`[v2] GEN: ${completionTokens} tok in ${elapsedMs}ms = ${tps.toFixed(1)} tok/s (prompt ${Number(usage?.prompt_tokens) || 0})`);
     if (completionTokens > 0) {
+      // Re-calibrate chars→tokens density from the backend's real count so the
+      // next trim decision matches reality (CJK payloads ≈ 1 token/char, not 3.5).
+      const promptTokens = Number(usage?.prompt_tokens) || 0;
+      if (promptTokens > 0 && inRoundLastSentChars > 0) {
+        const measured = promptTokens / inRoundLastSentChars;
+        if (Number.isFinite(measured) && measured > 0) {
+          inRoundCtxCharPerToken = Math.min(1.2, Math.max(0.1, inRoundCtxCharPerToken * 0.5 + measured * 0.5));
+        }
+      }
       sendSSE('stats', {
         tokens_per_second: Math.round(tps * 10) / 10,
         completion_tokens: completionTokens,
-        prompt_tokens: Number(usage?.prompt_tokens) || 0,
+        prompt_tokens: promptTokens,
         elapsed_ms: elapsedMs,
       });
+      // Runtime adaptive budget: slow generation → shrink the in-round budget so
+      // the model stops choking on a long context; fast generation → relax it
+      // back toward the window-derived base. Self-tuning, no hard-coded size.
+      if (tps < INROUND_SLOW_TPS) {
+        const shrunk = Math.max(INROUND_MIN_BUDGET, Math.round(inRoundAdaptiveBudget * 0.7));
+        if (shrunk !== inRoundAdaptiveBudget) {
+          console.log(`[v2] CTX: tps ${tps.toFixed(1)} < ${INROUND_SLOW_TPS} → in-round budget ${inRoundAdaptiveBudget} → ${shrunk}`);
+          inRoundAdaptiveBudget = shrunk;
+        }
+      } else if (tps >= INROUND_FAST_TPS && inRoundAdaptiveBudget < baseInRoundBudget) {
+        const grown = Math.min(baseInRoundBudget, Math.round(inRoundAdaptiveBudget * 1.2));
+        if (grown !== inRoundAdaptiveBudget) {
+          console.log(`[v2] CTX: tps ${tps.toFixed(1)} ≥ ${INROUND_FAST_TPS} → in-round budget ${inRoundAdaptiveBudget} → ${grown}`);
+          inRoundAdaptiveBudget = grown;
+        }
+      }
     }
   };
 
@@ -5146,7 +5269,7 @@ RULES:
       );
       const primaryThinkMode: boolean | 'high' | 'medium' | 'low' = (multiAgentActive && !isActiveAutomationOp) ? true : false;
       const genStartedAt = Date.now();
-      const generationPromise = ollama.chatWithThinking(messages, 'executor', {
+      const generationPromise = ollama.chatWithThinking(trimInRoundMessages(messages), 'executor', {
         tools,
         temperature: 0.3,
         num_ctx: 8192,
