@@ -8717,10 +8717,12 @@ function renderKnowledgeList() {
       const chunks = (f && typeof f.chunks === 'number') ? f.chunks : 0;
       const added = (f && f.added_at) ? ' · ' + String(f.added_at) : '';
       // Click the file name to auto-insert an @reference; trash icon deletes, same line as the name
-      html += '<div style="padding:8px 10px;margin-bottom:6px;border:1px solid #3d4656;border-radius:8px;background:#262d39;cursor:pointer" title="点击文件名，自动在聊天中引用" onclick="insertKbRef(' + JSON.stringify(base) + ')">' +
+      // NOTE: single-quoted attribute values — JSON.stringify yields double quotes, which would
+      // otherwise terminate the onclick attribute early and silently kill the handler.
+      html += '<div style="padding:8px 10px;margin-bottom:6px;border:1px solid #3d4656;border-radius:8px;background:#262d39;cursor:pointer" title="点击文件名，自动在聊天中引用" onclick=\'insertKbRef(' + JSON.stringify(base) + ')\'>' +
         '<div style="display:flex;align-items:center;gap:6px">' +
           '<span style="flex:1;min-width:0;font-size:12px;font-weight:600;color:#6ea8fe;word-break:break-all;line-height:1.4;text-decoration:underline;text-underline-offset:2px">' + name + '</span>' +
-          '<button onclick="event.stopPropagation();removeKnowledgeFile(' + JSON.stringify(name) + ')" title="从知识库删除" style="flex-shrink:0;background:transparent;border:none;color:#aeb9cb;cursor:pointer;font-size:13px;line-height:1">🗑</button>' +
+          '<button onclick=\'event.stopPropagation();removeKnowledgeFile(' + JSON.stringify(name) + ')\' title="从知识库删除" style="flex-shrink:0;background:transparent;border:none;color:#aeb9cb;cursor:pointer;font-size:13px;line-height:1">🗑</button>' +
         '</div>' +
         '<div style="font-size:10px;color:#aeb9cb;margin-top:2px">' + chunks + ' 分块' + added + '</div>' +
       '</div>';
