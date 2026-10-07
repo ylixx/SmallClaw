@@ -6052,7 +6052,8 @@ function clearChat() {
   let drag = null;
   document.addEventListener('mousemove', (e) => {
     if (!drag) return;
-    const h = Math.min(Math.max(drag.startH + (e.clientY - drag.startY), 44), 600);
+    // Handle sits on the input's TOP edge: pulling up grows, pushing down shrinks
+    const h = Math.min(Math.max(drag.startH - (e.clientY - drag.startY), 44), 600);
     input.style.height = h + 'px';
   });
   document.addEventListener('mouseup', () => {
