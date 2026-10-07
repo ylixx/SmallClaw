@@ -3352,6 +3352,37 @@ const TOOL_ARG_PARSE_RETRY_HINT =
   '3. 如果某个参数内容非常长（例如整个 HTML 文件全文），不要一次性塞进工具参数——先用 create_file 写入骨架，再分几步追加或整文件重写；\n' +
   '4. 不要重复调用已经成功完成的工具，直接继续下一步。';
 
+/**
+ * Resolve the chat-history token budget from the ACTIVE model's context window:
+ *   budget = clamp(window * 0.5, 8000, 60000)
+ * Window sources, in priority order:
+ *   1. preset.context_window   (explicit, user-configurable per model profile)
+ *   2. preset.server.ctx_size  (local llama.cpp presets, e.g. 49152)
+ *   3. 131072 default for cloud OpenAI-compatible models (128K+ modern models)
+ * An explicit SMALLCLAW_HISTORY_BUDGET_TOKENS env var overrides everything, so
+ * nothing is hard-locked: a 128K model gets a large history, a 48K local model
+ * gets a smaller one automatically.
+ */
+function resolveHistoryBudgetTokens(): number {
+  const explicit = Number(process.env.SMALLCLAW_HISTORY_BUDGET_TOKENS);
+  if (Number.isFinite(explicit) && explicit > 0) return explicit;
+  const raw = getConfig().getConfig() as any;
+  const llm = raw?.llm || {};
+  const preset = llm.presets?.[String(llm.active_preset || '')];
+  let window = 131072;
+  if (preset) {
+    const explicitWindow = Number(preset.context_window);
+    if (Number.isFinite(explicitWindow) && explicitWindow > 0) {
+      window = explicitWindow;
+    } else {
+      const serverCtx = Number(preset.server?.ctx_size);
+      if (Number.isFinite(serverCtx) && serverCtx > 0) window = serverCtx;
+    }
+  }
+  const budget = Math.round(window * 0.5);
+  return Math.min(60000, Math.max(8000, budget));
+}
+
 async function handleChat(
   message: string,
   sessionId: string,
@@ -3782,8 +3813,12 @@ async function handleChat(
 
   // ── Context budget: load history newest-first up to a token budget so long
   //    sessions never overflow the model's context window (llama.cpp hard-fails
-  //    with 400 exceed_context_size_error instead of degrading gracefully). ──
-  const HISTORY_BUDGET_TOKENS = Number(process.env.SMALLCLAW_HISTORY_BUDGET_TOKENS || 14000);
+  //    with 400 exceed_context_size_error instead of degrading gracefully).
+  //    The budget is derived from the ACTIVE model's context window, not a
+  //    hard-coded number: a 128K cloud model gets a large history budget while
+  //    a 48K local llama.cpp model gets a smaller one. Override with
+  //    SMALLCLAW_HISTORY_BUDGET_TOKENS. ──
+  const HISTORY_BUDGET_TOKENS = resolveHistoryBudgetTokens();
   let budgetChars = HISTORY_BUDGET_TOKENS * 3.5; // ~3.5 chars/token for mixed zh/en
   const historyKept: Array<{ role: string; content: any }> = [];
   for (let i = history.length - 1; i >= 0; i--) {

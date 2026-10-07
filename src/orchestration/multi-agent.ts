@@ -1112,8 +1112,25 @@ async function buildSecondaryProvider(): Promise<{ provider: LLMProvider; config
   if (!config) return null;
 
   let provider: LLMProvider;
+  let model = config.secondary.model;
+
   try {
-    const { buildProviderById } = await import('../providers/factory');
+    // Follow the user's active preset when one exists: internal advisors should
+    // use the same model the user is chatting with (e.g. a 128K cloud model),
+    // not a hard-coded local llama.cpp backend. Falls back to the configured
+    // secondary provider when no usable active preset is available.
+    const { buildProviderForPreset, buildProviderById } = await import('../providers/factory');
+    const raw = getConfig().getConfig() as any;
+    const llm = raw?.llm || {};
+    const activePreset = llm.presets?.[String(llm.active_preset || '')];
+    if (activePreset && activePreset.provider) {
+      const presetProvider = buildProviderForPreset(activePreset);
+      if (presetProvider) {
+        provider = presetProvider;
+        model = String(activePreset.providers?.[activePreset.provider]?.model || config.secondary.model);
+        return { provider, config: { ...config, secondary: { ...config.secondary, model } } };
+      }
+    }
     provider = buildProviderById(config.secondary.provider);
   } catch (err: any) {
     console.error('[Orchestrator] Failed to build secondary provider:', err.message);

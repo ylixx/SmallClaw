@@ -104,6 +104,44 @@ export function buildProviderForLLM(llm: any): LLMProvider {
 }
 
 
+/**
+ * Build a provider instance from an active preset (multi-model profile).
+ *
+ * A preset carries its own per-provider endpoint/api_key (e.g. the Agnes preset
+ * points at api.agnes-ai.cn with its own vault key), which the global
+ * llm.providers block may not reflect. This lets internal components
+ * (orchestration advisor, file-op classifier) follow the model the user is
+ * actually chatting with instead of being pinned to a hard-coded backend.
+ * Returns null when the preset has no usable provider config.
+ */
+export function buildProviderForPreset(preset: any): LLMProvider | null {
+  if (!preset || typeof preset !== 'object') return null;
+  const pid = preset.provider as ProviderID;
+  const cfg = preset.providers?.[pid];
+  if (!cfg || typeof cfg !== 'object') return null;
+  switch (pid) {
+    case 'ollama':
+      return new OllamaAdapter(cfg.endpoint || 'http://localhost:11434');
+    case 'llama_cpp':
+    case 'lm_studio':
+      return new OpenAICompatAdapter({
+        endpoint: cfg.endpoint || (pid === 'llama_cpp' ? 'http://localhost:8080' : 'http://localhost:1234'),
+        apiKey: resolveEnvKey(cfg.api_key),
+        providerId: pid,
+      });
+    case 'openai':
+      return new OpenAICompatAdapter({
+        endpoint: cfg.endpoint || 'https://api.openai.com',
+        apiKey: resolveEnvKey(cfg.api_key),
+        providerId: 'openai',
+      });
+    case 'openai_codex':
+      return new OpenAICodexAdapter(getConfigDir());
+    default:
+      return null;
+  }
+}
+
 function buildProvider(id: ProviderID, providers: any): LLMProvider {
   switch (id) {
 
