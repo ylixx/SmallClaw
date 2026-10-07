@@ -8716,13 +8716,13 @@ function renderKnowledgeList() {
       const base = name.replace(/\.[^.]+$/, '');
       const chunks = (f && typeof f.chunks === 'number') ? f.chunks : 0;
       const added = (f && f.added_at) ? ' · ' + String(f.added_at) : '';
-      html += '<div style="padding:8px 10px;margin-bottom:6px;border:1px solid #3d4656;border-radius:8px;background:#262d39">' +
-        '<div style="font-size:12px;font-weight:600;color:#e8edf6;word-break:break-all;line-height:1.4">📄 ' + name + '</div>' +
-        '<div style="font-size:10px;color:#aeb9cb;margin-top:2px">' + chunks + ' 分块' + added + '</div>' +
-        '<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">' +
-          '<button onclick="event.stopPropagation();insertKbRef(' + JSON.stringify(base) + ')" title="在聊天中引用该文件" style="background:#2a313d;border:1px solid #3d4656;border-radius:6px;padding:3px 8px;font-size:11px;color:#6ea8fe;cursor:pointer">@ 引用</button>' +
-          '<button onclick="event.stopPropagation();removeKnowledgeFile(' + JSON.stringify(name) + ')" title="从知识库删除" style="background:transparent;border:1px solid #3d4656;border-radius:6px;padding:3px 8px;font-size:11px;color:#aeb9cb;cursor:pointer">✕ 删除</button>' +
+      // Click the file name to auto-insert an @reference; trash icon deletes, same line as the name
+      html += '<div style="padding:8px 10px;margin-bottom:6px;border:1px solid #3d4656;border-radius:8px;background:#262d39;cursor:pointer" title="点击文件名，自动在聊天中引用" onclick="insertKbRef(' + JSON.stringify(base) + ')">' +
+        '<div style="display:flex;align-items:center;gap:6px">' +
+          '<span style="flex:1;min-width:0;font-size:12px;font-weight:600;color:#6ea8fe;word-break:break-all;line-height:1.4;text-decoration:underline;text-underline-offset:2px">' + name + '</span>' +
+          '<button onclick="event.stopPropagation();removeKnowledgeFile(' + JSON.stringify(name) + ')" title="从知识库删除" style="flex-shrink:0;background:transparent;border:none;color:#aeb9cb;cursor:pointer;font-size:13px;line-height:1">🗑</button>' +
         '</div>' +
+        '<div style="font-size:10px;color:#aeb9cb;margin-top:2px">' + chunks + ' 分块' + added + '</div>' +
       '</div>';
     }
     el.innerHTML = html;
