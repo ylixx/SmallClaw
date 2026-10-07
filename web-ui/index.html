@@ -433,6 +433,7 @@
   #jobs-list,
   #skills-list,
   #flows-list,
+  #knowledge-list,
   #skills-search-results { flex: 1; min-height: 0; overflow-y: auto; padding: 10px; }
 
   .job-item,
@@ -2196,6 +2197,7 @@
     <button class="sidebar-tab active" id="tab-jobs" onclick="setSidebarTab('jobs')">Sessions</button>
     <button class="sidebar-tab" id="tab-skills" onclick="setSidebarTab('skills')">🧩 Skills</button>
     <button class="sidebar-tab" id="tab-flows" onclick="setSidebarTab('flows')">⚡ Flows</button>
+    <button class="sidebar-tab" id="tab-knowledge" onclick="setSidebarTab('knowledge')">📚 知识库</button>
   </div>
 
   <!-- SESSIONS TAB -->
@@ -2234,6 +2236,26 @@
     </div>
     <div id="flows-list" style="flex:1;min-height:0;overflow-y:auto;padding:10px">
       <div class="empty-state" style="padding:16px">Loading flows...</div>
+    </div>
+  </div>
+
+  <!-- KNOWLEDGE TAB (local RAG knowledge base) -->
+  <div id="sidebar-knowledge" style="display:none">
+    <div class="sidebar-section" style="border-top:none">
+      <span>知识库</span>
+      <span id="kb-status-line" style="font-size:11px;color:var(--muted)">本地 RAG</span>
+    </div>
+    <div style="padding:0 14px 8px;display:flex;flex-direction:column;gap:6px">
+      <div style="display:flex;gap:6px">
+        <input id="kb-add-input" style="flex:1;border:1px solid var(--line);border-radius:8px;padding:6px 8px;font-size:12px;background:var(--panel-2);color:var(--text)" placeholder="工作区文件名，如 report.pdf" />
+        <button class="sidebar-action" onclick="addKnowledgeFile()">入库</button>
+      </div>
+      <div style="font-size:10px;color:var(--muted);line-height:1.4">
+        支持 PDF / Word / Excel / PPT / 文本 / HTML / CSV。入库后聊天问资料类问题会自动检索引用。
+      </div>
+    </div>
+    <div id="knowledge-list" style="flex:1;min-height:0;overflow-y:auto;padding:10px">
+      <div class="empty-state" style="padding:16px">Loading knowledge base...</div>
     </div>
   </div>
 </aside>
@@ -4152,11 +4174,14 @@ function setSidebarTab(tab) {
   document.getElementById('tab-jobs').classList.toggle('active', tab === 'jobs');
   document.getElementById('tab-skills').classList.toggle('active', tab === 'skills');
   document.getElementById('tab-flows').classList.toggle('active', tab === 'flows');
+  document.getElementById('tab-knowledge').classList.toggle('active', tab === 'knowledge');
   document.getElementById('sidebar-jobs').style.display = tab === 'jobs' ? 'flex' : 'none';
   document.getElementById('sidebar-skills').style.display = tab === 'skills' ? 'flex' : 'none';
   document.getElementById('sidebar-flows').style.display = tab === 'flows' ? 'flex' : 'none';
+  document.getElementById('sidebar-knowledge').style.display = tab === 'knowledge' ? 'flex' : 'none';
   if (tab === 'skills') loadInstalledSkills();
   if (tab === 'flows') loadFlows();
+  if (tab === 'knowledge') loadKnowledge();
 }
 
 // ---- Agent mode toggle ----
@@ -8434,6 +8459,73 @@ async function runFlow(id) {
     addProcessEntry('info', '流程运行结束');
   } catch (err) {
     addProcessEntry('error', '流程运行错误: ' + err.message);
+  }
+}
+
+// ---- Knowledge base (local RAG) ----
+let knowledgeFiles = [];
+
+async function loadKnowledge() {
+  const el = document.getElementById('knowledge-list');
+  const statusLine = document.getElementById('kb-status-line');
+  el.innerHTML = '<div style="padding:12px;color:var(--muted);font-size:11px"><span class="spinner"></span> Loading...</div>';
+  try {
+    const data = await api('/api/knowledge');
+    knowledgeFiles = data.files || [];
+    const st = data.status || {};
+    if (statusLine) statusLine.textContent = `本地 RAG · ${st.files || 0} 文件 / ${st.chunks || 0} 分块`;
+    if (knowledgeFiles.length === 0) {
+      el.innerHTML = '<div class="empty-state" style="padding:16px">知识库为空。<br>在上方输入工作区文件名入库。</div>';
+      return;
+    }
+    el.innerHTML = knowledgeFiles.map(f => `
+      <div class="skill-card" data-kb-name="${escHtml(f.name)}">
+        <div class="skill-card-top">
+          <div class="skill-card-emoji">📄</div>
+          <div class="skill-card-info">
+            <div class="skill-card-name" style="word-break:break-all">${escHtml(f.name)}</div>
+            <div class="skill-card-desc">${f.chunks} 分块 · ${escHtml(f.added_at || '')}</div>
+          </div>
+          <div class="skill-card-actions">
+            <button class="skill-remove-btn" onclick="event.stopPropagation();removeKnowledgeFile('${escHtml(f.name)}')" title="从知识库删除" aria-label="Delete from KB">✕</button>
+            <div class="skill-card-dot"></div>
+          </div>
+        </div>
+      </div>
+    `).join('');
+  } catch (err) {
+    el.innerHTML = `<div style="padding:12px;color:var(--err);font-size:11px">Error: ${err.message}</div>`;
+  }
+}
+
+async function addKnowledgeFile() {
+  const input = document.getElementById('kb-add-input');
+  const filename = String(input?.value || '').trim();
+  if (!filename) { addProcessEntry('error', '请先输入工作区文件名'); return; }
+  addProcessEntry('info', `入库: ${filename} ...`);
+  try {
+    const res = await api('/api/knowledge/add', { method: 'POST', body: JSON.stringify({ filename }) });
+    if (!res.success) {
+      addProcessEntry('error', '入库失败: ' + (res.error || 'unknown'));
+      return;
+    }
+    addProcessEntry('final', `✓ 已入库 ${res.name}（${res.chunks} 分块，共 ${res.total_files} 个文件）`);
+    input.value = '';
+    loadKnowledge();
+  } catch (err) {
+    addProcessEntry('error', '入库错误: ' + err.message);
+  }
+}
+
+async function removeKnowledgeFile(name) {
+  addProcessEntry('info', `从知识库删除: ${name} ...`);
+  try {
+    const res = await api('/api/knowledge/remove', { method: 'POST', body: JSON.stringify({ name }) });
+    if (!res.success) { addProcessEntry('error', '删除失败: ' + (res.error || 'unknown')); return; }
+    addProcessEntry('final', `✓ 已删除 ${name}`);
+    loadKnowledge();
+  } catch (err) {
+    addProcessEntry('error', '删除错误: ' + err.message);
   }
 }
 

@@ -1647,6 +1647,13 @@ const FILE_TOOL_NAMES = new Set([
   ...KNOWLEDGE_TOOL_NAMES,
 ]);
 const SHELL_TOOL_NAMES = new Set(['run_command', 'shell_exec']);
+const KNOWLEDGE_DIR = path.join(__dirname, '..', '..', 'knowledge');
+
+// Knowledge auto-injection: questions that clearly reference stored material
+// trigger a local RAG lookup. Kept deliberately narrow so everyday chat is
+// never delayed or polluted by a search.
+const KB_AUTO_INJECT_RE =
+  /(知识库|资料库|库里|检索一下|查一下(知识库|资料|文档|报告)|上次那(份|个)(报告|文档|资料|数据|文件)|之前的(报告|文档|资料|数据|文件)|(报告|文档|资料|材料)里(说|写|提到|有没|有没有|的内容))/;
 
 // ─── Artifact log: what tools produced/changed in this gateway run ────────────
 export interface ArtifactEntry {
@@ -2214,13 +2221,14 @@ async function executeToolImpl(name: string, args: any, workspacePath: string, s
           args = { ...args, path: resolved ? resolved.path : raw };
         }
         const outcome = await executeKnowledgeTool(name, args, kbDir);
-        recordArtifact(sessionId, name, outcome);
-        return {
+        const kbResult: ToolResult = {
           name,
           args,
           result: outcome.ok ? JSON.stringify(outcome, null, 1) : (outcome.error || 'knowledge tool failed'),
           error: !!outcome.error,
         };
+        recordArtifact(sessionId, name, kbResult);
+        return kbResult;
       }
 
       case 'image_render':
@@ -3787,6 +3795,39 @@ async function handleChat(
         `【已启用流程模板「${matchedFlow.name}」】请严格按以下执行规范完成用户任务，不要省略步骤，完成后按规范交付产物：\n${matchedFlow.instruction}`,
     });
     sendSSE('flow_start', { flow_id: matchedFlow.id, name: matchedFlow.name });
+  }
+
+  // ── Knowledge auto-injection (RAG): if the question clearly references
+  //    stored material, fetch top chunks locally and inject them with
+  //    sources so the model answers from the knowledge base, not from memory.
+  //    Bounded by a 6s race — a slow/missing KB never blocks or delays chat. ──
+  if (!isBootStartupTurn && !suppressFlowTrigger && KB_AUTO_INJECT_RE.test(message)) {
+    try {
+      const searchPromise = executeKnowledgeTool(
+        'knowledge_search',
+        { query: String(message).slice(0, 120), top_k: 4 },
+        KNOWLEDGE_DIR,
+      );
+      const timeoutPromise = new Promise<{ ok: boolean; results?: any[] }>((resolve) => {
+        setTimeout(() => resolve({ ok: false }), 6000);
+      });
+      const kbOutcome = await Promise.race([searchPromise, timeoutPromise]);
+      if (kbOutcome.ok && Array.isArray(kbOutcome.results) && kbOutcome.results.length > 0) {
+        const hits = kbOutcome.results
+          .slice(0, 4)
+          .map((r: any) => `【${r.file}】\n${String(r.text || '').slice(0, 900)}`)
+          .join('\n\n---\n\n');
+        messages.push({
+          role: 'user',
+          content:
+            `【本地知识库自动检索结果】用户的问题涉及已存储资料，以下是本地知识库的相关内容（来源文件见各段标题）。回答时请优先依据这些内容，并注明来源文件；若内容不足以回答，请明确说明：\n\n${hits}`,
+        });
+        console.log(`[v2] KB auto-inject: ${kbOutcome.results.length} chunks matched for "${String(message).slice(0, 40)}"`);
+        sendSSE('knowledge_injected', { matched: kbOutcome.results.length });
+      }
+    } catch (err: any) {
+      console.log(`[v2] KB auto-inject skipped: ${err?.message || err}`);
+    }
   }
 
   // ── Lightweight model-switch suggestion ──────────────────────────────────
@@ -6835,6 +6876,47 @@ app.get('/api/status', async (_req, res) => {
       secondary: orchCfg.secondary,
     } : null,
   });
+});
+
+// ─── Knowledge base REST (web UI management) ────────────────────────────────
+// GET    /api/knowledge          — list + status
+// POST   /api/knowledge/add      — { filename } relative to workspace (or path)
+// POST   /api/knowledge/remove   — { name }
+app.get('/api/knowledge', async (_req, res) => {
+  try {
+    const [listOut, statusOut] = await Promise.all([
+      executeKnowledgeTool('knowledge_list', {}, KNOWLEDGE_DIR),
+      executeKnowledgeTool('knowledge_status', {}, KNOWLEDGE_DIR),
+    ]);
+    res.json({ success: true, files: listOut.files || [], status: statusOut });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || String(err) });
+  }
+});
+
+app.post('/api/knowledge/add', async (req, res) => {
+  try {
+    const raw = String(req.body?.filename || req.body?.path || '').trim();
+    if (!raw) { res.status(400).json({ success: false, error: 'filename required' }); return; }
+    const workspacePath = getConfig().getWorkspacePath();
+    const resolved = resolveToolFilePath(workspacePath, raw);
+    if (!resolved.ok) { res.status(403).json({ success: false, error: resolved.error }); return; }
+    const outcome = await executeKnowledgeTool('knowledge_add', { path: resolved.path }, KNOWLEDGE_DIR);
+    res.json({ success: !!outcome.ok, ...(outcome.ok ? { name: outcome.name, chunks: outcome.chunks, total_files: outcome.total_files } : { error: outcome.error }) });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || String(err) });
+  }
+});
+
+app.post('/api/knowledge/remove', async (req, res) => {
+  try {
+    const name = String(req.body?.name || '').trim();
+    if (!name) { res.status(400).json({ success: false, error: 'name required' }); return; }
+    const outcome = await executeKnowledgeTool('knowledge_remove', { name }, KNOWLEDGE_DIR);
+    res.json({ success: !!outcome.ok, ...(outcome.ok ? { removed: outcome.removed } : { error: outcome.error }) });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || String(err) });
+  }
 });
 
 // ─── Flow templates (one-click process fix) ───────────────────────────────────
