@@ -6925,6 +6925,21 @@ app.get('/api/status', async (_req, res) => {
   const providerCfg = rawCfg.llm?.providers?.[provider] || {};
   const activeModel: string = providerCfg.model || rawCfg.models?.primary || 'unknown';
   const orchCfg = getOrchestrationConfig();
+  // Report the EFFECTIVE secondary model (follows the active preset, then the
+  // primary model) instead of the raw configured value, so the UI never shows
+  // a stale hard-coded model the user is not actually running.
+  let effectiveSecondary: { provider: string; model: string } | null = null;
+  if (orchCfg) {
+    const llm = rawCfg.llm || {};
+    const preset = llm.presets?.[String(llm.active_preset || '')];
+    const effProvider: string = preset?.provider || llm.provider || orchCfg.secondary.provider;
+    const effModel: string =
+      preset?.providers?.[preset.provider]?.model ||
+      providerCfg.model ||
+      rawCfg.models?.primary ||
+      orchCfg.secondary.model;
+    effectiveSecondary = { provider: String(effProvider), model: String(effModel) };
+  }
   res.json({
     status: 'ok', version: 'v2-tools', ollama: connected,
     provider,
@@ -6933,7 +6948,7 @@ app.get('/api/status', async (_req, res) => {
     search: rawCfg.search?.google_api_key ? 'google' : (rawCfg.search?.tavily_api_key ? 'tavily' : 'none'),
     orchestration: orchCfg ? {
       enabled: orchCfg.enabled,
-      secondary: orchCfg.secondary,
+      secondary: effectiveSecondary,
     } : null,
   });
 });
@@ -9325,10 +9340,20 @@ app.post('/api/models/presets/switch', async (req, res) => {
     // Keep existing models.roles untouched (shallow merge would drop them).
     const cfgNow = getConfig().getConfig() as any;
     const primaryModel = String(preset.providers?.[preset.provider]?.model || preset.id || '');
-    getConfig().updateConfig({
+    // Keep orchestration.secondary following the newly activated preset so the
+    // advisor and the UI never show a stale hard-coded model.
+    const orchNow = cfgNow.orchestration;
+    const nextPatch: any = {
       llm: updatedLlm,
       models: { ...(cfgNow.models || {}), primary: primaryModel },
-    } as any);
+    };
+    if (orchNow?.secondary) {
+      nextPatch.orchestration = {
+        ...orchNow,
+        secondary: { provider: preset.provider, model: primaryModel },
+      };
+    }
+    getConfig().updateConfig(nextPatch as any);
     resetProvider();
 
     // 2) llama.cpp presets need a server restart to load the new weights

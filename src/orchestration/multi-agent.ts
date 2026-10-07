@@ -186,10 +186,10 @@ export async function checkOrchestrationEligibility(): Promise<EligibilityResult
     return { eligible: false, reason: 'Secondary model not configured in Settings -> Models -> Orchestration.' };
   }
 
-  const primaryModel = raw.llm?.providers?.[primaryProvider]?.model;
-  if (secondary.provider === primaryProvider && secondary.model === primaryModel) {
-    return { eligible: false, reason: 'Secondary must be a different model than primary.' };
-  }
+  // NOTE: the historical "secondary must differ from primary" rule was removed
+  // because the secondary now FOLLOWS the active preset / primary model (the
+  // user's intent: advisors run on whatever model is active, no hard-coding).
+  // Same-model secondary is the normal case now, not a misconfiguration.
 
   if (secondary.provider === 'openai_codex') {
     const tokens = loadTokens(getConfigDir());
