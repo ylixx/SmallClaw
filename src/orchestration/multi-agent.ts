@@ -1478,7 +1478,7 @@ export async function callSecondaryFileAnalyzer(input: {
     .slice(-8)
     .map((m, i) => `${i + 1}. ${String(m.role || '').slice(0, 20)}: ${String(m.content || '').slice(0, 260)}`)
     .join('\n');
-  const filesText = compactList(input.candidateFiles || [], 16, 220).join('\n');
+  const filesText = compactList(input.candidateFiles || [], 60, 220).join('\n');
 
   const prompt = `USER REQUEST:
 ${String(input.userMessage || '').slice(0, 2200)}

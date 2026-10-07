@@ -4791,10 +4791,28 @@ RULES:
     sendSSE('info', { message: 'FILE_OP v2: delegating analysis to secondary model.' });
     const candidateFiles = (() => {
       try {
-        return fs.readdirSync(workspacePath, { withFileTypes: true })
+        const files = fs.readdirSync(workspacePath, { withFileTypes: true })
           .filter(e => e.isFile())
-          .map(e => e.name)
-          .slice(0, 80);
+          .map(e => e.name);
+        // Relevance-first ordering: any file whose basename appears in the
+        // user's message moves to the front. readdir order puts Chinese-named
+        // files last, so without this the compacted candidate list handed to
+        // the secondary analyzer used to drop the very file the user asks about
+        // (e.g. "检验报告_2025-2026" → its PDF never made the cut → analyzer
+        // wrongly diagnosed the file as missing).
+        const msg = String(message || '').toLowerCase();
+        const scored = files.map((name) => {
+          const base = name.replace(/\.[^.]+$/, '').toLowerCase();
+          let score = 0;
+          if (base.length >= 2 && msg.includes(base)) {
+            score = base.length; // longer basename match = more specific
+          } else if (base.length >= 2 && msg.includes(base.split(/[_\-]/)[0])) {
+            score = 1;
+          }
+          return { name, score };
+        });
+        scored.sort((a, b) => (b.score - a.score) || a.name.localeCompare(b.name, 'zh-Hans-CN'));
+        return scored.map(s => s.name).slice(0, 80);
       } catch {
         return [] as string[];
       }
