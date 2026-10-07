@@ -3145,7 +3145,7 @@
             <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px">Endpoint</label>
             <input id="settings-llamacpp-endpoint" type="text" placeholder="http://localhost:8080" style="width:100%;border:1px solid var(--line);border-radius:10px;padding:8px;font-size:12px;font-family:'IBM Plex Mono',monospace" />
             <label style="display:block;font-size:12px;color:var(--muted);margin:10px 0 6px">Model name <span style="color:var(--muted);font-weight:400">(type manually)</span></label>
-            <input id="settings-llamacpp-model" type="text" placeholder="e.g. qwen2.5-7b" style="width:100%;border:1px solid var(--line);border-radius:10px;padding:8px;font-size:12px;font-family:'IBM Plex Mono',monospace" />
+            <input id="settings-llamacpp-model" type="text" placeholder="e.g. MiniCPM5-2B" style="width:100%;border:1px solid var(--line);border-radius:10px;padding:8px;font-size:12px;font-family:'IBM Plex Mono',monospace" />
             <div style="display:flex;gap:8px;margin-top:8px">
               <button class="btn btn-sm" onclick="testProviderConnection()" style="background:#fff;border:1px solid var(--line);color:var(--text)">Test Connection</button>
             </div>
@@ -3159,7 +3159,7 @@
             <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px">Endpoint</label>
             <input id="settings-lmstudio-endpoint" type="text" placeholder="http://localhost:1234" style="width:100%;border:1px solid var(--line);border-radius:10px;padding:8px;font-size:12px;font-family:'IBM Plex Mono',monospace" />
             <label style="display:block;font-size:12px;color:var(--muted);margin:10px 0 6px">Model name</label>
-            <input id="settings-lmstudio-model" type="text" placeholder="e.g. qwen2.5-7b-instruct" style="width:100%;border:1px solid var(--line);border-radius:10px;padding:8px;font-size:12px;font-family:'IBM Plex Mono',monospace" />
+            <input id="settings-lmstudio-model" type="text" placeholder="e.g. MiniCPM5-2B-Instruct" style="width:100%;border:1px solid var(--line);border-radius:10px;padding:8px;font-size:12px;font-family:'IBM Plex Mono',monospace" />
             <div style="display:flex;gap:8px;margin-top:8px">
               <button class="btn btn-sm" onclick="refreshProviderModels()" style="background:#fff;border:1px solid var(--line);color:var(--text)">Detect Model</button>
               <button class="btn btn-sm" onclick="testProviderConnection()" style="background:#fff;border:1px solid var(--line);color:var(--text)">Test</button>
@@ -3577,7 +3577,7 @@
               </div>
               <div>
                 <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:4px">Model</label>
-                <input id="agent-edit-model" type="text" placeholder="ollama/qwen3:4b" style="width:100%;border:1px solid var(--line);border-radius:8px;padding:6px 8px;font-size:12px;font-family:'IBM Plex Mono',monospace;box-sizing:border-box" />
+                <input id="agent-edit-model" type="text" placeholder="ollama/MiniCPM5-2B" style="width:100%;border:1px solid var(--line);border-radius:8px;padding:6px 8px;font-size:12px;font-family:'IBM Plex Mono',monospace;box-sizing:border-box" />
               </div>
               <div>
                 <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:4px">Cron Schedule</label>
@@ -7062,7 +7062,7 @@ async function refreshOpenAIModels(silent = false) {
 function buildProviderPayload() {
   const provider = document.getElementById('settings-llm-provider')?.value || 'ollama';
   const providers = {};
-  providers.ollama    = { endpoint: document.getElementById('settings-ollama-endpoint')?.value  || 'http://localhost:11434', model: document.getElementById('settings-primary-model')?.value || 'qwen3:4b' };
+  providers.ollama    = { endpoint: document.getElementById('settings-ollama-endpoint')?.value  || 'http://localhost:11434', model: document.getElementById('settings-primary-model')?.value || '' };
   providers.llama_cpp = { endpoint: document.getElementById('settings-llamacpp-endpoint')?.value || 'http://localhost:8080',  model: document.getElementById('settings-llamacpp-model')?.value  || '' };
   providers.lm_studio = { endpoint: document.getElementById('settings-lmstudio-endpoint')?.value || 'http://localhost:1234',  model: document.getElementById('settings-lmstudio-model')?.value   || '' };
   providers.openai    = { api_key:  document.getElementById('settings-openai-key')?.value         || '',                       model: document.getElementById('settings-openai-model')?.value      || 'gpt-4o' };

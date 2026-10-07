@@ -175,7 +175,7 @@ export interface AgentDefinition {
 
   /**
    * Model override for this agent.
-   * Format: "provider/model" e.g. "ollama/qwen3:4b" or "openai/gpt-4o"
+   * Format: "provider/model" e.g. "ollama/MiniCPM5-2B" or "openai/gpt-4o"
    * If omitted, uses the global llm.provider + model.
    */
   model?: string;

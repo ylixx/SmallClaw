@@ -122,7 +122,7 @@ const NODE_CALL_REPROMPT =
   'Nothing else. No prose before or after.';
 
 // Native tool-call path: disabled by default for small models (4b and under).
-// The node_call<> text channel is far more reliable for Qwen3:4b.
+// The node_call<> text channel is far more reliable for 3B-class small models.
 // Set LOCALCLAW_NATIVE_TOOL_CALLS=1 to force-enable (useful for 32b+ models).
 const NATIVE_TOOL_CALLS_ENABLED = (() => {
   const explicit = process.env.LOCALCLAW_NATIVE_TOOL_CALLS;
