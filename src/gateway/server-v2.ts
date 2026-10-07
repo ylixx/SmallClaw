@@ -3780,7 +3780,29 @@ async function handleChat(
     messages.push({ role: 'assistant', content: 'I have the pinned context. Continuing...' });
   }
 
-  for (const msg of history) {
+  // ── Context budget: load history newest-first up to a token budget so long
+  //    sessions never overflow the model's context window (llama.cpp hard-fails
+  //    with 400 exceed_context_size_error instead of degrading gracefully). ──
+  const HISTORY_BUDGET_TOKENS = Number(process.env.SMALLCLAW_HISTORY_BUDGET_TOKENS || 14000);
+  let budgetChars = HISTORY_BUDGET_TOKENS * 3.5; // ~3.5 chars/token for mixed zh/en
+  const historyKept: Array<{ role: string; content: any }> = [];
+  for (let i = history.length - 1; i >= 0; i--) {
+    const m = history[i];
+    const len = String(m?.content || '').length;
+    if (len > budgetChars) {
+      if (historyKept.length > 0) break; // budget exhausted → drop this and all older
+      historyKept.unshift(m); // single oversized message: keep the freshest context anyway
+      break;
+    }
+    historyKept.unshift(m);
+    budgetChars -= len;
+  }
+  const skippedHistory = history.length - historyKept.length;
+  if (skippedHistory > 0) {
+    console.log(`[v2] CTX: history pruned ${skippedHistory}/${history.length} msgs (budget ${HISTORY_BUDGET_TOKENS} tok)`);
+    messages.push({ role: 'user', content: `[Context budget] ${skippedHistory} earlier message(s) were omitted to fit the model's context window; do not claim knowledge of the omitted details.` });
+  }
+  for (const msg of historyKept) {
     messages.push({ role: msg.role === 'user' ? 'user' : 'assistant', content: msg.content });
   }
   messages.push({ role: 'user', content: buildMultimodalUserContent(message, workspacePath) });
