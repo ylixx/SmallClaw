@@ -242,8 +242,12 @@
   }
 
   #sidebar-jobs,
-  #sidebar-skills { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-  #sidebar-skills { display: none; }
+  #sidebar-skills,
+  #sidebar-flows,
+  #sidebar-knowledge { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  #sidebar-skills,
+  #sidebar-flows,
+  #sidebar-knowledge { display: none; }
 
   .sidebar-section {
     padding: 10px 12px;
@@ -2263,7 +2267,7 @@
         支持 PDF / Word / Excel / PPT / 文本 / HTML / CSV（≤50MB）。入库后聊天问资料类问题会自动检索引用。
       </div>
     </div>
-    <div id="knowledge-list" style="flex:1;min-height:0;overflow-y:auto;padding:10px">
+    <div id="knowledge-list" style="flex:1 1 auto;min-height:260px;overflow-y:auto;padding:10px">
       <div class="empty-state" style="padding:16px">Loading knowledge base...</div>
     </div>
   </div>
