@@ -364,6 +364,22 @@ export function clearHistory(id: string): void {
   saveSession(id);
 }
 
+export function deleteSession(id: string): void {
+  // Cancel any pending save so a debounced write does not resurrect the file.
+  const existing = sessionSaveTimers.get(id);
+  if (existing) {
+    clearTimeout(existing);
+    sessionSaveTimers.delete(id);
+  }
+  sessions.delete(id);
+  try {
+    const filePath = getSessionPath(id);
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+  } catch {
+    // Unlink failures are non-fatal; the in-memory session is gone regardless.
+  }
+}
+
 export function cleanupSessions(nowMs: number = Date.now()): { deleted: number; scanned: number } {
   ensureSessionDir();
   let deleted = 0;

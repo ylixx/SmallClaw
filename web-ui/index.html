@@ -4016,6 +4016,13 @@ function deleteChatSession(id, ev) {
   if (idx === -1) return;
 
   chatSessions.splice(idx, 1);
+  // Permanently delete the backend session too, so the conversation cannot be
+  // recalled again (session JSON in .smallclaw/sessions/ is removed).
+  fetch('/api/sessions/delete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionId: id }),
+  }).catch(err => console.error('Failed to delete backend session:', err));
   if (chatSessions.length === 0) {
     const newId = crypto?.randomUUID?.() || ('chat_' + Math.random().toString(36).slice(2));
     chatSessions.push({ id: newId, title: 'New chat', history: [], processLog: [], createdAt: Date.now(), updatedAt: Date.now() });
@@ -6048,6 +6055,13 @@ function clearChat() {
   chatHistory = [];
   persistActiveChat();
   renderChatMessages();
+  // Also clear the backend session history so a cleared conversation is not
+  // re-injected from the persisted session JSON on a later turn.
+  fetch('/api/clear-history', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionId: activeChatSessionId || 'default' }),
+  }).catch(err => console.error('Failed to clear backend history:', err));
 }
 
 // ---- Draggable chat input height ----

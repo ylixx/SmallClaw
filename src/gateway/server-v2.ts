@@ -26,7 +26,7 @@ import { getMCPManager, type MCPTool } from './mcp-manager';
 import { getVault } from '../security/vault';
 import { getOllamaClient } from '../agents/ollama-client';
 import { spawnAgent } from '../agents/spawner';
-import { getSession, addMessage, getHistory, getHistoryForApiCall, getWorkspace, setWorkspace, clearHistory, cleanupSessions } from './session';
+import { getSession, addMessage, getHistory, getHistoryForApiCall, getWorkspace, setWorkspace, clearHistory, deleteSession, cleanupSessions } from './session';
 import { hookBus } from './hooks';
 import { loadWorkspaceHooks } from './hook-loader';
 import { runBootMd } from './boot';
@@ -7339,6 +7339,48 @@ app.post('/api/clear-history', async (req, res) => {
   }
   clearHistory(sid);
   res.json({ success: true });
+});
+
+// Permanently delete a session: removes the on-disk session JSON
+// (.smallclaw/sessions/<id>.json) plus the in-memory state, so a "deleted
+// conversation" cannot be resurrected by a pending debounced save.
+app.post('/api/sessions/delete', async (req, res) => {
+  const sid = String(req.body.sessionId || '').trim();
+  if (!sid) { res.status(400).json({ error: 'sessionId required' }); return; }
+  try {
+    deleteSession(sid);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: String(err?.message || err) });
+  }
+});
+
+// Clear conversation memory logs (workspace/memory/<date>.md) — the source
+// behind the [RECENT_CONVERSATIONS] context injection. body: { date: 'today'
+// (default) | 'YYYY-MM-DD' | 'all' }. Deleting these means the model can no
+// longer recall those conversations via the daily-log injection.
+app.post('/api/memory/clear', async (req, res) => {
+  try {
+    const ws = (getConfig().getConfig() as any)?.workspace?.path || getConfig().getWorkspacePath();
+    const memDir = path.join(ws, 'memory');
+    const target = String(req.body?.date || 'today').trim();
+    let deleted = 0;
+    if (!fs.existsSync(memDir)) { res.json({ success: true, deleted: 0 }); return; }
+    if (target === 'all') {
+      const files = fs.readdirSync(memDir).filter((f) => /^\d{4}-\d{2}-\d{2}\.md$/.test(f));
+      for (const f of files) { try { fs.unlinkSync(path.join(memDir, f)); deleted++; } catch { /* continue */ } }
+    } else if (target === 'today') {
+      const today = new Date().toISOString().split('T')[0];
+      const p = path.join(memDir, `${today}.md`);
+      if (fs.existsSync(p)) { try { fs.unlinkSync(p); deleted = 1; } catch { /* continue */ } }
+    } else {
+      const p = path.join(memDir, `${target}.md`);
+      if (fs.existsSync(p)) { try { fs.unlinkSync(p); deleted = 1; } catch { /* continue */ } }
+    }
+    res.json({ success: true, deleted });
+  } catch (err: any) {
+    res.status(500).json({ error: String(err?.message || err) });
+  }
 });
 
 // ─── Skills API ────────────────────────────────────────────────────────────────
