@@ -461,7 +461,7 @@ export interface ModelPresetServer {
 
 /** A saved model configuration the user can switch to with one click. */
 export interface ModelPreset {
-  id: string;              // stable slug (e.g. "qwen9b-vision")
+  id: string;              // stable slug (e.g. "minicpm5")
   name: string;            // display name
   provider: ProviderID;
   providers: LLMConfig['providers'];

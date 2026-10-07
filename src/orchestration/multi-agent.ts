@@ -1111,33 +1111,43 @@ async function buildSecondaryProvider(): Promise<{ provider: LLMProvider; config
   const config = getOrchestrationConfig();
   if (!config) return null;
 
+  const raw = getConfig().getConfig() as any;
+  const llm = raw?.llm || {};
   let provider: LLMProvider;
-  let model = config.secondary.model;
+  let model = '';
 
   try {
-    // Follow the user's active preset when one exists: internal advisors should
-    // use the same model the user is chatting with (e.g. a 128K cloud model),
-    // not a hard-coded local llama.cpp backend. Falls back to the configured
-    // secondary provider when no usable active preset is available.
     const { buildProviderForPreset, buildProviderById } = await import('../providers/factory');
-    const raw = getConfig().getConfig() as any;
-    const llm = raw?.llm || {};
+
+    // 1) Follow the user's active preset: internal advisors should use the
+    //    same model the user is chatting with (e.g. a 128K cloud model or the
+    //    active local backend), not a hard-coded secondary model.
     const activePreset = llm.presets?.[String(llm.active_preset || '')];
-    if (activePreset && activePreset.provider) {
+    if (activePreset?.provider) {
       const presetProvider = buildProviderForPreset(activePreset);
       if (presetProvider) {
         provider = presetProvider;
         model = String(activePreset.providers?.[activePreset.provider]?.model || config.secondary.model);
+        console.log(`[Orchestrator] Secondary advisor follows active preset "${String(llm.active_preset)}": provider=${String(activePreset.provider)} model=${model}`);
         return { provider, config: { ...config, secondary: { ...config.secondary, model } } };
       }
     }
-    provider = buildProviderById(config.secondary.provider);
+
+    // 2) Fall back to the PRIMARY model the user has configured — never a
+    //    hard-coded secondary model. Keeps advisors on whatever model the user
+    //    is actually using (local or cloud) even when the preset cannot be built.
+    const primaryModel = String(llm.model || raw?.models?.primary || '');
+    const primaryProvider = String(llm.provider || config.secondary.provider);
+    provider = buildProviderById(primaryProvider);
+    if (!provider) provider = buildProviderById(config.secondary.provider);
+    model = primaryModel || config.secondary.model;
+    console.log(`[Orchestrator] Secondary advisor falls back to primary model: provider=${primaryProvider} model=${model}`);
   } catch (err: any) {
     console.error('[Orchestrator] Failed to build secondary provider:', err.message);
     return null;
   }
 
-  return { provider, config };
+  return { provider, config: { ...config, secondary: { ...config.secondary, model } } };
 }
 
 /**

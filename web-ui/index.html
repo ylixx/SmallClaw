@@ -3089,7 +3089,7 @@
             <div style="font-size:11px;color:var(--muted);margin-bottom:6px">勾选模型 → 自动填入模型名</div>
           </div>
           <label style="display:block;font-size:12px;color:var(--muted);margin:10px 0 6px">模型名（也可点上方「检测模型」后勾选自动填入）</label>
-          <input id="preset-model" type="text" placeholder="Qwen3.8-9B-heretic-uncensored.Q4_K_M" style="width:100%;border:1px solid var(--line);border-radius:10px;padding:8px;font-size:12px;font-family:'IBM Plex Mono',monospace" />
+          <input id="preset-model" type="text" placeholder="模型名（如 MiniCPM5-2B-Q4_K_M，或点上方「检测模型」自动填入）" style="width:100%;border:1px solid var(--line);border-radius:10px;padding:8px;font-size:12px;font-family:'IBM Plex Mono',monospace" />
           <div id="preset-llamacpp-fields" style="margin-top:4px">
             <label style="display:block;font-size:12px;color:var(--muted);margin:10px 0 6px">GGUF 模型文件路径（.gguf）</label>
             <input id="preset-model-path" type="text" placeholder="D:\models\...\model.gguf" style="width:100%;border:1px solid var(--line);border-radius:10px;padding:8px;font-size:12px;font-family:'IBM Plex Mono',monospace" />
@@ -3223,6 +3223,7 @@
           <div style="font-size:12px;color:var(--muted);margin-bottom:10px">
             A secondary AI advisor helps the primary model when it gets stuck or needs planning.
             Enable the <strong>Multi-Agent Orchestrator</strong> skill after setting this up.
+            <div style="font-size:11px;color:var(--muted);margin-top:6px">默认跟随你当前切换的模型档案运行；只有需要给顾问单独指定一个模型时才在这里选（留空 = 跟随当前模型）。</div>
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
             <div>

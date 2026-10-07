@@ -66,6 +66,7 @@ workspace/*.css
 workspace/*.py
 workspace/*.sh
 workspace/*.bat
+workspace/*.csv
 workspace/*.txt
 workspace/*.xlsx
 workspace/*.docx
@@ -111,6 +112,7 @@ desktop.ini
 
 # --- LOCAL SCRATCH (backups, launcher scripts, debug dumps) ---
 .backup/
+backup_*/
 
 # --- WORKBUDDY WORKSPACE DATA ---
 .workbuddy/
