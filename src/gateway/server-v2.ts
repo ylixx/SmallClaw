@@ -938,7 +938,10 @@ function detectToolCategories(text: string): Set<string> {
 // User message signals "I want to recall past conversations" → only then inject
 // [RECENT_CONVERSATIONS]. Without this gate the daily-log tail leaked into
 // every prompt and the model answered current questions with old memory topics.
-const MEMORY_RECALL_RE = /(上次|昨天|前天|之前|以前|刚才|还记得|回忆|最后一次|最近一次|对话记录|上次会话|上次聊|我们聊过|我们说过)/i;
+// The pattern must cover natural phrasing: "生成最近聊天记录报告" failed the
+// first version (matched 昨天/对话记录 only) and the model started guessing
+// file names instead of reading memory/*.md.
+const MEMORY_RECALL_RE = /(上次|昨天|前天|之前|以前|刚才|还记得|回忆|最后一次|最近一次|最近聊|聊天记录|对话记录|历史对话|前两天|这两天|这几天|上次会话|上次聊|我们聊过|我们说过|聊过什么|我们谈了|之前说的)/i;
 
 const TOOL_BLOCKS: Record<string, string> = {
   web: `WEB TOOLS: web_search(query) → headlines+snippets. web_fetch(url) → full page text. Use web_search first to get URLs, then web_fetch to read. For Reddit: web_search with site:reddit.com "keyword", then web_fetch post URLs — never open browser for Reddit.`,
@@ -1049,7 +1052,7 @@ async function buildPersonalityContext(
     }
   }
   const recentConvBlock = recentConversations.length > 0
-    ? `\n\n[RECENT_CONVERSATIONS — 以下是历史对话记录，仅供回忆"上次/最后一次对话"等提问；它们不是当前任务的事实，回答当前问题以最近的用户消息为准]\n${recentConversations.join('\n\n')}`
+    ? `\n\n[RECENT_CONVERSATIONS — 以下是历史对话记录（仅尾部摘要），仅供回忆"上次/最后一次对话/最近聊天记录"等提问；它们不是当前任务的事实，回答当前问题以最近的用户消息为准。如需完整记录，可用 read_file 读取 memory/ 目录下的 <日期>.md 文件（如 memory/2026-10-05.md）]\n${recentConversations.join('\n\n')}`
     : '';
 
   // ── Path B: autonomous execution — full prompt, no changes ─────────────────
@@ -2119,10 +2122,18 @@ async function executeToolImpl(name: string, args: any, workspacePath: string, s
   try {
     switch (name) {
       case 'list_files': {
-        const files = fs.readdirSync(workspacePath).filter(f => {
-          try { return fs.statSync(path.join(workspacePath, f)).isFile(); } catch { return false; }
-        });
-        return { name, args, result: JSON.stringify(files), error: false };
+        // Files first, then directories (marked with trailing "/") — without
+        // the subdirectories the model can't discover memory/, logs/, etc.
+        const entries = fs.readdirSync(workspacePath);
+        const files: string[] = [];
+        const dirs: string[] = [];
+        for (const f of entries) {
+          try {
+            if (fs.statSync(path.join(workspacePath, f)).isDirectory()) dirs.push(`${f}/`);
+            else files.push(f);
+          } catch { /* skip unreadable */ }
+        }
+        return { name, args, result: JSON.stringify([...files, ...dirs]), error: false };
       }
 
       case 'read_file': {
@@ -3483,6 +3494,50 @@ let inRoundLastSentChars = 0;      // chars actually sent in the last generation
 let inRoundAdaptiveBudget = 0;     // 0 = not initialized for the active model yet
 let inRoundBudgetModelKey = '';    // resets calibration when the model changes
 
+// ── On-demand tool definition injection ───────────────────────────────────────
+// buildTools() returns 56 definitions (~30K chars ≈ 8.3K tokens) — the single
+// biggest prompt cost. Injecting all of them every turn drowns a 2B model.
+// Keep a compact always-on core; browser/desktop/office/knowledge/subagent
+// groups are added only when the message signals that intent (same detector
+// that drives TOOL_BLOCKS). Unknown tools stay so nothing silently breaks.
+const CAT_ALWAYS_TOOLS = new Set([
+  'list_files', 'read_file', 'create_file', 'replace_lines', 'insert_after',
+  'delete_lines', 'find_replace', 'delete_file', 'write_note',
+  'web_search', 'web_fetch', 'run_command', 'start_task', 'task_control',
+  'schedule_job', 'parse_schedule_pattern', 'memory_browse', 'memory_write',
+  'memory_read', 'spawn_subagent',
+]);
+const CAT_BROWSER_PREFIX = 'browser_';
+const CAT_DESKTOP_PREFIX = 'desktop_';
+const CAT_OFFICE_PREFIX = 'doc_';
+const CAT_KNOWLEDGE_PREFIX = 'knowledge_';
+const CAT_PLAN_PREFIX = 'plan_';
+const CAT_OFFICE_EXTRAS = new Set(['image_render', 'file_batch']);
+const CAT_SUBAGENT_EXTRAS = new Set(['request_secondary_assist', 'delegate_to_specialist']);
+
+function filterToolsByIntent(toolDefs: any[], messageText: string): any[] {
+  const cats = detectToolCategories(messageText);
+  const lower = String(messageText || '').toLowerCase();
+  const wantOffice = cats.has('files')
+    || /(doc|文档|office|word|pdf|表格|excel|report|报告)/i.test(lower);
+  const wantKnowledge = cats.has('memory')
+    || /(知识库|knowledge|检索|资料|查一下)/i.test(lower);
+  const wantSubagent = cats.size >= 2
+    || /(子任务|subagent|并行|同时|拆分|分工)/i.test(lower);
+  return toolDefs.filter((t: any) => {
+    const n = String(t?.function?.name || '');
+    if (CAT_ALWAYS_TOOLS.has(n)) return true;
+    if (n.startsWith(CAT_BROWSER_PREFIX)) return cats.has('browser');
+    if (n.startsWith(CAT_DESKTOP_PREFIX)) return cats.has('desktop');
+    if (n.startsWith(CAT_OFFICE_PREFIX)) return wantOffice;
+    if (n.startsWith(CAT_KNOWLEDGE_PREFIX)) return wantKnowledge;
+    if (CAT_OFFICE_EXTRAS.has(n)) return wantOffice;
+    if (CAT_SUBAGENT_EXTRAS.has(n)) return wantSubagent;
+    if (n.startsWith(CAT_PLAN_PREFIX)) return wantSubagent;
+    return true;
+  });
+}
+
 async function handleChat(
   message: string,
   sessionId: string,
@@ -3508,7 +3563,7 @@ async function handleChat(
   const tools = applyToolPolicy(
     isBootStartupTurn
       ? buildTools().filter((t: any) => bootAllowedTools.has(String(t?.function?.name || '')))
-      : buildTools(),
+      : filterToolsByIntent(buildTools(), message),
     sessionId,
   );
   console.log(`[v2] TOOLS: n=${tools.length} chars=${JSON.stringify(tools).length} estTokens=${Math.ceil(JSON.stringify(tools).length / 3.6)}`);
@@ -5401,7 +5456,10 @@ RULES:
                   assist_cap: orchCfgForPreempt.limits.max_assists_per_session,
                 });
                 messages.push({ role: 'user', content: hint });
-                messages.push({ role: 'assistant', content: 'Understood. Acting immediately.' });
+                // NOTE: no pre-filled assistant ack here. The 2B model mirrors
+                // the last assistant message, so "Understood. Acting
+                // immediately." became its final answer instead of doing the
+                // work. Let it answer the [ADVISOR GUIDANCE] hint itself.
               }
             }
 
@@ -6489,7 +6547,9 @@ RULES:
             `[Orchestrator] Auto assist complete (${stats.assistCount}/${orchCfg.limits.max_assists_per_session})`,
           );
           messages.push({ role: 'user', content: hint });
-          messages.push({ role: 'assistant', content: 'Understood. Following the advisor guidance now.' });
+          // NOTE: no pre-filled assistant ack (same mirroring bug as the
+          // preempt path — the model repeats "Understood. Following the
+          // advisor guidance now." as its whole answer). Let it respond.
         }
       }
     }
