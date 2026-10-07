@@ -932,10 +932,40 @@
     outline: none;
   }
 
-  #chat-input { min-height: 44px; max-height: 150px; resize: none; line-height: 1.55; overflow-y: auto; }
+  #chat-input { min-height: 44px; max-height: 600px; resize: none; line-height: 1.55; overflow-y: auto; }
   #chat-input:focus,
   #mission-input:focus,
   #skill-search-input:focus { border-color: #9fc1f7; box-shadow: 0 0 0 4px rgba(22, 104, 227, 0.11); }
+
+  /* Draggable chat input height (same style family as the column dividers) */
+  .input-resizer {
+    position: absolute;
+    top: -7px;
+    left: 36px;
+    right: 44px;
+    height: 16px;
+    cursor: row-resize;
+    z-index: 90;
+    background: transparent;
+    user-select: none;
+  }
+  .input-resizer::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    height: 1px;
+    margin-top: -0.5px;
+    background: rgba(127, 140, 160, 0.28);
+    transition: background 0.15s ease, height 0.15s ease;
+  }
+  .input-resizer:hover::after,
+  .input-resizer.active::after {
+    background: rgba(22, 104, 227, 0.95);
+    height: 2px;
+    margin-top: -1px;
+  }
 
   .btn,
   .send-btn,
@@ -2381,6 +2411,7 @@
 	      <div class="doc-preview-panel" id="plan-panel" style="display:none"></div>
 	      <div class="attach-chips" id="attach-chips" style="display:none"></div>
 	      <div class="chat-input-row">
+        <div class="input-resizer" id="input-resizer" title="拖动调整输入框高度"></div>
         <button class="icon-btn attach-btn" id="attach-btn" onclick="document.getElementById('attach-input').click()" title="Attach a file">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
         </button>
@@ -6009,6 +6040,37 @@ function clearChat() {
   persistActiveChat();
   renderChatMessages();
 }
+
+// ---- Draggable chat input height ----
+(function initInputResizer() {
+  const input = document.getElementById('chat-input');
+  const bar = document.getElementById('input-resizer');
+  if (!input || !bar) return;
+  const KEY = 'sc-input-h';
+  const saved = localStorage.getItem(KEY);
+  if (saved) input.style.height = saved + 'px';
+  let drag = null;
+  document.addEventListener('mousemove', (e) => {
+    if (!drag) return;
+    const h = Math.min(Math.max(drag.startH + (e.clientY - drag.startY), 44), 600);
+    input.style.height = h + 'px';
+  });
+  document.addEventListener('mouseup', () => {
+    if (!drag) return;
+    localStorage.setItem(KEY, String(Math.round(input.getBoundingClientRect().height)));
+    bar.classList.remove('active');
+    drag = null;
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  });
+  bar.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    drag = { startY: e.clientY, startH: input.getBoundingClientRect().height };
+    bar.classList.add('active');
+    document.body.style.cursor = 'row-resize';
+    document.body.style.userSelect = 'none';
+  });
+})();
 
 // Enter to send, Shift+Enter for newline
 document.getElementById('chat-input').addEventListener('keydown', e => {
