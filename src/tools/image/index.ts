@@ -410,7 +410,7 @@ export function getImageToolDefinitions(): any[] {
       function: {
         name: 'image_render',
         description:
-          'Render a PNG image from HTML/CSS through a headless browser (offline, fast). Pick a template and give title/subtitle/bullets, or pass complete html for full control. Use for 海报、封面、卡片、banner、配图、社交媒体图、幻灯片封面。',
+          'Render a PNG image from HTML/CSS via headless browser (offline, fast). Pick a template with title/subtitle/bullets, or pass complete html for full control. Use for 海报、封面、卡片、banner、配图、社交媒体图、幻灯片封面.',
         parameters: {
           type: 'object',
           required: [],
@@ -441,7 +441,7 @@ export function getImageToolDefinitions(): any[] {
       type: 'function',
       function: {
         name: 'image_generate',
-        description: 'Generate an image from a text prompt with a configured local/remote image model (AI绘图). Prefer image_render for diagrams, posters with text, or anything that must match exact copy.',
+        description: 'Generate an image from a text prompt with a configured local/remote image model (AI绘图). Prefer image_render for diagrams/posters with exact text copy.',
         parameters: {
           type: 'object',
           required: ['prompt'],

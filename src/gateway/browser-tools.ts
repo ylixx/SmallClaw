@@ -1321,7 +1321,7 @@ export function getBrowserToolDefinitions(): any[] {
       type: 'function',
       function: {
         name: 'browser_open',
-        description: 'Open a URL in a Playwright-controlled Chrome browser (NOT your regular Chrome or Edge). This is the ONLY correct way to open URLs for browser automation — NEVER use run_command to open chrome/edge, as those windows are invisible to all other browser tools. Always use browser_open first to establish a session before using browser_snapshot, browser_click, etc. Returns a snapshot of interactive page elements with @ref numbers — read it immediately. Do NOT call browser_open again for a different URL within the same site — use browser_click on the link @ref instead. For searches, build a direct search URL (e.g. github.com/search?q=query). Elements marked [INPUT] can be filled. If element count looks low, call browser_wait to let JS finish loading.',
+        description: 'Open a URL in the Playwright-controlled Chrome (NOT your regular Chrome/Edge — those are invisible to browser_* tools; never use run_command for web). Always use browser_open first to establish a session, then use browser_click/snapshot etc. Returns a snapshot of interactive elements with @ref numbers — read it immediately. Do NOT re-open for a different URL on the same site — click the link @ref instead. For searches, build a direct search URL (e.g. github.com/search?q=query). Elements marked [INPUT] can be filled. If element count looks low, call browser_wait to let JS finish.',
         parameters: {
           type: 'object', required: ['url'],
           properties: { url: { type: 'string', description: 'Full URL to navigate to. For searches, build the search URL directly.' } },
@@ -1332,7 +1332,7 @@ export function getBrowserToolDefinitions(): any[] {
       type: 'function',
       function: {
         name: 'browser_snapshot',
-        description: 'Re-scan the current page and return an updated list of interactive elements with @ref numbers. ONLY call this when you do NOT already have a recent snapshot in context — do NOT call it twice in a row or after browser_open/browser_fill/browser_wait which already return a snapshot. If you just received a snapshot, ACT on it immediately (browser_click or browser_fill) instead of re-snapping. Repeated snapshot calls without acting = stall loop.',
+        description: 'Re-scan the page and return updated interactive elements with @ref numbers. ONLY call when you do NOT have a recent snapshot in context — not twice in a row or after browser_open/browser_fill/browser_wait (they already return one). If you just received a snapshot, ACT on it (click/fill) instead of re-snapping. Repeated snapping without acting = stall loop.',
         parameters: { type: 'object', properties: {} },
       },
     },
@@ -1340,7 +1340,7 @@ export function getBrowserToolDefinitions(): any[] {
       type: 'function',
       function: {
         name: 'browser_click',
-        description: 'Click a page element by its @ref number. Always take a browser_snapshot after clicking to see the result. If the snapshot looks unchanged after clicking, the wrong element was clicked — pick a different @ref and try again.',
+        description: 'Click a page element by @ref. Take a browser_snapshot after clicking to see the result. If the snapshot looks unchanged, the wrong element was clicked — pick a different @ref.',
         parameters: {
           type: 'object', required: ['ref'],
           properties: { ref: { type: 'number', description: '@ref number from the most recent snapshot' } },
@@ -1351,7 +1351,7 @@ export function getBrowserToolDefinitions(): any[] {
       type: 'function',
       function: {
         name: 'browser_fill',
-        description: 'Type text into an [INPUT] element by its @ref number. Only works on elements labelled [INPUT] in the snapshot. After filling, use browser_press_key with "Enter" to submit, or browser_click on the submit button.',
+        description: 'Type text into an [INPUT] element by @ref (only works on elements labelled [INPUT]). Then submit with browser_press_key "Enter" or browser_click on the submit button.',
         parameters: {
           type: 'object', required: ['ref', 'text'],
           properties: {
@@ -1365,7 +1365,7 @@ export function getBrowserToolDefinitions(): any[] {
       type: 'function',
       function: {
         name: 'browser_press_key',
-        description: 'Press a keyboard key. Use "Enter" to submit a form or search after filling an input. Use "Escape" to close a popup. Use "Tab" to move focus to the next field.',
+        description: 'Press a keyboard key. "Enter" submits a form/search after filling an input; "Escape" closes a popup; "Tab" moves focus.',
         parameters: {
           type: 'object', required: ['key'],
           properties: { key: { type: 'string', description: 'Key name: Enter, Tab, Escape, ArrowDown, ArrowUp, Space' } },
@@ -1376,7 +1376,7 @@ export function getBrowserToolDefinitions(): any[] {
       type: 'function',
       function: {
         name: 'browser_wait',
-        description: 'Wait for the page to finish loading, then return a fresh snapshot. Use this when: (1) a page just loaded but has few elements, (2) after a click that should open something but the snapshot looks unchanged, (3) waiting for search results or dynamic content to appear.',
+        description: 'Wait for the page to finish loading, then return a fresh snapshot. Use when: (1) a page just loaded but has few elements, (2) after a click that should open something but the snapshot looks unchanged, (3) waiting for search results or dynamic content.',
         parameters: {
           type: 'object',
           properties: { ms: { type: 'number', description: 'Milliseconds to wait before snapping (500-8000, default 2000)' } },
@@ -1387,7 +1387,7 @@ export function getBrowserToolDefinitions(): any[] {
       type: 'function',
       function: {
         name: 'browser_scroll',
-        description: 'Scroll the page by a multiple of the viewport height. Prefer this over browser_press_key(PageDown) on sites with infinite scroll or content virtualization. Use direction="down" with multiplier=1.75 on X/Twitter to reliably load new tweets past virtualization. Default multiplier=1.0.',
+        description: 'Scroll the page by a multiple of the viewport height. Prefer over browser_press_key(PageDown) on infinite-scroll/virtualized sites. Use direction="down" with multiplier=1.75 on X/Twitter to load new tweets. Default multiplier=1.0.',
         parameters: {
           type: 'object',
           properties: {

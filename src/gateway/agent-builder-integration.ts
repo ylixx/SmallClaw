@@ -712,7 +712,7 @@ export const AGENT_BUILDER_TOOL_DEFINITIONS = [
     type: 'function',
     function: {
       name: 'architect_workflow',
-      description: `Design and create a NEW workflow in Agent Builder. \nIMPORTANT: ALWAYS call search_workflow_templates first. Only call this if no suitable template exists — creating duplicates wastes time and API budget.\nIf search returns results, use execute_workflow_template() instead.`,
+      description: `Design and create a NEW workflow in Agent Builder. ALWAYS call search_workflow_templates first; only use this if no suitable template exists (duplicates waste API budget). If search returns results, use execute_workflow_template() instead.`,
       parameters: {
         type: 'object',
         properties: {
@@ -733,7 +733,7 @@ export const AGENT_BUILDER_TOOL_DEFINITIONS = [
     type: 'function',
     function: {
       name: 'verify_workflow_credentials',
-      description: 'Check whether all required API credentials for a workflow are present in Agent Builder. Call this after architect_workflow() returns credentials_needed.',
+      description: 'Check whether all required API credentials for a workflow are present. Call after architect_workflow() returns credentials_needed.',
       parameters: {
         type: 'object',
         properties: {
@@ -761,7 +761,7 @@ export const AGENT_BUILDER_TOOL_DEFINITIONS = [
     type: 'function',
     function: {
       name: 'deploy_workflow',
-      description: 'Activate a workflow and save it to SmallClaw\'s persistent registry. After this, the workflow is remembered forever and can be reused with execute_workflow_template(). Call only after test_workflow() passes.',
+      description: 'Activate a workflow and save it to SmallClaw\'s persistent registry (remembered forever, reusable via execute_workflow_template). Call only after test_workflow() passes.',
       parameters: {
         type: 'object',
         properties: {
@@ -802,7 +802,7 @@ export const AGENT_BUILDER_TOOL_DEFINITIONS = [
     type: 'function',
     function: {
       name: 'search_workflow_templates',
-      description: `Search for existing workflows before creating new ones. \nALWAYS call this FIRST when a user asks to automate something. \nSearches SmallClaw's local registry (instant) then Agent Builder.\nIf results found, use execute_workflow_template() — do NOT call architect_workflow().`,
+      description: `Search for existing workflows before creating new ones. ALWAYS call FIRST when a user asks to automate something. Searches local registry (instant) then Agent Builder. If results found, use execute_workflow_template() — do NOT call architect_workflow().`,
       parameters: {
         type: 'object',
         properties: {
@@ -822,7 +822,7 @@ export const AGENT_BUILDER_TOOL_DEFINITIONS = [
     type: 'function',
     function: {
       name: 'execute_workflow_template',
-      description: 'Execute an existing workflow with runtime inputs. Use this to run any workflow that was previously deployed — no API calls to rebuild, instant execution.',
+      description: 'Execute an existing deployed workflow with runtime inputs — no API calls to rebuild, instant execution.',
       parameters: {
         type: 'object',
         properties: {

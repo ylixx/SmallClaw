@@ -61,7 +61,7 @@ export function planToolDefinitions(): any[] {
       function: {
         name: 'plan_submit',
         description:
-          '提交执行计划并等待用户批准 (submit an execution plan and wait for user approval). Required in plan mode BEFORE any tool that changes files or runs commands. Research first with read-only tools (list_files, read_file, doc_inspect, doc_read, web_search), then send summary + concrete steps. The call blocks until the user approves or rejects; after approval, execute the plan step by step.',
+          '提交执行计划并等待用户批准 (submit an execution plan and wait for approval). Required in plan mode BEFORE any tool that changes files or runs commands. Research first with read-only tools (list_files, read_file, doc_inspect, doc_read, web_search), then send summary + concrete steps. Blocks until approved/rejected; after approval, execute step by step.',
         parameters: {
           type: 'object',
           required: ['summary', 'steps'],

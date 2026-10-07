@@ -247,7 +247,7 @@ export function getFileBatchToolDefinitions(): any[] {
       function: {
         name: 'file_batch',
         description:
-          'Batch file operations in the workspace: rename, move, copy, delete, organize (group files into folders by type). ALWAYS call mode:"preview" first to see the plan; apply with the preview_id after the user approves. Deletes and moves are irreversible, so never skip the preview.',
+          'Batch file ops in the workspace: rename, move, copy, delete, organize (group by type). ALWAYS call mode:"preview" first to see the plan; apply with the preview_id after user approval. Deletes/moves are irreversible — never skip the preview.',
         parameters: {
           type: 'object',
           required: ['op'],

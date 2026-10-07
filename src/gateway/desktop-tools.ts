@@ -624,7 +624,7 @@ export function getDesktopToolDefinitions(): any[] {
       type: 'function',
       function: {
         name: 'desktop_screenshot',
-        description: 'Capture a screenshot of the full desktop and return active/open window info. Use this first for desktop app tasks.',
+        description: 'Capture the full desktop and return open-window info. Use first for desktop app tasks.',
         parameters: { type: 'object', properties: {} },
       },
     },
@@ -637,7 +637,7 @@ export function getDesktopToolDefinitions(): any[] {
           type: 'object',
           required: ['name'],
           properties: {
-            name: { type: 'string', description: 'Partial window title or process name, e.g. "Visual Studio Code"' },
+            name: { type: 'string', description: 'Partial title or process name, e.g. "Visual Studio Code"' },
           },
         },
       },
@@ -646,12 +646,12 @@ export function getDesktopToolDefinitions(): any[] {
       type: 'function',
       function: {
         name: 'desktop_focus_window',
-        description: 'Bring a matching window to foreground/focus.',
+        description: 'Bring a matching window to foreground.',
         parameters: {
           type: 'object',
           required: ['name'],
           properties: {
-            name: { type: 'string', description: 'Partial window title or process name to focus' },
+            name: { type: 'string', description: 'Partial title or process name to focus' },
           },
         },
       },
@@ -665,8 +665,8 @@ export function getDesktopToolDefinitions(): any[] {
           type: 'object',
           required: ['x', 'y'],
           properties: {
-            x: { type: 'number', description: 'Screen X coordinate in pixels' },
-            y: { type: 'number', description: 'Screen Y coordinate in pixels' },
+            x: { type: 'number', description: 'Screen X (pixels)' },
+            y: { type: 'number', description: 'Screen Y (pixels)' },
             button: { type: 'string', enum: ['left', 'right'], description: 'Mouse button (default left)' },
             double_click: { type: 'boolean', description: 'Double-click instead of single-click' },
           },
@@ -682,10 +682,10 @@ export function getDesktopToolDefinitions(): any[] {
           type: 'object',
           required: ['from_x', 'from_y', 'to_x', 'to_y'],
           properties: {
-            from_x: { type: 'number', description: 'Start X coordinate' },
-            from_y: { type: 'number', description: 'Start Y coordinate' },
-            to_x: { type: 'number', description: 'End X coordinate' },
-            to_y: { type: 'number', description: 'End Y coordinate' },
+            from_x: { type: 'number', description: 'Start X' },
+            from_y: { type: 'number', description: 'Start Y' },
+            to_x: { type: 'number', description: 'End X' },
+            to_y: { type: 'number', description: 'End Y' },
             steps: { type: 'number', description: 'Interpolation steps (default 20)' },
           },
         },
@@ -708,7 +708,7 @@ export function getDesktopToolDefinitions(): any[] {
       type: 'function',
       function: {
         name: 'desktop_type',
-        description: 'Type text into the currently focused desktop window (via clipboard paste).',
+        description: 'Type text into the focused desktop window (via clipboard paste).',
         parameters: {
           type: 'object',
           required: ['text'],
@@ -722,7 +722,7 @@ export function getDesktopToolDefinitions(): any[] {
       type: 'function',
       function: {
         name: 'desktop_press_key',
-        description: 'Press a key in the focused desktop window. Supports Enter, Escape, Tab, PageDown, Ctrl+C, Ctrl+V, etc.',
+        description: 'Press a key in the focused window: Enter, Escape, Tab, PageDown, Ctrl+C, Ctrl+V, etc.',
         parameters: {
           type: 'object',
           required: ['key'],

@@ -530,7 +530,7 @@ export function getOfficeToolDefinitions(): any[] {
     function: {
       name: 'doc_inspect',
       description:
-        'Inspect the structure of an Office/PDF/CSV document: worksheets, dimensions and header rows (xlsx), outline/headings/tables (docx), slides/shapes/positions (pptx), pages (pdf), columns (csv). Use this first to learn where things are before reading a range or writing.',
+        'Inspect structure of an Office/PDF/CSV document: worksheets/dimensions/header rows (xlsx), outline/headings/tables (docx), slides/shapes (pptx), pages (pdf), columns (csv). Use first to learn where things are.',
       parameters: {
         type: 'object',
         required: ['filename'],
@@ -544,7 +544,7 @@ export function getOfficeToolDefinitions(): any[] {
     function: {
       name: 'doc_read',
       description:
-        'Read an Office/PDF/CSV document and return it as Markdown (tables are rendered). Supports xlsx cell ranges, docx paragraph windows, pptx slides, pdf pages.',
+        'Read an Office/PDF/CSV document as Markdown (tables rendered). Supports xlsx cell ranges, docx paragraph windows, pptx slides, pdf pages.',
       parameters: {
         type: 'object',
         required: ['filename'],
@@ -553,11 +553,11 @@ export function getOfficeToolDefinitions(): any[] {
           target: {
             type: 'string',
             description:
-              'What to read. xlsx: range like "Sheet1!A1:D50". docx: paragraph index like "12". pptx: slide number like "3". pdf: page number like "2".',
+              'xlsx: range like "Sheet1!A1:D50". docx: paragraph index "12". pptx: slide number "3". pdf: page number "2".',
           },
-          stats: { type: 'boolean', description: 'xlsx only: include per-column stats (min/max/sum/avg/numeric counts).' },
-          limit: { type: 'number', description: 'docx/csv/pdf: max paragraphs/rows/pages to return (default 200).' },
-          row_limit: { type: 'number', description: 'xlsx/csv: max rows in each Markdown table (default 50).' },
+          stats: { type: 'boolean', description: 'xlsx only: per-column stats (min/max/sum/avg/numeric counts).' },
+          limit: { type: 'number', description: 'docx/csv/pdf: max paragraphs/rows/pages (default 200).' },
+          row_limit: { type: 'number', description: 'xlsx/csv: max rows per Markdown table (default 50).' },
         },
       },
     },
@@ -568,10 +568,10 @@ export function getOfficeToolDefinitions(): any[] {
     function: {
       name: 'doc_write',
       description:
-        'Create or edit an .xlsx / .docx / .pptx file (if the file does not exist it is created from scratch). ALWAYS call mode:"preview" first: it returns a rendered Markdown preview plus a preview_id and writes nothing. Only call mode:"apply" with that preview_id after the user has approved the preview; if they reject it, show the preview only.\n'
+        'Create or edit an .xlsx / .docx / .pptx (created from scratch if missing). ALWAYS call mode:"preview" first: returns a rendered Markdown preview plus preview_id and writes nothing. Only call mode:"apply" with that preview_id after the user approves; if rejected, show the preview only.\n'
         + 'ops by format:\n'
         + 'xlsx: {op:"cells",sheet,ref,values} | {op:"rows",sheet,at,values} | {op:"add_sheet",name} | {op:"chart",range,type:"bar|line|pie|area|scatter",title,anchor}\n'
-        + 'docx: {op:"content",markdown} (append headings/lists/tables/images from Markdown - easiest for writing a document) | {op:"heading",at:"#append",level,text} | {op:"insert",after:"#append",text} | {op:"add_table",rows} | {op:"add_image",image} | existing content: replace/heading with at:"#12", insert with after:"#12", table with at:"#T0",r,c\n'
+        + 'docx: {op:"content",markdown} (append headings/lists/tables/images from Markdown - easiest) | {op:"heading",at:"#append",level,text} | {op:"insert",after:"#append",text} | {op:"add_table",rows} | {op:"add_image",image} | existing content: replace/heading with at:"#12", insert with after:"#12", table with at:"#T0",r,c\n'
         + 'pptx: {op:"outline",markdown} ("# deck title", "## slide", "- bullet", "---" = next slide - builds a whole deck in one call) | {op:"add_slide",title,bullets} | existing slides: title/set_text/textbox/table/image/delete_shape with slide numbers.',
       parameters: {
         type: 'object',
@@ -582,11 +582,11 @@ export function getOfficeToolDefinitions(): any[] {
           mode: {
             type: 'string',
             enum: ['preview', 'apply'],
-            description: 'preview (default) = show what would change and write nothing; apply = actually write the file.',
+            description: 'preview (default) = show what would change, write nothing; apply = actually write.',
           },
           preview_id: {
             type: 'string',
-            description: 'Returned by the preview call. Required for apply. Re-run preview if the ops changed.',
+            description: 'Returned by the preview call. Required for apply. Re-run preview if ops changed.',
           },
           out: { type: 'string', description: 'Optional: write to a different file (same extension) instead of overwriting.' },
         },
@@ -600,7 +600,7 @@ export function getOfficeToolDefinitions(): any[] {
       function: {
         name: 'doc_chart',
         description:
-          'Render a chart to a PNG image (bar, line, pie, area, scatter) from inline data or from an xlsx/csv range, and optionally insert it into a .docx/.pptx in the same call. Use this for 数据可视化 / 图表 / 配图. Output path is a file in the workspace.',
+          'Render a chart to a PNG (bar, line, pie, area, scatter) from inline data or an xlsx/csv range, optionally inserting it into a .docx/.pptx in the same call. Use for 数据可视化 / 图表 / 配图. Output path is a workspace file.',
         parameters: {
           type: 'object',
           required: ['type'],
@@ -610,13 +610,13 @@ export function getOfficeToolDefinitions(): any[] {
               type: 'array',
               description: 'Rows of values, row 1 = headers, col A = labels. e.g. [["month","sales"],["Jan",120],["Feb",150]]',
             },
-            file: { type: 'string', description: 'Alternative to data: xlsx/csv file to read the numbers from.' },
+            file: { type: 'string', description: 'Alternative to data: xlsx/csv file to read numbers from.' },
             range: { type: 'string', description: 'With file: range like "Sheet1!A1:D12" (default = used range).' },
             title: { type: 'string', description: 'Chart title.' },
             xlabel: { type: 'string', description: 'X axis label.' },
             ylabel: { type: 'string', description: 'Y axis label.' },
             out: { type: 'string', description: 'PNG path in the workspace (default chart-<time>.png).' },
-            embed: { type: 'string', description: 'Optional .docx or .pptx to insert the finished chart into.' },
+            embed: { type: 'string', description: 'Optional .docx or .pptx to insert the chart into.' },
             width: { type: 'number', description: 'PNG width in px (default 1200).' },
             height: { type: 'number', description: 'PNG height in px (default 700).' },
           },
@@ -631,7 +631,7 @@ export function getOfficeToolDefinitions(): any[] {
       function: {
         name: 'doc_convert',
         description:
-          'Convert a document to another format using LibreOffice. Sources: .doc/.docx/.odt/.rtf/.txt/.md/.html/.xls/.xlsx/.csv/.ppt/.pptx/.pdf. Targets: pdf, docx, xlsx, pptx, txt, csv, html. Example: markdown report -> pdf, or legacy .doc -> .docx.',
+          'Convert a document via LibreOffice. Sources: .doc/.docx/.odt/.rtf/.txt/.md/.html/.xls/.xlsx/.csv/.ppt/.pptx/.pdf. Targets: pdf, docx, xlsx, pptx, txt, csv, html. E.g. markdown -> pdf, legacy .doc -> .docx.',
         parameters: {
           type: 'object',
           required: ['filename', 'to'],
@@ -642,7 +642,7 @@ export function getOfficeToolDefinitions(): any[] {
               enum: ['pdf', 'docx', 'xlsx', 'pptx', 'txt', 'csv', 'html'],
               description: 'Target format',
             },
-            out: { type: 'string', description: 'Optional output path (must end with the target extension). Defaults to the source name.' },
+            out: { type: 'string', description: 'Optional output path (must end with target extension). Defaults to the source name.' },
           },
         },
       },
@@ -655,7 +655,7 @@ export function getOfficeToolDefinitions(): any[] {
       function: {
         name: 'doc_ocr',
         description:
-          'OCR scanned pages of a PDF (medical/imaging reports are often scanned with no text layer) and return the recognized text as Markdown. Use when doc_read on a PDF returns "(no extractable text - this may be a scanned PDF; use OCR)".',
+          'OCR scanned pages of a PDF (medical/imaging reports are often scanned with no text layer) and return recognized text as Markdown. Use when doc_read returns "(no extractable text - this may be a scanned PDF; use OCR)".',
         parameters: {
           type: 'object',
           required: ['filename'],
@@ -678,7 +678,7 @@ export function getOfficeToolDefinitions(): any[] {
       function: {
         name: 'doc_parse_lab',
         description:
-          'Parse a hospital lab report PDF (检验报告单) into structured data: patient header, dated batches of lab items (code/name/value/reference/unit), abnormal flags (偏高/偏低) and the full timeline of test dates. Returns a Markdown summary; the structured JSON is also embedded in the result. Use for 化验单/检验报告 analysis.',
+          'Parse a hospital lab report PDF (检验报告单) into structured data: patient header, dated batches of lab items (code/name/value/reference/unit), abnormal flags (偏高/偏低), full test-date timeline. Returns Markdown summary with embedded structured JSON. Use for 化验单/检验报告 analysis.',
         parameters: {
           type: 'object',
           required: ['filename'],

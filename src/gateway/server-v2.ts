@@ -336,7 +336,7 @@ function shellExecToolDefinition(): any {
     type: 'function',
     function: {
       name: 'shell_exec',
-      description: 'Run a real terminal command inside the workspace and return its output. Use this when run_command rejects a command - run_command is only a GUI app launcher, not a shell. Confined to the workspace directory; destructive patterns are blocked.',
+      description: 'Run a real terminal command in the workspace and return its output. Use when run_command rejects a command (run_command is only a GUI launcher). Confined to the workspace; destructive patterns are blocked.',
       parameters: {
         type: 'object', required: ['command'],
         properties: {
@@ -1126,7 +1126,7 @@ function buildTools() {
       type: 'function',
       function: {
         name: 'read_file',
-        description: 'Read a file and return its content WITH line numbers. Always use this before editing a file.',
+        description: 'Read a file with line numbers. Use before editing.',
         parameters: {
           type: 'object', required: ['filename'],
           properties: { filename: { type: 'string', description: 'Name of the file to read' } },
@@ -1137,7 +1137,7 @@ function buildTools() {
       type: 'function',
       function: {
         name: 'create_file',
-        description: 'Create a NEW file with content. Only use for files that do NOT exist yet.',
+        description: 'Create a NEW file (fails if it exists).',
         parameters: {
           type: 'object', required: ['filename', 'content'],
           properties: {
@@ -1151,7 +1151,7 @@ function buildTools() {
       type: 'function',
       function: {
         name: 'replace_lines',
-        description: 'Replace specific lines in an existing file. Use read_file first to see line numbers.',
+        description: 'Replace a line range in an existing file (1-based, inclusive).',
         parameters: {
           type: 'object', required: ['filename', 'start_line', 'end_line', 'new_content'],
           properties: {
@@ -1167,7 +1167,7 @@ function buildTools() {
       type: 'function',
       function: {
         name: 'insert_after',
-        description: 'Insert new lines after a specific line number. Use 0 to insert at beginning.',
+        description: 'Insert lines after a line number (0 = beginning).',
         parameters: {
           type: 'object', required: ['filename', 'after_line', 'content'],
           properties: {
@@ -1197,7 +1197,7 @@ function buildTools() {
       type: 'function',
       function: {
         name: 'find_replace',
-        description: 'Find exact text in a file and replace it. Good for small text changes.',
+        description: 'Find exact text in a file and replace it.',
         parameters: {
           type: 'object', required: ['filename', 'find', 'replace'],
           properties: {
@@ -1223,14 +1223,14 @@ function buildTools() {
       type: 'function',
       function: {
         name: 'write_note',
-        description: 'Write a temporary note to today\'s intraday memory file. Works in all sessions (task and chat). Notes persist across the day and are included in tomorrow\'s boot context. Auto-cleaned at end of day.',
+        description: 'Write a note to today\'s intraday memory (persists through the day, auto-cleaned at day end, included in next boot context).',
         parameters: {
           type: 'object', required: ['content'],
           properties: {
-            content: { type: 'string', description: 'Note content — what you found, decided, or want to remember' },
-            tag: { type: 'string', description: 'Optional tag: task, debug, discovery, or general (default: general)' },
-            task_id: { type: 'string', description: 'Optional task ID if this note is related to a specific task' },
-            step: { type: 'string', description: 'Legacy: step label (still accepted, mapped to tag)' },
+            content: { type: 'string', description: 'Note content: what you found, decided, or want to remember' },
+            tag: { type: 'string', description: 'Optional: task, debug, discovery, or general (default general)' },
+            task_id: { type: 'string', description: 'Optional task ID this note relates to' },
+            step: { type: 'string', description: 'Legacy: mapped to tag' },
           },
         },
       },
@@ -1239,7 +1239,7 @@ function buildTools() {
       type: 'function',
       function: {
         name: 'web_search',
-        description: 'Search the web for current information. Use web_fetch on result URLs to read full page content.',
+        description: 'Search the web for current information. Use web_fetch on result URLs for full content.',
         parameters: {
           type: 'object', required: ['query'],
           properties: { query: { type: 'string', description: 'Search query' } },
@@ -1250,7 +1250,7 @@ function buildTools() {
       type: 'function',
       function: {
         name: 'web_fetch',
-        description: 'Fetch the full text content of a webpage URL. Use this AFTER web_search to read the actual page content instead of just snippets. Essential for getting real data, details, and context.',
+        description: 'Fetch full text of a webpage URL. Use AFTER web_search to get real page content, details and context.',
         parameters: {
           type: 'object', required: ['url'],
           properties: { url: { type: 'string', description: 'Full URL to fetch (from web_search results or any URL)' } },
@@ -1261,11 +1261,11 @@ function buildTools() {
       type: 'function',
       function: {
         name: 'run_command',
-        description: 'Open apps for the USER to see on their screen. This is a GUI launcher, NOT a shell: it cannot run pipelines, globs, redirects, switches or arbitrary commands, and it returns no output. NEVER use this to open Chrome or Edge for web automation — those windows have no debug port and are invisible to browser_open/snapshot/click. For any web browsing, always use browser_open instead. Use run_command only for: launching GUI apps (notepad, calc, word, winword, excel, powerpoint), opening a local file with the system default program (start <file>; if the extension has no default app, Windows pops the "how do you want to open this" picker for the user to choose — do not retry), or opening a path in VS Code / Explorer.',
+        description: 'Launch GUI apps or open files for the USER (visible on their screen). NOT a shell: no pipelines, globs, redirects, switches; returns no output. Do NOT open Chrome/Edge here (no debug port; use browser_* tools for web). Use for: GUI apps (notepad, calc, word, excel, powerpoint), opening a file with the system default program ("start report.docx"; if no default app the OS picker appears - do not retry), opening a path in VS Code / Explorer.',
         parameters: {
           type: 'object', required: ['command'],
           properties: {
-            command: { type: 'string', description: 'Accepted: a bare app name ("notepad", "calc", "word", "winword"); an app plus a file path ("code D:\\project", "notepad notes.txt", "word report.docx" - only notepad/code/explorer/word/winword take a path); a local file opened with the system default program ("start report.docx", "open report.docx"); or a URL. Rejected: "powershell <cmd>", anything with switches, pipes or shell metacharacters. Do NOT use "chrome" or "msedge" here — use browser_open instead.' },
+            command: { type: 'string', description: 'Bare app name ("notepad", "calc", "word"); app + path ("code D:\\project", "word report.docx" - only notepad/code/explorer/word/winword take a path); file via system default ("start report.docx", "open report.docx"); or a URL. Rejected: "powershell <cmd>", switches, pipes, shell metacharacters. No "chrome"/"msedge" - use browser_* instead.' },
           },
         },
       },
@@ -1274,7 +1274,7 @@ function buildTools() {
       type: 'function',
       function: {
         name: 'start_task',
-        description: 'Start a multi-step task that requires many actions (like browser automation, complex file operations). The task will run with a sliding context window so it can handle 20+ steps.',
+        description: 'Start a multi-step task (browser automation, complex file ops) that runs with a sliding context window for 20+ steps.',
         parameters: {
           type: 'object', required: ['goal'],
           properties: {
@@ -1288,18 +1288,18 @@ function buildTools() {
       type: 'function',
       function: {
         name: 'task_control',
-        description: 'Query and control background tasks. Use this instead of reading files to discover task status.',
+        description: 'Query and control background tasks (list/latest/get/resume/rerun/pause/cancel/delete).',
         parameters: {
           type: 'object',
           required: ['action'],
           properties: {
-            action: { type: 'string', description: 'One of: list, latest, get, resume, rerun, pause, cancel, delete' },
-            task_id: { type: 'string', description: 'Task ID (required for get/pause/cancel/delete; optional for resume/rerun)' },
+            action: { type: 'string', description: 'list, latest, get, resume, rerun, pause, cancel, delete' },
+            task_id: { type: 'string', description: 'Required for get/pause/cancel/delete; optional for resume/rerun' },
             status: { type: 'string', description: 'Optional filter: queued|running|paused|stalled|needs_assistance|failed|complete|waiting_subagent' },
-            include_all_sessions: { type: 'boolean', description: 'If true, list across all sessions/channels; default false (scoped)' },
-            limit: { type: 'number', description: 'Max tasks to return (default 20, max 100)' },
-            note: { type: 'string', description: 'Optional operator note to append when resuming/rerunning' },
-            confirm: { type: 'boolean', description: 'Required true for destructive actions cancel/delete' },
+            include_all_sessions: { type: 'boolean', description: 'List across all sessions; default false (scoped)' },
+            limit: { type: 'number', description: 'Max tasks (default 20, max 100)' },
+            note: { type: 'string', description: 'Operator note appended on resume/rerun' },
+            confirm: { type: 'boolean', description: 'Required true for cancel/delete' },
           },
         },
       },
@@ -1308,12 +1308,12 @@ function buildTools() {
       type: 'function',
       function: {
         name: 'schedule_job',
-        description: 'Manage scheduled jobs (list/create/update/pause/resume/delete/run_now). Use for recurring or time-based automation.',
+        description: 'Manage scheduled jobs (list/create/update/pause/resume/delete/run_now) for recurring or time-based automation.',
         parameters: {
           type: 'object',
           required: ['action'],
           properties: {
-            action: { type: 'string', description: 'One of: list, create, update, pause, resume, delete, run_now' },
+            action: { type: 'string', description: 'list, create, update, pause, resume, delete, run_now' },
             job_id: { type: 'string', description: 'Required for update/pause/resume/delete/run_now' },
             name: { type: 'string', description: 'Job name (create/update)' },
             instruction_prompt: { type: 'string', description: 'What the scheduled run should do (create/update)' },
@@ -1333,9 +1333,9 @@ function buildTools() {
                 session_target: { type: 'string', description: 'main or isolated' },
               },
             },
-            model_override: { type: 'string', description: 'Optional model override for this scheduled job' },
-            confirm: { type: 'boolean', description: 'Must be true for create/update/delete actions' },
-            limit: { type: 'number', description: 'Optional max jobs returned for list' },
+            model_override: { type: 'string', description: 'Optional model override for this job' },
+            confirm: { type: 'boolean', description: 'Must be true for create/update/delete' },
+            limit: { type: 'number', description: 'Optional max jobs for list' },
           },
         },
       },
@@ -1344,7 +1344,7 @@ function buildTools() {
       type: 'function',
       function: {
         name: 'parse_schedule_pattern',
-        description: 'Parse natural language schedule patterns to cron expressions. Use before creating schedules to convert user language like "daily at 3:13pm" to proper cron syntax.',
+        description: 'Parse natural-language schedule patterns (e.g. "daily at 3:13pm") to cron expressions. Use before creating schedules.',
         parameters: {
           type: 'object',
           required: ['text'],
@@ -1366,13 +1366,13 @@ function buildTools() {
         type: 'function' as const,
         function: {
           name: 'request_secondary_assist',
-          description: 'Request guidance from the secondary AI advisor when you are stuck, need a plan, or have failed multiple times. The advisor returns a structured action plan. Use proactively for complex tasks.',
+          description: 'Request guidance from the secondary AI advisor when stuck, need a plan, or have failed repeatedly. Returns a structured action plan. Use proactively for complex tasks.',
           parameters: {
             type: 'object',
             required: ['reason'],
             properties: {
               reason: { type: 'string', description: 'Why you need help: planning, stuck, repeated failures, risky edit, etc.' },
-              mode:   { type: 'string', enum: ['planner', 'rescue'], description: 'planner = need upfront strategy; rescue = stuck or failing' },
+              mode:   { type: 'string', enum: ['planner', 'rescue'], description: 'planner = upfront strategy; rescue = stuck/failing' },
             },
           },
         },
@@ -1388,21 +1388,19 @@ function buildTools() {
           function: {
             name: 'subagent_spawn',
             description:
-              'Spawn a child agent in an isolated session to handle a parallel subtask. ' +
-              'The current task pauses until ALL spawned children complete. ' +
-              'Do NOT call this recursively from inside a child task.',
+              'Spawn a child agent in an isolated session for a parallel subtask. The current task pauses until ALL spawned children complete. Do NOT call recursively from inside a child task.',
             parameters: {
               type: 'object',
               required: ['task_title', 'task_prompt'],
               properties: {
                 task_title:      { type: 'string', description: 'Short title for the sub-agent task' },
                 task_prompt:     { type: 'string', description: 'Full instruction for the sub-agent (be precise)' },
-                context_snippet: { type: 'string', description: 'Relevant context pre-extracted for the sub-agent (file contents, URLs, etc.)' },
+                context_snippet: { type: 'string', description: 'Relevant context pre-extracted (file contents, URLs, etc.)' },
                 expected_output: { type: 'string', description: 'What the sub-agent should return when done' },
                 profile: {
                   type: 'string',
                   enum: ['file_editor', 'researcher', 'shell_runner', 'reader_only'],
-                  description: 'Tool access profile: file_editor=read/write files, researcher=read+web, shell_runner=run_command, reader_only=read only',
+                  description: 'Tool access: file_editor=read/write files, researcher=read+web, shell_runner=run_command, reader_only=read only',
                 },
               },
             },
@@ -1415,9 +1413,7 @@ function buildTools() {
         function: {
           name: 'delegate_to_specialist',
           description:
-            'Delegate a focused, self-contained subtask to a specialist sub-agent. ' +
-            'Use for file edits, research lookups, or shell commands that are narrow and well-scoped. ' +
-            'The current task pauses until the specialist completes.',
+            'Delegate a focused, self-contained subtask to a specialist sub-agent (file edits, research lookups, shell commands). The current task pauses until it completes.',
           parameters: {
             type: 'object',
             required: ['type', 'input'],
@@ -1428,7 +1424,7 @@ function buildTools() {
                 description: 'Specialist role',
               },
               input: { type: 'string', description: 'Precise instruction for the specialist' },
-              context_snippet: { type: 'string', description: 'Relevant context the specialist needs (file content, URL, etc.)' },
+              context_snippet: { type: 'string', description: 'Relevant context (file content, URL, etc.)' },
               target_file: { type: 'string', description: 'File to operate on (for file_editor)' },
             },
           },
@@ -1441,68 +1437,37 @@ function buildTools() {
       function: {
         name: 'spawn_subagent',
         description:
-          'Create and spawn a specialized sub-agent for a specific task. Define the subagent\'s tools, constraints, and instructions dynamically. ' +
-          'Perfect for delegating research, analysis, or data extraction to a constrained secondary agent. ' +
-          'Subagent configs are persisted and reusable (you can call the same subagent_id again later).',
+          'Create and spawn a specialized sub-agent with dynamically defined tools, constraints and instructions. ' +
+          'Configs are persisted and reusable (call the same subagent_id again later).',
         parameters: {
           type: 'object',
           required: ['subagent_id', 'task_prompt'],
           properties: {
             subagent_id: {
               type: 'string',
-              description: 'Unique identifier for this subagent (e.g., "news_researcher_v1", "article_analyzer"). Use persistent names so you can call it again.',
+              description: 'Unique persistent id, e.g. "news_researcher_v1" (saved to .smallclaw/subagents/)',
             },
             task_prompt: {
               type: 'string',
-              description: 'The specific task for this subagent to complete (e.g., "Extract headline and key facts from these 3 Reuters article snapshots").',
+              description: 'The specific task for this subagent to complete',
             },
             context_data: {
               type: 'object',
-              description: 'Optional context to pass to the subagent: snapshots, URLs, previously extracted text, etc.',
+              description: 'Optional context: snapshots, URLs, previously extracted text, etc.',
             },
             create_if_missing: {
               type: 'object',
-              description: 'If subagent does not exist, create it with these specifications. Subagent config files are saved to .smallclaw/subagents/ and can be edited by users.',
+              description: 'If subagent does not exist, create it with these specifications (saved to .smallclaw/subagents/)',
               properties: {
-                description: {
-                  type: 'string',
-                  description: 'What this subagent specializes in (e.g., "News article researcher that extracts facts from web pages")',
-                },
-                allowed_tools: {
-                  type: 'array',
-                  items: { type: 'string' },
-                  description: 'Tools this subagent can access. Examples: web_fetch, browser_open, browser_click, read_file, time_now. Use wildcard patterns like "browser_*".',
-                },
-                forbidden_tools: {
-                  type: 'array',
-                  items: { type: 'string' },
-                  description: 'Explicit tool blacklist to prevent (e.g., ["run_command", "create_file"])',
-                },
-                system_instructions: {
-                  type: 'string',
-                  description: 'Detailed instructions for how this subagent should think and behave (personality, priorities, special rules)',
-                },
-                constraints: {
-                  type: 'array',
-                  items: { type: 'string' },
-                  description: 'Hard rules the subagent MUST follow (e.g., "Extract ONLY facts, never hallucinate", "Return max 5 items", "Verify facts across 2+ sources")',
-                },
-                success_criteria: {
-                  type: 'string',
-                  description: 'Condition for when the subagent has completed successfully (e.g., "When you have extracted headlines and key facts from at least 3 news sources")',
-                },
-                max_steps: {
-                  type: 'number',
-                  description: 'Maximum tool calls before stopping (default 20)',
-                },
-                timeout_ms: {
-                  type: 'number',
-                  description: 'Maximum milliseconds to wait (default 300000 = 5 minutes)',
-                },
-                model: {
-                  type: 'string',
-                  description: 'Optional override of which model runs this subagent',
-                },
+                description: { type: 'string', description: 'What this subagent specializes in' },
+                allowed_tools: { type: 'array', items: { type: 'string' }, description: 'Tools it can access. Wildcards ok, e.g. "browser_*", "web_fetch", "read_file"' },
+                forbidden_tools: { type: 'array', items: { type: 'string' }, description: 'Tool blacklist, e.g. ["run_command", "create_file"]' },
+                system_instructions: { type: 'string', description: 'How this subagent should think and behave' },
+                constraints: { type: 'array', items: { type: 'string' }, description: 'Hard rules it MUST follow, e.g. "Extract ONLY facts"' },
+                success_criteria: { type: 'string', description: 'When the subagent has completed successfully' },
+                max_steps: { type: 'number', description: 'Max tool calls before stopping (default 20)' },
+                timeout_ms: { type: 'number', description: 'Max milliseconds to wait (default 300000)' },
+                model: { type: 'string', description: 'Optional model override' },
               },
               required: ['description', 'allowed_tools', 'system_instructions', 'constraints', 'success_criteria'],
             },
@@ -1515,7 +1480,7 @@ function buildTools() {
       type: 'function',
       function: {
         name: 'memory_browse',
-        description: 'List the category sections currently in USER.md or SOUL.md. Call this before memory_write to find the right category or decide to create a new one.',
+        description: 'List category sections in USER.md or SOUL.md. Call before memory_write to pick the right category.',
         parameters: {
           type: 'object',
           required: ['file'],
@@ -1529,14 +1494,14 @@ function buildTools() {
       type: 'function',
       function: {
         name: 'memory_write',
-        description: 'Write a fact or update to USER.md or SOUL.md under a specific category section. Creates the category if it does not exist. Use memory_browse first to pick the right category.',
+        description: 'Write a fact/update to USER.md or SOUL.md under a category (creates it if missing). Use memory_browse first.',
         parameters: {
           type: 'object',
           required: ['file', 'category', 'content'],
           properties: {
             file: { type: 'string', description: '"user" for USER.md or "soul" for SOUL.md' },
-            category: { type: 'string', description: 'Category section name (e.g. "coding", "communication_style", "projects"). Use existing categories when possible.' },
-            content: { type: 'string', description: 'The fact or update to write. Be specific and concise. Example: "Prefers vanilla JS over frameworks"' },
+            category: { type: 'string', description: 'Category section name (e.g. "coding", "communication_style"). Use existing when possible.' },
+            content: { type: 'string', description: 'The fact/update to write. Specific and concise. Example: "Prefers vanilla JS over frameworks"' },
           },
         },
       },
@@ -1545,7 +1510,7 @@ function buildTools() {
       type: 'function',
       function: {
         name: 'memory_read',
-        description: 'Read the full contents of USER.md or SOUL.md. Use when you need complete context before making changes.',
+        description: 'Read the full contents of USER.md or SOUL.md.',
         parameters: {
           type: 'object',
           required: ['file'],
@@ -1555,9 +1520,14 @@ function buildTools() {
         },
       },
     },
-    // ── Agent Builder Integration Tools ──────────────────────────────────────
+    // ── Agent Builder Integration Tools (opt-in: config.tools.agent_builder === true) ──
   ] as any[];
-  registerAgentBuilderTools(toolDefs);
+  try {
+    const cfg = (getConfig().getConfig() as any) ?? {};
+    if (cfg?.tools?.agent_builder === true) registerAgentBuilderTools(toolDefs);
+  } catch {
+    /* config read failure - skip agent builder tools */
+  }
   toolDefs.push(...getOfficeToolDefinitions());
   toolDefs.push(...getImageToolDefinitions());
   toolDefs.push(...getFileBatchToolDefinitions());
@@ -3411,6 +3381,7 @@ async function handleChat(
       : buildTools(),
     sessionId,
   );
+  console.log(`[v2] TOOLS: n=${tools.length} chars=${JSON.stringify(tools).length} estTokens=${Math.ceil(JSON.stringify(tools).length / 3.6)}`);
   const allToolResults: ToolResult[] = [];
   let toolArgParseRetries = 0;
   let allThinking = '';
