@@ -8539,39 +8539,50 @@ async function runFlow(id) {
 // ---- Knowledge base (local RAG) ----
 let knowledgeFiles = [];
 
+function renderKnowledgeList() {
+  const el = document.getElementById('knowledge-list');
+  if (!el) return;
+  try {
+    if (!Array.isArray(knowledgeFiles) || knowledgeFiles.length === 0) {
+      el.innerHTML = '<div class="empty-state" style="padding:16px">知识库为空。<br>点上方「选择文件」或输入工作区文件名入库。</div>';
+      return;
+    }
+    el.innerHTML = knowledgeFiles.map((f, i) => {
+      const name = String(f && f.name || '').replace(/"/g, '&quot;');
+      const base = name.replace(/\.[^.]+$/, '');
+      return '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;margin-bottom:6px;border:1px solid var(--line);border-radius:8px;background:var(--panel-2)">' +
+        '<span style="font-size:14px">📄</span>' +
+        '<div style="flex:1;min-width:0">' +
+          '<div style="font-size:12px;font-weight:600;color:var(--text);word-break:break-all">' + name + '</div>' +
+          '<div style="font-size:10px;color:var(--muted)">' + (f.chunks || 0) + ' 分块' + (f.added_at ? ' · ' + String(f.added_at) : '') + '</div>' +
+        '</div>' +
+        '<button onclick="event.stopPropagation();insertKbRef(' + JSON.stringify(base) + ')" title="在聊天中引用该文件" style="flex-shrink:0;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:3px 8px;font-size:11px;color:var(--accent);cursor:pointer">@ 引用</button>' +
+        '<button onclick="event.stopPropagation();removeKnowledgeFile(' + JSON.stringify(name) + ')" title="从知识库删除" style="flex-shrink:0;background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:12px">✕</button>' +
+      '</div>';
+    }).join('');
+  } catch (err) {
+    el.innerHTML = '<div style="padding:12px;color:var(--err);font-size:11px">列表渲染失败: ' + (err && err.message ? err.message : err) + '</div>';
+  }
+}
+
 async function loadKnowledge() {
   const el = document.getElementById('knowledge-list');
   const statusLine = document.getElementById('kb-status-line');
-  el.innerHTML = '<div style="padding:12px;color:var(--muted);font-size:11px"><span class="spinner"></span> Loading...</div>';
+  if (el) el.innerHTML = '<div style="padding:12px;color:var(--muted);font-size:11px"><span class="spinner"></span> Loading...</div>';
   try {
     const data = await api('/api/knowledge');
-    knowledgeFiles = data.files || [];
-    const st = data.status || {};
-    if (statusLine) statusLine.textContent = `本地 RAG · ${st.files || 0} 文件 / ${st.chunks || 0} 分块`;
-    if (knowledgeFiles.length === 0) {
-      el.innerHTML = '<div class="empty-state" style="padding:16px">知识库为空。<br>在上方输入工作区文件名入库。</div>';
-      return;
-    }
-    el.innerHTML = knowledgeFiles.map(f => `
-      <div class="skill-card" data-kb-name="${escHtml(f.name)}">
-        <div class="skill-card-top">
-          <div class="skill-card-emoji">📄</div>
-          <div class="skill-card-info">
-            <div class="skill-card-name" style="word-break:break-all">${escHtml(f.name)}</div>
-            <div class="skill-card-desc">${f.chunks} 分块 · ${escHtml(f.added_at || '')}</div>
-          </div>
-          <div class="skill-card-actions">
-            <button class="skill-mini-btn" onclick="event.stopPropagation();insertKbRef('${escHtml(f.name)}')" title="在聊天中引用该文件" style="display:flex;align-items:center;gap:3px;padding:3px 8px;font-size:11px">@ 引用</button>
-            <button class="skill-remove-btn" onclick="event.stopPropagation();removeKnowledgeFile('${escHtml(f.name)}')" title="从知识库删除" aria-label="Delete from KB">✕</button>
-            <div class="skill-card-dot"></div>
-          </div>
-        </div>
-      </div>
-    `).join('');
+    knowledgeFiles = (data && Array.isArray(data.files)) ? data.files : [];
+    const st = (data && data.status) || {};
+    if (statusLine) statusLine.textContent = '本地 RAG · ' + (st.files || 0) + ' 文件 / ' + (st.chunks || 0) + ' 分块';
+    renderKnowledgeList();
   } catch (err) {
-    el.innerHTML = `<div style="padding:12px;color:var(--err);font-size:11px">Error: ${err.message}</div>`;
+    if (el) el.innerHTML = '<div style="padding:12px;color:var(--err);font-size:11px">加载知识库失败: ' + (err && err.message ? err.message : err) + '</div>';
   }
 }
+
+// Preload the KB list once on startup so the panel is never empty, even if the
+// sidebar tab is opened later.
+loadKnowledge();
 
 async function addKnowledgeFile() {
   const input = document.getElementById('kb-add-input');
