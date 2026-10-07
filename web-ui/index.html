@@ -68,7 +68,7 @@
       var(--bg);
     display: grid;
     grid-template-rows: 64px 1fr;
-    grid-template-columns: 280px 1fr minmax(380px, 34vw);
+    grid-template-columns: var(--col-sidebar, 280px) 1fr var(--col-right, minmax(380px, 34vw));
     grid-template-areas:
       "header header header"
       "sidebar main right";
@@ -209,6 +209,25 @@
     grid-area: sidebar;
     display: flex;
     flex-direction: column;
+    position: relative;
+    min-width: 0;
+  }
+
+  /* Draggable column dividers (sidebar|main|right) */
+  .col-resizer {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 8px;
+    cursor: col-resize;
+    z-index: 80;
+    background: transparent;
+    transition: background 0.15s ease;
+    user-select: none;
+  }
+  .col-resizer:hover,
+  .col-resizer.active {
+    background: rgba(22, 104, 227, 0.22);
   }
 
   #sidebar-tabs {
@@ -232,6 +251,9 @@
     cursor: pointer;
     transition: all 0.18s ease;
     font-family: 'Manrope', sans-serif;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   :root[data-theme="dark"] .sidebar-tab { background: var(--panel); }
 
@@ -2159,7 +2181,7 @@
     <button class="mode-btn active" id="btn-chat" onclick="setMode('chat')">Chat</button>
     <button class="mode-btn" id="btn-bgtasks" onclick="setMode('bgtasks')">Tasks</button>
     <button class="mode-btn" id="btn-schedule" onclick="setMode('schedule')">Schedule</button>
-    <button class="mode-btn" id="btn-knowledge" onclick="setSidebarTab('knowledge')">📚 知识库</button>
+    <button class="mode-btn" id="btn-knowledge" onclick="setSidebarTab('knowledge')">知识库</button>
   </div>
 
   <div class="status-bar">
@@ -2203,9 +2225,9 @@
 <aside>
   <div id="sidebar-tabs">
     <button class="sidebar-tab active" id="tab-jobs" onclick="setSidebarTab('jobs')">Sessions</button>
-    <button class="sidebar-tab" id="tab-skills" onclick="setSidebarTab('skills')">🧩 Skills</button>
-    <button class="sidebar-tab" id="tab-flows" onclick="setSidebarTab('flows')">⚡ Flows</button>
-    <button class="sidebar-tab" id="tab-knowledge" onclick="setSidebarTab('knowledge')">📚 知识库</button>
+    <button class="sidebar-tab" id="tab-skills" onclick="setSidebarTab('skills')">Skills</button>
+    <button class="sidebar-tab" id="tab-flows" onclick="setSidebarTab('flows')">Flows</button>
+    <button class="sidebar-tab" id="tab-knowledge" onclick="setSidebarTab('knowledge')">知识库</button>
   </div>
 
   <!-- SESSIONS TAB -->
@@ -2256,7 +2278,7 @@
     <div style="padding:0 14px 8px;display:flex;flex-direction:column;gap:6px">
       <div style="display:flex;gap:6px;align-items:center">
         <input type="file" id="kb-file-input" style="display:none" onchange="handleKbFilePick(this)" />
-        <button class="sidebar-action" onclick="document.getElementById('kb-file-input').click()">📁 选择文件</button>
+        <button class="sidebar-action" onclick="document.getElementById('kb-file-input').click()">选择文件</button>
         <span id="kb-picked-name" style="flex:1;font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;align-self:center"></span>
       </div>
       <div style="display:flex;gap:6px">
@@ -2271,6 +2293,7 @@
       <div class="empty-state" style="padding:16px">Loading knowledge base...</div>
     </div>
   </div>
+  <div class="col-resizer" id="resizer-sidebar" data-side="sidebar" style="right:-4px" title="拖动调整侧边栏宽度"></div>
 </aside>
 
 <!-- MAIN -->
@@ -2524,6 +2547,7 @@
 
 <!-- RIGHT PANEL -->
   <div class="right-panel" id="right-panel" style="position:relative">
+  <div class="col-resizer" id="resizer-right" data-side="right" style="left:-4px" title="拖动调整右侧面板宽度"></div>
   <!-- Right panel topbar with canvas toggle -->
   <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 12px;border-bottom:1px solid var(--line);flex-shrink:0;background:var(--panel);min-height:38px">
     <span style="font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em">Context</span>
@@ -2706,7 +2730,7 @@
       <button class="btn btn-sm" style="background:var(--bg3);color:var(--muted);border:1px solid var(--border);padding:3px 8px" onclick="clearChat()">✕ Chat</button>
       <button class="btn btn-sm" style="background:var(--bg3);color:var(--muted);border:1px solid var(--border);padding:3px 8px" onclick="newChatSession()">+</button>
       <button class="btn btn-sm" style="background:var(--bg3);color:var(--muted);border:1px solid var(--border);padding:3px 8px" onclick="openSettings()">Settings</button>
-      <button class="btn btn-sm" style="background:var(--bg3);color:var(--muted);border:1px solid var(--border);padding:3px 8px" onclick="setSidebarTab('skills')">🧩</button>
+      <button class="btn btn-sm" style="background:var(--bg3);color:var(--muted);border:1px solid var(--border);padding:3px 8px;white-space:nowrap" onclick="setSidebarTab('skills')">技能</button>
     </div>
   </div>
 
@@ -5979,6 +6003,55 @@ document.getElementById('chat-input').addEventListener('keydown', e => {
     sendChat();
   }
 });
+
+// ---- Draggable column widths (sidebar | main | right) ----
+(function initColResizers() {
+  const root = document.documentElement;
+  const KEY_S = 'sc-col-sidebar';
+  const KEY_R = 'sc-col-right';
+  const savedS = localStorage.getItem(KEY_S);
+  const savedR = localStorage.getItem(KEY_R);
+  if (savedS) root.style.setProperty('--col-sidebar', savedS + 'px');
+  if (savedR) root.style.setProperty('--col-right', savedR + 'px');
+  let drag = null;
+  document.addEventListener('mousemove', (e) => {
+    if (!drag) return;
+    const dx = e.clientX - drag.startX;
+    if (drag.side === 'sidebar') {
+      const w = Math.min(Math.max(drag.start + dx, 150), 560);
+      root.style.setProperty('--col-sidebar', w + 'px');
+    } else {
+      const w = Math.min(Math.max(drag.start - dx, 320), 1000);
+      root.style.setProperty('--col-right', w + 'px');
+    }
+  });
+  document.addEventListener('mouseup', () => {
+    if (!drag) return;
+    const s = getComputedStyle(root);
+    const sw = parseFloat(s.getPropertyValue('--col-sidebar')) || 0;
+    const rw = parseFloat(s.getPropertyValue('--col-right')) || 0;
+    if (sw > 0) localStorage.setItem(KEY_S, String(Math.round(sw)));
+    if (rw > 0) localStorage.setItem(KEY_R, String(Math.round(rw)));
+    if (drag.bar) drag.bar.classList.remove('active');
+    drag = null;
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  });
+  document.querySelectorAll('.col-resizer').forEach((bar) => {
+    bar.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      const side = bar.getAttribute('data-side');
+      const cs = getComputedStyle(root);
+      const cur = side === 'sidebar'
+        ? (parseFloat(cs.getPropertyValue('--col-sidebar')) || 280)
+        : (parseFloat(cs.getPropertyValue('--col-right')) || 520);
+      drag = { side, startX: e.clientX, start: cur, bar };
+      bar.classList.add('active');
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    });
+  });
+})();
 
 // Auto-resize textarea
 document.getElementById('chat-input').addEventListener('input', function() {
