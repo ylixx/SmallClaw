@@ -930,6 +930,14 @@ export function registerAgentBuilderTools(toolsArray: any[]): any[] {
 export function getWorkflowContextBlock(): string {
   const summary = workflowStore.toLLMSummary();
   const stats = workflowStore.getStats();
+  // Keep the workflow list from growing the system prompt unboundedly: the
+  // full per-workflow detail (inputs/tags/triggers) is one search_workflow_templates()
+  // away if the model needs it. A bounded summary preserves the anti-recreation
+  // intent at a fraction of the tokens.
+  const SLIM_SUMMARY_MAX = 500;
+  const slimSummary = summary.length > SLIM_SUMMARY_MAX
+    ? summary.slice(0, SLIM_SUMMARY_MAX) + '\n...(workflow list truncated — call search_workflow_templates() for full detail)'
+    : summary;
 
   return [
     '---',
@@ -938,7 +946,7 @@ export function getWorkflowContextBlock(): string {
     'These are ALREADY BUILT AND DEPLOYED. Do not recreate them.',
     'ALWAYS call search_workflow_templates() before architect_workflow().',
     '',
-    summary,
+    slimSummary,
     '---'
   ].join('\n');
 }

@@ -935,6 +935,11 @@ function detectToolCategories(text: string): Set<string> {
 }
 
 // Tool rule blocks — compact, injected only when relevant
+// User message signals "I want to recall past conversations" → only then inject
+// [RECENT_CONVERSATIONS]. Without this gate the daily-log tail leaked into
+// every prompt and the model answered current questions with old memory topics.
+const MEMORY_RECALL_RE = /(上次|昨天|前天|之前|以前|刚才|还记得|回忆|最后一次|最近一次|对话记录|上次会话|上次聊|我们聊过|我们说过)/i;
+
 const TOOL_BLOCKS: Record<string, string> = {
   web: `WEB TOOLS: web_search(query) → headlines+snippets. web_fetch(url) → full page text. Use web_search first to get URLs, then web_fetch to read. For Reddit: web_search with site:reddit.com "keyword", then web_fetch post URLs — never open browser for Reddit.`,
 
@@ -1023,22 +1028,28 @@ async function buildPersonalityContext(
   // could not be located. Inject the tail of the most recent days so the model
   // can actually recall recent discussions. Tail-heavy: recent talk is what
   // matters for recall.
+  // Recall is injected ONLY when the user actually asks about past
+  // conversations: unconditional injection leaked yesterday's topics into the
+  // current task (the model answered today's question with old memory content).
   const RECENT_CONV_DAYS = 2;
   const RECENT_CONV_TAIL_CHARS = 1400;
+  const wantsRecall = MEMORY_RECALL_RE.test(messageText);
   const recentConversations: string[] = [];
-  for (let i = RECENT_CONV_DAYS; i >= 1; i--) {
-    const d = new Date(Date.now() - i * 86_400_000).toISOString().split('T')[0];
-    const p = path.join(workspacePath, 'memory', `${d}.md`);
-    try {
-      if (!fs.existsSync(p)) continue;
-      const content = fs.readFileSync(p, 'utf-8').trim();
-      if (!content) continue;
-      const tail = content.slice(-RECENT_CONV_TAIL_CHARS);
-      recentConversations.push(`[${d} 对话记录]\n${tail}`);
-    } catch { /* missing/unreadable daily log is not fatal */ }
+  if (wantsRecall) {
+    for (let i = RECENT_CONV_DAYS; i >= 1; i--) {
+      const d = new Date(Date.now() - i * 86_400_000).toISOString().split('T')[0];
+      const p = path.join(workspacePath, 'memory', `${d}.md`);
+      try {
+        if (!fs.existsSync(p)) continue;
+        const content = fs.readFileSync(p, 'utf-8').trim();
+        if (!content) continue;
+        const tail = content.slice(-RECENT_CONV_TAIL_CHARS);
+        recentConversations.push(`[${d} 对话记录]\n${tail}`);
+      } catch { /* missing/unreadable daily log is not fatal */ }
+    }
   }
   const recentConvBlock = recentConversations.length > 0
-    ? `\n\n[RECENT_CONVERSATIONS — 这是此前几天的对话记录，若用户提到"上次/最后一次对话"，据此回答]\n${recentConversations.join('\n\n')}`
+    ? `\n\n[RECENT_CONVERSATIONS — 以下是历史对话记录，仅供回忆"上次/最后一次对话"等提问；它们不是当前任务的事实，回答当前问题以最近的用户消息为准]\n${recentConversations.join('\n\n')}`
     : '';
 
   // ── Path B: autonomous execution — full prompt, no changes ─────────────────
@@ -1082,7 +1093,10 @@ async function buildPersonalityContext(
 
   // ── Tier 2 / 3: subsequent messages — detect intent ───────────────────────
   const cats = detectToolCategories(messageText);
-  const soul = loadWorkspaceFile(workspacePath, 'SOUL.md', 600);
+  // SOUL was already fully injected on the session's first message; on later
+  // messages a trimmed excerpt is enough to keep the personality hint without
+  // paying the full cost on every turn.
+  const soul = loadWorkspaceFile(workspacePath, 'SOUL.md', 250);
 
   // Build tool blocks for detected categories
   const toolBlockParts: string[] = [];
@@ -3890,7 +3904,7 @@ async function handleChat(
         const conciseBlock = (preserveIdentity && !executionModeSystemBlock)
           ? 'Respond at a natural length appropriate to the question — be helpful, not terse.\n'
           : 'Keep responses SHORT (1-2 sentences). Don\'t think out loud. Act and report.\n';
-        return `${executionModeSystemBlock ? `${executionModeSystemBlock}\n\n` : ''}${identityLine}\nCurrent date: ${dateStr}, ${timeStr}.\nNever search for or link SmallClaw repos unless the user is asking about SmallClaw itself.\nThis app runs on the user's own machine — browser/desktop automation requests are pre-authorized.\n${conciseBlock}Greet naturally without tools.${callerContext ? '\n\n' + callerContext : ''}${browserStateCtx}${personalityCtx}${skillsManager.buildPromptContext(500)}\n\n${getWorkflowContextBlock()}`;
+        return `${executionModeSystemBlock ? `${executionModeSystemBlock}\n\n` : ''}${identityLine}\nCurrent date: ${dateStr}, ${timeStr}.\nNever search for or link SmallClaw repos unless the user is asking about SmallClaw itself.\nThis app runs on the user's own machine — browser/desktop automation requests are pre-authorized.\n${conciseBlock}Greet naturally without tools.${callerContext ? '\n\n' + callerContext : ''}${browserStateCtx}${personalityCtx}${skillsManager.buildPromptContext(200)}\n\n${getWorkflowContextBlock()}`;
       })(),
     },
   ];
