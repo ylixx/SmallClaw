@@ -38,6 +38,7 @@ export interface FlowTemplate {
 export class FlowsManager {
   private dir: string;
   private cache: FlowTemplate[] | null = null;
+  private lastScanSig = '';
 
   constructor(configDir: string) {
     this.dir = path.join(configDir, 'flows');
@@ -48,6 +49,29 @@ export class FlowsManager {
     return this.dir;
   }
 
+  /**
+   * Invalidate the cache automatically when any *.json template is added,
+   * removed or modified — so editing a flow file takes effect immediately
+   * without a gateway restart. The fingerprint (name+mtime+size per file)
+   * also catches same-millisecond writes.
+   */
+  private scan(): void {
+    let sig = '';
+    try {
+      for (const entry of fs.readdirSync(this.dir).sort()) {
+        if (!entry.endsWith('.json')) continue;
+        const st = fs.statSync(path.join(this.dir, entry));
+        sig += entry + ':' + st.mtimeMs + ':' + st.size + ';';
+      }
+    } catch {
+      sig = ''; // directory missing → treat as empty
+    }
+    if (sig !== this.lastScanSig) {
+      this.lastScanSig = sig;
+      this.cache = null;
+    }
+  }
+
   /** Reload templates from disk (called on list() if cache is stale). */
   reload(): void {
     this.cache = null;
@@ -55,6 +79,7 @@ export class FlowsManager {
   }
 
   list(): FlowTemplate[] {
+    this.scan();
     if (this.cache) return this.cache;
     if (!fs.existsSync(this.dir)) {
       this.cache = [];

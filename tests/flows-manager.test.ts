@@ -76,11 +76,18 @@ describe('FlowsManager', () => {
     expect(mgr.get('nope')).toBeUndefined();
   });
 
-  it('reload() picks up newly added templates', () => {
+  it('picks up newly added templates automatically (no reload needed)', () => {
     writeFlow('first', {});
     expect(mgr.list()).toHaveLength(1);
     writeFlow('second', {});
-    expect(mgr.list()).toHaveLength(1); // cached
+    expect(mgr.list()).toHaveLength(2); // fingerprint scan invalidated the cache
+  });
+
+  it('reload() force-refreshes from disk', () => {
+    writeFlow('first', {});
+    expect(mgr.list()).toHaveLength(1);
+    writeFlow('second', {});
+    expect(mgr.list()).toHaveLength(2);
     mgr.reload();
     expect(mgr.list()).toHaveLength(2);
   });
