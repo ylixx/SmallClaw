@@ -1963,6 +1963,37 @@ function normalizeToolArgs(rawArgs: any): any {
 
 const TEXT_SNAPSHOT_MAX_BYTES = 200_000;
 
+// Max chars of a file's content injected into the model context when the system
+// reads a FILE_ANALYSIS target on the model's behalf (MiniCPM5-2B does not
+// reliably issue tool calls itself). Tail-heavy: "last line / last record"
+// questions need the end of the file.
+const ANALYSIS_INJECT_MAX_CHARS = 16_000;
+
+// Resolve the file the user is most likely asking about in a FILE_ANALYSIS
+// request: workspace files whose basename appears in the message win by match
+// length; returns null when nothing matches (the model may then list_files).
+function resolveAnalysisTarget(message: string, workspacePath: string): string | null {
+  try {
+    const files = fs.readdirSync(workspacePath, { withFileTypes: true })
+      .filter(e => e.isFile())
+      .map(e => e.name);
+    const msg = String(message || '').toLowerCase();
+    const scored = files
+      .map((name) => {
+        const base = name.replace(/\.[^.]+$/, '').toLowerCase();
+        let score = 0;
+        if (base.length >= 2 && msg.includes(base)) score = base.length;
+        else if (base.length >= 2 && msg.includes(base.split(/[_\-]/)[0])) score = 1;
+        return { name, score };
+      })
+      .filter(s => s.score > 0);
+    scored.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, 'zh-Hans-CN'));
+    return scored.length ? scored[0].name : null;
+  } catch {
+    return null;
+  }
+}
+
 function readTextSnapshot(filePath: string | null): string | null {
   if (!filePath) return null;
   try {
@@ -3608,7 +3639,12 @@ async function handleChat(
     && fileOpSettings.enabled
     && (fileOpClassification.type === 'FILE_ANALYSIS' || fileOpClassification.type === 'FILE_CREATE' || fileOpClassification.type === 'FILE_EDIT');
   const fileOpType = fileOpClassification.type;
-  let fileOpOwner: 'primary' | 'secondary' = fileOpType === 'FILE_ANALYSIS' ? 'secondary' : 'primary';
+  // FILE_ANALYSIS is handled by the PRIMARY model with its read tools (it can
+  // actually read the target file). A tool-less secondary analyzer used to
+  // answer from a truncated file-name list and misdiagnosed existing files as
+  // missing — the user's rule: when the model can't complete a task alone, call
+  // tools to complete it.
+  let fileOpOwner: 'primary' | 'secondary' = 'primary';
   const fileOpTouchedFiles = new Set<string>();
   const fileOpToolHistory: Array<{
     tool: string;
@@ -3752,7 +3788,7 @@ async function handleChat(
     } else {
       maybeSaveFileOpCheckpoint({
         phase: 'plan',
-        next_action: fileOpType === 'FILE_ANALYSIS' ? 'secondary analysis' : 'primary execution',
+        next_action: 'primary execution',
       });
     }
   }
@@ -4788,58 +4824,34 @@ RULES:
   };
 
   if (fileOpV2Active && fileOpType === 'FILE_ANALYSIS') {
-    sendSSE('info', { message: 'FILE_OP v2: delegating analysis to secondary model.' });
-    const candidateFiles = (() => {
-      try {
-        const files = fs.readdirSync(workspacePath, { withFileTypes: true })
-          .filter(e => e.isFile())
-          .map(e => e.name);
-        // Relevance-first ordering: any file whose basename appears in the
-        // user's message moves to the front. readdir order puts Chinese-named
-        // files last, so without this the compacted candidate list handed to
-        // the secondary analyzer used to drop the very file the user asks about
-        // (e.g. "检验报告_2025-2026" → its PDF never made the cut → analyzer
-        // wrongly diagnosed the file as missing).
-        const msg = String(message || '').toLowerCase();
-        const scored = files.map((name) => {
-          const base = name.replace(/\.[^.]+$/, '').toLowerCase();
-          let score = 0;
-          if (base.length >= 2 && msg.includes(base)) {
-            score = base.length; // longer basename match = more specific
-          } else if (base.length >= 2 && msg.includes(base.split(/[_\-]/)[0])) {
-            score = 1;
-          }
-          return { name, score };
+    // FILE_ANALYSIS now runs on the PRIMARY model, with the system performing
+    // the file read on the model's behalf: the active model (MiniCPM5-2B) does
+    // not reliably issue tool calls on its own, so the user's rule applies —
+    // when the model can't complete a task alone, call tools to complete it.
+    // read_file / doc_read handle PDF & Office files, so the model gets the
+    // real file content in context and can answer (e.g. "the last line of
+    // data"). Delegating to a tool-less secondary LLM used to produce
+    // diagnosis-only answers from a truncated file-name list and misdiagnosed
+    // existing files as missing. Fall through to the main tool loop below.
+    sendSSE('info', { message: 'FILE_OP v2: FILE_ANALYSIS handled by primary model with tools (no secondary delegation).' });
+    maybeSaveFileOpCheckpoint({ phase: 'plan', next_action: 'primary reads and analyzes target file with tools' });
+    const analysisTarget = resolveAnalysisTarget(message, workspacePath);
+    if (analysisTarget) {
+      sendSSE('info', { message: `FILE_OP v2: system reading "${analysisTarget}" on the model's behalf.` });
+      const read = await executeTool('read_file', { filename: analysisTarget }, workspacePath, sessionId, sendSSE);
+      if (!read.error && read.result) {
+        const full = String(read.result);
+        const cap = ANALYSIS_INJECT_MAX_CHARS;
+        const shown = full.length > cap ? `[File truncated: last ${cap} chars of ${full.length} total.]\n${full.slice(-cap)}` : full;
+        messages.push({
+          role: 'user',
+          content: `[SYSTEM: I read the file "${analysisTarget}" for you. Use its content to answer the user's question precisely; do not claim you cannot access it.]\n${shown}`,
         });
-        scored.sort((a, b) => (b.score - a.score) || a.name.localeCompare(b.name, 'zh-Hans-CN'));
-        return scored.map(s => s.name).slice(0, 80);
-      } catch {
-        return [] as string[];
+        sendSSE('info', { message: `FILE_OP v2: injected ${full.length} chars of file content into model context.` });
+      } else {
+        sendSSE('info', { message: `FILE_OP v2: read failed for "${analysisTarget}": ${String(read?.result || '').slice(0, 160)}` });
       }
-    })();
-    const analysis = await callSecondaryFileAnalyzer({
-      userMessage: message,
-      recentHistory: history.slice(-6).map(h => ({ role: h.role, content: h.content })),
-      candidateFiles,
-    });
-    if (analysis) {
-      maybeSaveFileOpCheckpoint({
-        phase: 'done',
-        next_action: 'analysis complete',
-      });
-      clearFileOpCheckpoint(sessionId);
-      const lines: string[] = [];
-      if (analysis.summary) lines.push(analysis.summary);
-      if (analysis.diagnosis) lines.push(`Diagnosis: ${analysis.diagnosis}`);
-      if (analysis.exact_files.length) lines.push(`Files: ${analysis.exact_files.join(', ')}`);
-      if (analysis.edit_plan.length) lines.push(`Plan: ${analysis.edit_plan.join(' -> ')}`);
-      const text = lines.join('\n');
-      logToDaily(workspacePath, 'SmallClaw', text);
-      return { type: 'chat', text };
     }
-    // Secondary unavailable — fail-closed. Spec: FILE_ANALYSIS is always Secondary, no primary fallback.
-    sendSSE('info', { message: 'FILE_OP v2: secondary analyzer unavailable; cannot complete FILE_ANALYSIS (fail-closed).' });
-    return { type: 'chat', text: 'Analysis could not be completed: the secondary model is unavailable. Please try again.' };
   }
 
   logToDaily(workspacePath, 'User', message);
