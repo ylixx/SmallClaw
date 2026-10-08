@@ -5570,7 +5570,20 @@ RULES:
           && (r.name.startsWith('browser_') || r.name.startsWith('desktop_')),
         )
       );
-      const primaryThinkMode: boolean | 'high' | 'medium' | 'low' = (multiAgentActive && !isActiveAutomationOp) ? true : false;
+      // Thinking is ONLY enabled when the active model preset explicitly asks
+      // for it. Auto-enabling for "multi-agent" turns broke MiniCPM5-2B (a
+      // reasoning model): with think=true it burns its whole output budget on
+      // reasoning → empty content (fallback) or a minutes-long thinking loop
+      // (frozen UI). Small local models answer faster and more reliably with
+      // thinking off; big/reasoning-capable presets can opt in via
+      // llm.presets.<id>.think = true/'high'|'medium'|'low'.
+      const activePresetId = String(rawCfgForPreempt.llm?.active_preset || '').trim();
+      const activePresetCfg = rawCfgForPreempt.llm?.presets?.[activePresetId] || {};
+      const presetThink = activePresetCfg.think;
+      const primaryThinkMode: boolean | 'high' | 'medium' | 'low' =
+        presetThink === true || presetThink === 'high' || presetThink === 'medium' || presetThink === 'low'
+          ? presetThink
+          : false;
       const genStartedAt = Date.now();
       const generationPromise = ollama.chatWithThinking(trimInRoundMessages(messages), 'executor', {
         tools,

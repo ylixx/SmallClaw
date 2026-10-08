@@ -134,9 +134,27 @@ export class OpenAICompatAdapter implements LLMProvider {
 
     const data = await this.post('/v1/chat/completions', body);
     const choice = data.choices?.[0];
+    const rawContent = choice?.message?.content ?? '';
+    let content: any = rawContent;
+    if (!rawContent) {
+      // Reasoning-only turn (reasoning models like MiniCPM5 sometimes burn the
+      // whole budget on thinking even with think=off). Fall back to the last
+      // sentence of the reasoning so the turn never silently returns empty
+      // and trips the "Hey! How can I help?" fallback downstream.
+      const reasoning = choice?.message?.reasoning_content || choice?.message?.reasoning || '';
+      if (reasoning) {
+        const sentences = String(reasoning)
+          .split(/(?<=[.!?。！？])\s+/)
+          .map((s) => s.trim())
+          .filter((s) => s.length > 4);
+        content = sentences.length
+          ? sentences[sentences.length - 1]
+          : String(reasoning).slice(-200);
+      }
+    }
     const message: ChatMessage = {
       role: 'assistant',
-      content: choice?.message?.content ?? '',
+      content,
       tool_calls: choice?.message?.tool_calls,
     };
     // Pass usage through (llama-server & OpenAI-compat backends report
