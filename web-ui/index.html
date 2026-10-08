@@ -4091,6 +4091,11 @@ function setMode(mode) {
   const rightPanel = document.getElementById('right-panel');
   if (aside) aside.style.display = mode === 'chat' ? '' : 'none';
   if (rightPanel) rightPanel.style.display = mode === 'chat' ? '' : 'none';
+  // Column resizers only make sense on the chat (3-column) layout
+  const resizerSide = document.getElementById('resizer-sidebar');
+  const resizerRight = document.getElementById('resizer-right');
+  if (resizerSide) resizerSide.style.display = mode === 'chat' ? '' : 'none';
+  if (resizerRight) resizerRight.style.display = mode === 'chat' ? '' : 'none';
   // Load data when switching to respective views
   if (mode === 'bgtasks') refreshBgTasks();
   if (mode === 'schedule') refreshSchedules();
