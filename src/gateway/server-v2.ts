@@ -1192,7 +1192,7 @@ function buildTools() {
       type: 'function',
       function: {
         name: 'list_files',
-        description: 'List all files in the workspace directory.',
+        description: 'List workspace files sorted by size, LARGEST FIRST, with size in parentheses (e.g. "report.html (1.2 MB)"). The first entry is always the largest file. Directories are marked with a trailing "/".',
         parameters: { type: 'object', properties: {}, required: [] },
       },
     },
@@ -1335,7 +1335,7 @@ function buildTools() {
       type: 'function',
       function: {
         name: 'run_command',
-        description: 'Launch GUI apps or open files for the USER (visible on their screen). NOT a shell: no pipelines, globs, redirects, switches; returns no output. Do NOT open Chrome/Edge here (no debug port; use browser_* tools for web). Use for: GUI apps (notepad, calc, word, excel, powerpoint), opening a file with the system default program ("start report.docx"; if no default app the OS picker appears - do not retry), opening a path in VS Code / Explorer.',
+        description: 'Launch GUI apps or open files for the USER (visible on their screen). NOT a shell: no pipelines, globs, redirects, switches; returns no output; do NOT pass file-size/stat commands like du, ls, dir, stat. Do NOT open Chrome/Edge here (no debug port; use browser_* tools for web). Use for: GUI apps (notepad, calc, word, excel, powerpoint), opening a file with the system default program ("start report.docx"; if no default app the OS picker appears - do not retry), opening a path in VS Code / Explorer.',
         parameters: {
           type: 'object', required: ['command'],
           properties: {
@@ -2151,18 +2151,26 @@ async function executeToolImpl(name: string, args: any, workspacePath: string, s
   try {
     switch (name) {
       case 'list_files': {
-        // Files first, then directories (marked with trailing "/") — without
-        // the subdirectories the model can't discover memory/, logs/, etc.
+        // Files sorted by size DESCENDING (largest first) so the model can
+        // answer "which file is largest" from the first entry alone — a 2B
+        // model otherwise recites the whole list and burns its output budget.
+        // Directories (marked with trailing "/") are appended at the end.
         const entries = fs.readdirSync(workspacePath);
-        const files: string[] = [];
+        const files: { label: string; size: number }[] = [];
         const dirs: string[] = [];
         for (const f of entries) {
           try {
-            if (fs.statSync(path.join(workspacePath, f)).isDirectory()) dirs.push(`${f}/`);
-            else files.push(f);
+            const st = fs.statSync(path.join(workspacePath, f));
+            if (st.isDirectory()) { dirs.push(`${f}/`); continue; }
+            const b = st.size;
+            const sizeStr = b >= 1024 * 1024
+              ? `${(b / (1024 * 1024)).toFixed(1)} MB`
+              : b >= 1024 ? `${(b / 1024).toFixed(1)} KB` : `${b} B`;
+            files.push({ label: `${f} (${sizeStr})`, size: b });
           } catch { /* skip unreadable */ }
         }
-        return { name, args, result: JSON.stringify([...files, ...dirs]), error: false };
+        files.sort((a, b) => b.size - a.size);
+        return { name, args, result: JSON.stringify([...files.map(f => f.label), ...dirs]), error: false };
       }
 
       case 'read_file': {
@@ -6741,6 +6749,12 @@ RULES:
       }
 
       const goalReminder = `\n\n[GOAL REMINDER: Your task is still: "${message.slice(0, 120)}". Stay focused on this goal only.]`;
+      // list_files returns entries sorted by size DESCENDING — the first entry
+      // is the largest file. Tell a small model to answer directly instead of
+      // reciting the whole list (which burns its output budget).
+      const listFilesHint = toolName === 'list_files'
+        ? `\n[list_files entries are sorted by size DESCENDING — the FIRST entry is the largest file. Answer the user's question directly and concisely; do NOT recite the full list.]`
+        : '';
       // ── Multi-agent browser interception ────────────────────────────────────
       // When orchestrator is active, LLM never sees raw snapshot/browser data.
       // Full data still flows to advisor via getBrowserAdvisorPacket().
@@ -6753,7 +6767,7 @@ RULES:
         role: 'tool',
         tool_name: toolName,
         tool_call_id: toolCallId || undefined,
-        content: toolMessageContent + goalReminder,
+        content: toolMessageContent + goalReminder + listFilesHint,
       });
 
       if (isBrowserTool && !toolResult.error) {
