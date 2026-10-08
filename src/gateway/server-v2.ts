@@ -4030,6 +4030,36 @@ async function handleChat(
   for (const msg of historyKept) {
     messages.push({ role: msg.role === 'user' ? 'user' : 'assistant', content: msg.content });
   }
+
+  // ── Session-history meta questions ─────────────────────────────────────────
+  // A small local model cannot accurately answer "what was the last exchange /
+  // how many turns" from a pruned prompt, so when the user asks about the
+  // conversation itself we hand it the real ledger from the session store.
+  const SESSION_META_RE = /(最后|最近|上一|刚才|几组|多少组|几轮|多少轮|几条|多少条|总共|一共|聊天记录|对话内容|历史对话|说过什么|之前说了|都说了)/i;
+  if (!isBootStartupTurn && SESSION_META_RE.test(message)) {
+    const metaSession = getSession(sessionId);
+    // Exclude the current question itself (it was already stored by /api/chat).
+    const metaHist = (metaSession?.history || []).filter(
+      (m: any) => !(m.role === 'user' && String(m.content || '') === message),
+    );
+    if (metaHist.length > 0) {
+      const metaUserMsgs = metaHist.filter((m: any) => m.role === 'user').length;
+      const metaAsstMsgs = metaHist.filter((m: any) => m.role === 'assistant').length;
+      const metaRecent = metaHist.slice(-8);
+      const metaLines = metaRecent.map((m: any, i: number) => {
+        const who = m.role === 'user' ? '用户' : '助手';
+        const t = m.timestamp ? new Date(m.timestamp).toLocaleTimeString('zh-CN', { hour12: false }) : '';
+        const text = String(m.content || '').replace(/\s+/g, ' ').slice(0, 200);
+        return `${i + 1}. [${who} ${t}] ${text}`;
+      }).join('\n');
+      messages.push({
+        role: 'user',
+        content:
+          `[会话历史实况] 当前会话共 ${metaHist.length} 条消息（${metaUserMsgs} 条用户消息、${metaAsstMsgs} 条助手消息）。\n最近的消息：\n${metaLines}\n若用户问的是"最后一组/总共几组/历史对话"，请直接依据以上实况准确回答，不要编造实况之外的内容。`,
+      });
+    }
+  }
+
   messages.push({ role: 'user', content: buildMultimodalUserContent(message, workspacePath) });
 
   // ── One-click flow: if the message matches a flow trigger, inject the
