@@ -3612,6 +3612,60 @@ function computeSessionMetaAnswer(
   return '';
 }
 
+/**
+ * Compile the conversation ledger into a Markdown chat-log report (no model
+ * involved). Returns { summary, markdown } or null when the ledger is empty.
+ */
+function buildChatLogReport(
+  message: string,
+  hist: Array<{ role: string; content: any; timestamp?: any }>,
+): { summary: string; markdown: string } | null {
+  if (!hist.length) return null;
+  const userCount = hist.filter((m) => m.role === 'user').length;
+  const asstCount = hist.filter((m) => m.role === 'assistant').length;
+  const pairs = Math.min(userCount, asstCount);
+  const lines: string[] = [
+    `# 聊天记录报告`,
+    ``,
+    `- 生成时间：${new Date().toLocaleString('zh-CN', { hour12: false })}`,
+    `- 共 ${pairs} 组对话（${hist.length} 条消息：${userCount} 条用户、${asstCount} 条助手）`,
+    ``,
+  ];
+  let groupIdx = 0;
+  let pendingUser: string | null = null;
+  let pendingTs = '';
+  for (const m of hist) {
+    const text = String(m.content || '').replace(/\s+/g, ' ').trim();
+    const ts = m.timestamp ? new Date(m.timestamp).toLocaleTimeString('zh-CN', { hour12: false }) : '';
+    if (m.role === 'user') {
+      pendingUser = text;
+      pendingTs = ts;
+    } else if (m.role === 'assistant' && pendingUser !== null) {
+      groupIdx += 1;
+      lines.push(`## 第 ${groupIdx} 组对话${pendingTs ? `（${pendingTs}）` : ''}`);
+      lines.push(``);
+      lines.push(`**用户**：${pendingUser || '（空）'}`);
+      lines.push(``);
+      lines.push(`**助手**：${text || '（空）'}`);
+      lines.push(``);
+      pendingUser = null;
+    }
+  }
+  // Trailing user message with no reply yet.
+  if (pendingUser !== null) {
+    groupIdx += 1;
+    lines.push(`## 第 ${groupIdx} 组对话${pendingTs ? `（${pendingTs}）` : ''}`);
+    lines.push(``);
+    lines.push(`**用户**：${pendingUser || '（空）'}`);
+    lines.push(``);
+    lines.push(`**助手**：（尚未回复）`);
+    lines.push(``);
+  }
+  const markdown = lines.join('\n');
+  const summary = `已生成聊天记录报告：共 ${pairs} 组对话（${hist.length} 条消息：${userCount} 条用户、${asstCount} 条助手）。`;
+  return { summary, markdown };
+}
+
 async function handleChat(
   message: string,
   sessionId: string,
@@ -4085,12 +4139,13 @@ async function handleChat(
   // turn appears frozen for minutes).
   const SESSION_META_RE = /(最后|最近|上一|刚才|几组|多少组|几轮|多少轮|几条|多少条|总共|一共|聊天记录|对话内容|历史对话|说过什么|之前说了|都说了)/i;
   let metaQuestionInjected = false;
+  // Ledger for both meta questions and chat-log reports (shared, excludes the
+  // current question itself — it was already stored by /api/chat).
+  const metaSession = getSession(sessionId);
+  const metaHist = (metaSession?.history || []).filter(
+    (m: any) => !(m.role === 'user' && String(m.content || '') === message),
+  );
   if (!isBootStartupTurn && SESSION_META_RE.test(message)) {
-    const metaSession = getSession(sessionId);
-    // Exclude the current question itself (it was already stored by /api/chat).
-    const metaHist = (metaSession?.history || []).filter(
-      (m: any) => !(m.role === 'user' && String(m.content || '') === message),
-    );
     if (metaHist.length > 0) {
       const metaUserMsgs = metaHist.filter((m: any) => m.role === 'user').length;
       const metaAsstMsgs = metaHist.filter((m: any) => m.role === 'assistant').length;
@@ -4123,11 +4178,39 @@ async function handleChat(
     }
   }
 
+  // ── Chat-log report: user asks to turn the conversation into a report ────
+  // e.g. "把这12组对话做成报告". Without this, the message mis-triggers the
+  // doc-analysis-report flow and sends the 2B model into a workspace-file
+  // tool loop (list_files → read USER.md/SOUL.md/memory.md → EISDIR on
+  // memory/ → frontend timeout → "aborted due to timeout" = frozen UI).
+  // The ledger is already local, so the system compiles the report directly.
+  const chatReportAsk =
+    /(聊天记录|对话记录|聊天内容|聊天|对话)/.test(message)
+    && /(报告|整理|总结|导出|做成|生成|输出)/.test(message);
+  if (!isBootStartupTurn && chatReportAsk && metaHist.length > 0) {
+    const report = buildChatLogReport(message, metaHist);
+    if (report) {
+      let savedPath = '';
+      try {
+        const stamp = new Date().toISOString().slice(0, 19).replace(/[-:T]/g, '');
+        const fname = `聊天记录报告_${stamp}.md`;
+        const fpath = path.join(workspacePath || process.cwd(), fname);
+        fs.writeFileSync(fpath, report.markdown, 'utf8');
+        savedPath = fname;
+      } catch (e: any) {
+        console.warn('[chat-report] write failed: ' + (e?.message || e));
+      }
+      console.log(`[v2] CHAT_REPORT: built from ledger (${report.markdown.length} chars) saved=${savedPath}`);
+      const head = savedPath ? `\n\n已保存为工作区文件：${savedPath}` : '';
+      return { type: 'chat', text: report.summary + head, toolResults: [] };
+    }
+  }
+
   messages.push({ role: 'user', content: buildMultimodalUserContent(message, workspacePath) });
 
   // ── One-click flow: if the message matches a flow trigger, inject the
   //    flow instruction so the model follows the fixed process end-to-end. ──
-  const matchedFlow = suppressFlowTrigger || isBootStartupTurn ? null : flowsManager.matchTrigger(message);
+  const matchedFlow = suppressFlowTrigger || isBootStartupTurn || chatReportAsk ? null : flowsManager.matchTrigger(message);
   if (matchedFlow) {
     console.log(`[v2] FLOW: "${matchedFlow.id}" (${matchedFlow.name}) triggered by message`);
     messages.push({
