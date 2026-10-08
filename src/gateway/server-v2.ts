@@ -9652,7 +9652,7 @@ app.get('/api/agent/session/:id', (req, res) => {
   }));
   res.json({
     mode_lock: null,
-    mode: useAgentMode ? 'agent' : 'chat',
+    mode: ((getOrchestrationConfig()?.enabled ?? false) && isOrchestrationSkillEnabled()) ? 'agent' : 'chat',
     tasks: [],
     task_counts: { total: 0, done: 0 },
     turn_counts: { completed: history.length, open: 0 },
@@ -9664,9 +9664,6 @@ app.get('/api/agent/session/:id', (req, res) => {
     active_objective: userMessages.length > 0 ? String(userMessages[userMessages.length - 1]?.content || '').slice(0, 80) : null,
   });
 });
-
-// Track agent mode per-session (simplified)
-let useAgentMode = false;
 
 // ─── Approvals API ───────────────────────────────────────────────────────────
 // SECURITY: All approval endpoints require gateway auth. Approvals are the

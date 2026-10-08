@@ -2361,12 +2361,7 @@
     <div class="chat-input-area">
 	      <div class="agent-toggle">
         <span class="agent-toggle-label">Mode:</span>
-        <label class="toggle-switch" title="Toggle agent mode (gives AI access to tools)">
-          <input type="checkbox" id="agent-mode-toggle" onchange="updateAgentMode()">
-          <span class="toggle-track"></span>
-        </label>
-        <span class="agent-toggle-label" id="agent-mode-label">Chat</span>
-        <span class="agent-mode-badge" id="agent-mode-badge">AGENT</span>
+        <span class="agent-mode-badge" id="agent-mode-badge" title="工具策略：模型能力不足时自动调用工具，无需手动切换（由设置 → Agent Policy 的编排配置控制）">工具: 自动</span>
         <div class="agent-toggle-right" style="display:flex;align-items:center;gap:6px">
           <button class="quick-mode-btn" id="context-pin-btn" onclick="toggleContextPinMode()" title="Pin messages to context">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg>
@@ -3838,7 +3833,6 @@ let allJobs = [];
 let pollInterval = null;
 let currentMode = 'chat';
 let sidebarTab = 'jobs';
-let useAgentMode = false;
 const CHAT_SESSIONS_KEY = 'smallclaw_chat_sessions_v1';
 const AGENT_SESSION_KEY = 'smallclaw_agent_session_id';
 const THEME_KEY = 'smallclaw_theme';
@@ -4317,14 +4311,21 @@ function setSidebarTab(tab) {
   if (tab === 'knowledge') loadKnowledge();
 }
 
-// ---- Agent mode toggle ----
-function updateAgentMode() {
-  useAgentMode = document.getElementById('agent-mode-toggle').checked;
-  document.getElementById('agent-mode-label').textContent = useAgentMode ? 'Agent' : 'Chat';
-  document.getElementById('agent-mode-badge').classList.toggle('visible', useAgentMode);
-  document.getElementById('chat-input').placeholder = useAgentMode
-    ? 'Ask agent to do something... (has access to tools)'
-    : 'Type a message... (Enter to send, Shift+Enter for newline)';
+// Tool usage is automatic: the model calls tools when its own capability
+// is insufficient (controlled by orchestration config). No manual Chat/Agent
+// switch anymore — the badge shows the current tool policy state.
+let orchestrationEnabled = false;
+async function updateAgentModeIndicator() {
+  try {
+    const cfg = await api('/api/orchestration/config');
+    orchestrationEnabled = !!(cfg && cfg.enabled);
+    const elig = await api('/api/orchestration/eligible');
+    const skillOn = !!(elig && elig.eligible);
+    const badge = document.getElementById('agent-mode-badge');
+    if (!badge) return;
+    badge.textContent = (orchestrationEnabled && skillOn) ? '工具: 自动 + 编排' : '工具: 自动';
+    badge.classList.add('visible');
+  } catch { /* keep default badge text */ }
 }
 
 // ---- Chat ----
@@ -4672,7 +4673,7 @@ function renderChatMessages() {
       <div class="msg ai" id="thinking-msg">
         <div class="msg-avatar">🦞</div>
         <div class="msg-body">
-          <div class="msg-role">SmallClaw${useAgentMode ? ' (Agent)' : ''}</div>
+          <div class="msg-role">SmallClaw</div>
           ${currentPreflightStatus ? `<div class="msg-content" style="margin-bottom:6px;color:#26487e">${escHtml(currentPreflightStatus)}</div>` : ''}
           ${progressHtml}
           <div class="thinking">
@@ -5569,7 +5570,7 @@ async function sendChat(queuedMessage = null) {
         'Accept': 'text/event-stream'
       },
       signal: currentAbortController.signal,
-      body: JSON.stringify({ message, history: historyForAPI, useTools: useAgentMode, sessionId: agentSessionId, pinnedMessages: confirmedPins.length > 0 ? confirmedPins : undefined })
+      body: JSON.stringify({ message, history: historyForAPI, sessionId: agentSessionId, pinnedMessages: confirmedPins.length > 0 ? confirmedPins : undefined })
     });
 
     if (!res.ok) {
@@ -5958,7 +5959,7 @@ async function sendChat(queuedMessage = null) {
         content: finalReply,
         artifacts: finalArtifacts,
         steps: allSteps,
-        mode: useAgentMode ? 'agentic' : 'chat',
+        mode: 'chat',
         thinking: shouldAttachThinkingPanel ? (mergedThinking || finalStep?.thinking) : '',
         processEntries: turnEntries
       });
@@ -5974,7 +5975,7 @@ async function sendChat(queuedMessage = null) {
       addProcessEntry('warn', 'Generation stopped by user.');
       const content = partialContent ||
         (allSteps.length ? `[Stopped — ${allSteps.length} step${allSteps.length !== 1 ? 's' : ''} completed]` : '[Generation stopped]');
-      chatHistory.push({ role: 'ai', content, steps: allSteps, mode: useAgentMode ? 'agentic' : 'chat', processEntries: turnEntries });
+      chatHistory.push({ role: 'ai', content, steps: allSteps, mode: 'chat', processEntries: turnEntries });
     } else {
       lastHeartbeat = { ...lastHeartbeat, state: 'stalled', level: 'hard', message: String(err.message || 'connection_error'), current_step: 'error' };
       updateHeartbeatUI();
@@ -7388,22 +7389,6 @@ async function loadAgentSessionContext() {
       }
     }
 
-    const toggle = document.getElementById('agent-mode-toggle');
-    const label = document.getElementById('agent-mode-label');
-    if (toggle) {
-      const locked = data.mode_lock === 'agent' || data.mode_lock === 'chat';
-      toggle.disabled = !!locked;
-      if (data.mode_lock === 'agent') {
-        toggle.checked = true;
-        useAgentMode = true;
-      } else if (data.mode_lock === 'chat') {
-        toggle.checked = false;
-        useAgentMode = false;
-      }
-    }
-    if (label) {
-      label.textContent = useAgentMode ? 'Agent' : 'Chat';
-    }
     maybeAutoScrollRightColumn(rightColumnAutoFollow && isThinking);
   } catch {
     const rt = document.getElementById('r-recent-turns');
@@ -8181,7 +8166,7 @@ function updateStats(jobs) {
   const modeEl = document.getElementById('r-completed');
   if (totalEl) totalEl.textContent = String(chatSessions.length);
   if (runningEl) runningEl.textContent = activeChatSessionId ? '1' : '0';
-  if (modeEl) modeEl.textContent = useAgentMode ? 'On' : 'Off';
+  if (modeEl) modeEl.textContent = orchestrationEnabled ? 'On' : 'Off';
 }
 
 // ---- Approvals ----
@@ -8700,6 +8685,7 @@ async function refreshAll() {
   loadSystemStats();
   loadInstalledSkills();
   loadSearchSettingsSummary();
+  updateAgentModeIndicator();
   loadAgentSessionContext();
 }
 
