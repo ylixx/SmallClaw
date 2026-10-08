@@ -6,6 +6,7 @@
 <title>SmallClaw</title>
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/xml/xml.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/css/css.min.js"></script>
@@ -13,6 +14,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/htmlmixed/htmlmixed.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/markdown/markdown.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 
@@ -2211,16 +2213,16 @@
   .md-table { border-collapse: collapse; margin: 8px 0; max-width: 100%; }
   .md-table th, .md-table td { border: 1px solid var(--line); padding: 4px 10px; font-size: 12px; text-align: left; vertical-align: top; }
   .md-table th { background: var(--panel-2); font-weight: 700; }
-  .md-code { display: block; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin: 8px 0; overflow-x: auto; font-size: 12px; line-height: 1.5; font-family: 'IBM Plex Mono', Consolas, monospace; white-space: pre; }
-  .md-code code[class*="lang-"]::before { display: block; font-family: inherit; font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); border-bottom: 1px solid var(--line); padding-bottom: 4px; margin-bottom: 6px; }
-  .md-code code.lang-python::before { content: 'python'; }
-  .md-code code.lang-js::before, .md-code code.lang-javascript::before { content: 'javascript'; }
-  .md-code code.lang-bash::before, .md-code code.lang-sh::before { content: 'bash'; }
-  .md-code code.lang-json::before { content: 'json'; }
-  .md-code code.lang-html::before { content: 'html'; }
-  .md-code code.lang-css::before { content: 'css'; }
-  .md-code code.lang-typescript::before, .md-code code.lang-ts::before { content: 'typescript'; }
-  .md-code code.lang-sql::before { content: 'sql'; }
+  .md-code { display: block; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; margin: 8px 0; overflow-x: auto; font-size: 12px; line-height: 1.5; font-family: 'IBM Plex Mono', Consolas, monospace; white-space: pre; }
+  .md-code .md-code-head { display: flex; align-items: center; justify-content: space-between; padding: 4px 10px; border-bottom: 1px solid var(--line); background: var(--panel-1); border-radius: 8px 8px 0 0; position: sticky; left: 0; }
+  .md-code .md-code-lang { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-family: inherit; }
+  .md-code .md-code-copy { font-size: 11px; padding: 2px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); color: var(--text); cursor: pointer; }
+  .md-code .md-code-copy:hover { border-color: var(--accent); color: var(--accent); }
+  .md-code .md-code-copy.copied { border-color: #2f9e44; color: #2f9e44; }
+  .md-code code { display: block; padding: 8px 10px; white-space: pre; font-family: inherit; font-size: 12px; }
+  .md-code code.hljs { background: transparent; padding: 8px 10px; }
+  .md-code .hljs { color: var(--text); }
+  .md-code code.lang-python::before, .md-code code.lang-js::before, .md-code code.lang-javascript::before, .md-code code.lang-bash::before, .md-code code.lang-json::before, .md-code code.lang-html::before, .md-code code.lang-css::before, .md-code code.lang-typescript::before, .md-code code.lang-ts::before, .md-code code.lang-sql::before { content: none; }
   .md-task { list-style: none; padding-left: 4px; }
   .md-task-item input[type=checkbox] { margin-right: 6px; vertical-align: -1px; }
   .msg-content code { background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; font-size: 11.5px; font-family: 'IBM Plex Mono', Consolas, monospace; }
@@ -4499,11 +4501,17 @@ function renderMarkdown(text) {
   const raw = String(text || '').replace(/\r/g, '');
   if (!raw.trim()) return '';
   // Extract fenced code blocks first so their contents are never parsed as markdown.
+  // Structure: <pre class="md-code"><div class="md-code-head"><span class="md-code-lang">
+  //   LANG</span><button class="md-code-copy">复制</button></div><code class="hljs lang-X">…
+  // The copy button is bound via a document-level click handler; highlighting is
+  // applied by the MutationObserver in highlightCodeBlocks().
   const fenced = [];
   let body = raw.replace(/```([^\n]*)\n([\s\S]*?)```/g, (m, lang, code) => {
-    const langCls = String(lang || '').trim().replace(/[^a-zA-Z0-9_+-]/g, '');
+    const langRaw = String(lang || '').trim();
+    const langCls = langRaw.replace(/[^a-zA-Z0-9_+-]/g, '');
+    const langLabel = langRaw && /^[a-zA-Z0-9_+-]+$/.test(langRaw) ? langRaw : (langRaw || 'text');
     const codeHtml = escHtml(code.replace(/\n$/, ''));
-    fenced.push('<pre class="md-code"><code class="' + (langCls ? 'lang-' + langCls : '') + '">' + codeHtml + '</code></pre>');
+    fenced.push('<pre class="md-code"><div class="md-code-head"><span class="md-code-lang">' + escHtml(langLabel) + '</span><button class="md-code-copy" type="button" title="复制代码">复制</button></div><code class="hljs' + (langCls ? ' lang-' + langCls : '') + '">' + codeHtml + '</code></pre>');
     return '\u0000' + (fenced.length - 1) + '\u0000';
   });
   const lines = body.split('\n');
@@ -4589,6 +4597,69 @@ function renderMarkdown(text) {
   flushPara();
   return html.join('\n');
 }
+
+// ── Code block highlighting + copy (mirrors the project's code-block style) ──
+function highlightCodeBlocksIn(rootEl) {
+  if (typeof hljs === 'undefined') return;
+  const root = rootEl || document;
+  const codes = root.querySelectorAll ? root.querySelectorAll('pre.md-code code[class*="lang-"]') : [];
+  codes.forEach((code) => {
+    if (code.dataset.hlDone) return;
+    code.dataset.hlDone = '1';
+    try { hljs.highlightElement(code); } catch { /* keep plain text */ }
+  });
+}
+
+function copyCodeFromButton(btn) {
+  const pre = btn.closest('.md-code');
+  if (!pre) return;
+  const code = pre.querySelector('code');
+  const text = code ? code.textContent : '';
+  if (!text) return;
+  const done = () => {
+    btn.textContent = '已复制';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = '复制'; btn.classList.remove('copied'); }, 1600);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(done).catch(() => fallbackCopy(text, done));
+  } else {
+    fallbackCopy(text, done);
+  }
+}
+function fallbackCopy(text, done) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  try { document.execCommand('copy'); done(); } catch { /* clipboard blocked */ }
+  document.body.removeChild(ta);
+}
+
+// Global click delegation so copy buttons work for any message (streamed or
+// re-rendered), without re-binding per render.
+document.addEventListener('click', (e) => {
+  const btn = e.target && e.target.closest ? e.target.closest('.md-code-copy') : null;
+  if (btn) copyCodeFromButton(btn);
+});
+
+// Highlight code blocks as messages are rendered / streamed in.
+(function initCodeHighlightObserver() {
+  if (typeof MutationObserver === 'undefined') return;
+  const container = document.getElementById('chat-messages');
+  if (!container) return;
+  const mo = new MutationObserver((muts) => {
+    let need = false;
+    for (const m of muts) {
+      if (m.addedNodes && m.addedNodes.length) { need = true; break; }
+    }
+    if (need) highlightCodeBlocksIn(container);
+  });
+  mo.observe(container, { childList: true, subtree: true });
+  highlightCodeBlocksIn(container);
+})();
 
 function renderAssistantContent(content) {
   const text = String(content || '');
