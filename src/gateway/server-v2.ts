@@ -4035,7 +4035,11 @@ async function handleChat(
   // A small local model cannot accurately answer "what was the last exchange /
   // how many turns" from a pruned prompt, so when the user asks about the
   // conversation itself we hand it the real ledger from the session store.
+  // The injection also demands a terse answer and caps output tokens: without
+  // that, MiniCPM5-2B retells the whole ledger (~1000+ tok at ~3 tok/s → the
+  // turn appears frozen for minutes).
   const SESSION_META_RE = /(最后|最近|上一|刚才|几组|多少组|几轮|多少轮|几条|多少条|总共|一共|聊天记录|对话内容|历史对话|说过什么|之前说了|都说了)/i;
+  let metaQuestionInjected = false;
   if (!isBootStartupTurn && SESSION_META_RE.test(message)) {
     const metaSession = getSession(sessionId);
     // Exclude the current question itself (it was already stored by /api/chat).
@@ -4055,8 +4059,9 @@ async function handleChat(
       messages.push({
         role: 'user',
         content:
-          `[会话历史实况] 当前会话共 ${metaHist.length} 条消息（${metaUserMsgs} 条用户消息、${metaAsstMsgs} 条助手消息）。\n最近的消息：\n${metaLines}\n若用户问的是"最后一组/总共几组/历史对话"，请直接依据以上实况准确回答，不要编造实况之外的内容。`,
+          `[会话历史实况] 当前会话共 ${metaHist.length} 条消息（${metaUserMsgs} 条用户消息、${metaAsstMsgs} 条助手消息）。\n最近的消息：\n${metaLines}\n若用户问的是"最后一组/总共几组/历史对话"，请用最多 2 句话直接回答，只引用实况中已有的内容，不要复述、展开或总结实况之外的东西。`,
       });
+      metaQuestionInjected = true;
     }
   }
 
@@ -5406,6 +5411,10 @@ RULES:
         // llama-server (-c 128K for MiniCPM, whatever the preset starts), and
         // output length follows the model's natural stopping rule (stall
         // watchdog below still bounds pathological generations).
+        // EXCEPT session-history meta questions: MiniCPM5-2B retells the whole
+        // ledger and crawls to ~3 tok/s, so cap the answer (short replies are
+        // unaffected; a 400-token cap still leaves plenty of room).
+        ...(metaQuestionInjected ? { max_tokens: 400 } : {}),
       });
 
       // ── Preempt watchdog ────────────────────────────────────────────
