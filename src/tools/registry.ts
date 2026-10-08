@@ -1,6 +1,7 @@
 import { ToolResult } from '../types.js';
 import { shellTool } from './shell.js';
 import { readTool, writeTool, editTool, listTool, deleteTool, renameTool, copyTool, mkdirTool, statTool, appendTool, applyPatchTool } from './files.js';
+import { grepContentTool } from './grep-content.js';
 import { webSearchTool, webFetchTool } from './web.js';
 import { memorySearchTool, memoryWriteTool } from './memory.js';
 import { memoryReadTool } from './memory-read.js';
@@ -43,6 +44,7 @@ const TOOL_PROFILE_TOOL_NAMES: Record<Exclude<ToolProfile, 'full'>, ReadonlySet<
     'stat',
     'append',
     'apply_patch',
+    'grep_content',
     'memory_search',
     'memory_write',
   ]),
@@ -117,6 +119,7 @@ class ToolRegistry {
     this.registerSafe(editTool);
     this.registerSafe(listTool);
     this.registerSafe(deleteTool);
+    this.registerSafe(grepContentTool);
     // Additional filesystem utilities
     this.registerSafe(renameTool);
     this.registerSafe(copyTool);

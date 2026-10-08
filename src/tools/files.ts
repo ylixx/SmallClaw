@@ -32,7 +32,7 @@ function isPathInside(basePath: string, targetPath: string): boolean {
   return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
 }
 
-function isPathAllowed(targetPath: string): { allowed: boolean; reason?: string } {
+export function isPathAllowed(targetPath: string): { allowed: boolean; reason?: string } {
   const config = getConfig().getConfig();
   const permissions = config.tools.permissions.files;
   const absPath = path.resolve(String(targetPath || ''));
@@ -215,7 +215,8 @@ export async function executeRead(args: ReadToolArgs): Promise<ToolResult> {
     const window = Math.min(requested, cap);
     const startIdx = Math.max(0, startLine - 1);
     const selected = allLines.slice(startIdx, startIdx + window);
-    const outContent = selected.join('\n');
+    // 行号前缀（`行号\t内容`）：模型可精确引用"第 N 行"，与 edit 工具联动
+    const outContent = selected.map((l, i) => `${startLine + i}\t${l}`).join('\n');
     const endLine = startLine + selected.length - 1;
     const truncated = (allLines.length > selected.length) || startLine > 1 || requested > cap;
     return {

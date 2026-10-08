@@ -1207,6 +1207,22 @@ function buildTools() {
     {
       type: 'function',
       function: {
+        name: 'grep_content',
+        description: 'Search file contents inside the workspace with a regex and return "file:line: text" matches. Use when you need to FIND where something is written (a config key, function name, string) — do NOT guess file by file. Patterns are JavaScript RegExp (e.g. "compactionThreshold", "memoryFlush.*threshold"). Large dirs (node_modules/.git/dist) are skipped; invalid regex returns an error.',
+        parameters: {
+          type: 'object', required: ['pattern'],
+          properties: {
+            pattern: { type: 'string', description: 'regex to search for (JavaScript RegExp syntax)' },
+            path: { type: 'string', description: 'file or directory to search (default: workspace root)' },
+            limit: { type: 'number', description: 'max matches to return (default 100, max 500)' },
+            case_sensitive: { type: 'boolean', description: 'default false (case-insensitive)' },
+          },
+        },
+      },
+    },
+    {
+      type: 'function',
+      function: {
         name: 'read_file',
         description: 'Read a file with line numbers. Use before editing.',
         parameters: {
@@ -2278,6 +2294,19 @@ async function executeToolImpl(name: string, args: any, workspacePath: string, s
         if (maxEntries > 0) labels = labels.slice(0, maxEntries);
 
         return { name, args, result: JSON.stringify([header, ...labels, ...dirs]), error: false };
+      }
+
+      case 'grep_content': {
+        const { getToolRegistry } = await import('../tools/registry.js');
+        const res = await getToolRegistry().execute('grep_content', args);
+        return {
+          name,
+          args,
+          result: res.success
+            ? (res.stdout || '(no output)')
+            : (res.error || 'grep_content failed'),
+          error: !res.success,
+        };
       }
 
       case 'read_file': {
