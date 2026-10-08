@@ -3567,6 +3567,51 @@ function filterToolsByIntent(toolDefs: any[], messageText: string): any[] {
   });
 }
 
+/**
+ * Deterministically answer "how many exchanges / what was the last exchange"
+ * straight from the session ledger. Returns '' when the message is not a
+ * confident meta-question (then the model answers with the injected ledger).
+ */
+function computeSessionMetaAnswer(
+  message: string,
+  hist: Array<{ role: string; content: any }>,
+  userCount: number,
+  asstCount: number,
+): string {
+  const m = String(message || '').trim();
+  if (!m) return '';
+
+  // Guard: questions about a specific location/object are not meta questions.
+  if (/(在哪|哪里|怎么|为什么|什么文件|哪个文件)/.test(m)) return '';
+
+  // 1) Counting questions: "几组/多少组/几轮/多少轮/几条/多少条/组对话/轮对话/条消息"
+  if (/(几组|多少组|几轮|多少轮|几条|多少条|几段|多少段|几轮对话|组对话|轮对话|条消息|组消息|段对话)/i.test(m)) {
+    const pairs = Math.min(userCount, asstCount);
+    return `当前会话共 ${pairs} 组对话（${hist.length} 条消息：${userCount} 条用户消息、${asstCount} 条助手消息）。`;
+  }
+
+  // 2) Last-exchange questions: "最后/最近/上一/刚才 + 聊天/对话/内容/说了/聊"
+  if (/(最后|最近|上一|刚才).{0,8}(聊天|对话|内容|消息|说过|说了|讲了|聊)/i.test(m)) {
+    let lastAsstIdx = -1;
+    for (let i = hist.length - 1; i >= 0; i--) {
+      if (hist[i].role === 'assistant') { lastAsstIdx = i; break; }
+    }
+    if (lastAsstIdx === -1) return '';
+    let userIdx = -1;
+    for (let i = lastAsstIdx - 1; i >= 0; i--) {
+      if (hist[i].role === 'user') { userIdx = i; break; }
+    }
+    const asstText = String(hist[lastAsstIdx].content || '').replace(/\s+/g, ' ').slice(0, 300);
+    const usrText = userIdx >= 0 ? String(hist[userIdx].content || '').replace(/\s+/g, ' ').slice(0, 200) : '';
+    if (userIdx >= 0) {
+      return `最后一组聊天内容：\n- 用户：${usrText}\n- 助手：${asstText}`;
+    }
+    return `最后一组聊天内容是助手回复：${asstText}`;
+  }
+
+  return '';
+}
+
 async function handleChat(
   message: string,
   sessionId: string,
@@ -4062,6 +4107,19 @@ async function handleChat(
           `[会话历史实况] 当前会话共 ${metaHist.length} 条消息（${metaUserMsgs} 条用户消息、${metaAsstMsgs} 条助手消息）。\n最近的消息：\n${metaLines}\n若用户问的是"最后一组/总共几组/历史对话"，请用最多 2 句话直接回答，只引用实况中已有的内容，不要复述、展开或总结实况之外的东西。`,
       });
       metaQuestionInjected = true;
+
+      // ── System-computed answers for deterministic meta questions ─────────
+      // "几组/几轮/几条/总共" counting and "最后一组/最近聊天内容" are exact
+      // lookups on the ledger. A 2B model answers them slowly at best (retells
+      // the ledger) and at worst emits reasoning-only output that is discarded
+      // (→ "Hey! How can I help?" fallback). The system computes them directly:
+      // instant, exact, zero model dependency — the "use the system when the
+      // model can't" principle.
+      const metaAnswer = computeSessionMetaAnswer(message, metaHist, metaUserMsgs, metaAsstMsgs);
+      if (metaAnswer) {
+        console.log(`[v2] META: answered from ledger (${metaAnswer.length} chars)`);
+        return { type: 'chat', text: metaAnswer, toolResults: [] };
+      }
     }
   }
 
@@ -5412,9 +5470,15 @@ RULES:
         // output length follows the model's natural stopping rule (stall
         // watchdog below still bounds pathological generations).
         // EXCEPT session-history meta questions: MiniCPM5-2B retells the whole
-        // ledger and crawls to ~3 tok/s, so cap the answer (short replies are
-        // unaffected; a 400-token cap still leaves plenty of room).
-        ...(metaQuestionInjected ? { max_tokens: 400 } : {}),
+        // ledger (~1000+ tok @ ~3 tok/s), and even shorter outputs often start
+        // with reasoning ("Let me look...") that separateThinkingFromContent
+        // discards entirely (>500 chars → treated as thinking → empty reply →
+        // fallback). Cap at 150 tok: a 2-sentence answer fits, but a reasoning
+        // preamble cannot, so the model must answer directly.
+        // NOTE: chatWithThinking's option key is num_predict (it maps to
+        // provider max_tokens internally); a spread `max_tokens` key is
+        // silently dropped at runtime.
+        ...(metaQuestionInjected ? { num_predict: 150 } : {}),
       });
 
       // ── Preempt watchdog ────────────────────────────────────────────
