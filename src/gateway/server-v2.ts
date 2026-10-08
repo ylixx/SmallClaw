@@ -3613,25 +3613,26 @@ function computeSessionMetaAnswer(
 }
 
 /**
- * Compile the conversation ledger into a Markdown chat-log report (no model
- * involved). Returns { summary, markdown } or null when the ledger is empty.
+ * Compile the conversation ledger into a self-contained HTML chat-log report
+ * (no model involved). Returns { summary, html } or null when empty.
  */
 function buildChatLogReport(
   message: string,
   hist: Array<{ role: string; content: any; timestamp?: any }>,
-): { summary: string; markdown: string } | null {
+): { summary: string; html: string } | null {
   if (!hist.length) return null;
   const userCount = hist.filter((m) => m.role === 'user').length;
   const asstCount = hist.filter((m) => m.role === 'assistant').length;
   const pairs = Math.min(userCount, asstCount);
-  const lines: string[] = [
-    `# 聊天记录报告`,
-    ``,
-    `- 生成时间：${new Date().toLocaleString('zh-CN', { hour12: false })}`,
-    `- 共 ${pairs} 组对话（${hist.length} 条消息：${userCount} 条用户、${asstCount} 条助手）`,
-    ``,
-  ];
-  let groupIdx = 0;
+
+  const esc = (s: any): string =>
+    String(s ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+
+  const groups: string[] = [];
   let pendingUser: string | null = null;
   let pendingTs = '';
   for (const m of hist) {
@@ -3641,29 +3642,57 @@ function buildChatLogReport(
       pendingUser = text;
       pendingTs = ts;
     } else if (m.role === 'assistant' && pendingUser !== null) {
-      groupIdx += 1;
-      lines.push(`## 第 ${groupIdx} 组对话${pendingTs ? `（${pendingTs}）` : ''}`);
-      lines.push(``);
-      lines.push(`**用户**：${pendingUser || '（空）'}`);
-      lines.push(``);
-      lines.push(`**助手**：${text || '（空）'}`);
-      lines.push(``);
+      groups.push(
+        `<div class="group"><div class="ts">${esc(pendingTs)}</div>` +
+        `<div class="msg user"><span class="who">用户</span><div class="body">${esc(pendingUser || '（空）')}</div></div>` +
+        `<div class="msg asst"><span class="who">助手</span><div class="body">${esc(text || '（空）')}</div></div>` +
+        `</div>`,
+      );
       pendingUser = null;
     }
   }
-  // Trailing user message with no reply yet.
   if (pendingUser !== null) {
-    groupIdx += 1;
-    lines.push(`## 第 ${groupIdx} 组对话${pendingTs ? `（${pendingTs}）` : ''}`);
-    lines.push(``);
-    lines.push(`**用户**：${pendingUser || '（空）'}`);
-    lines.push(``);
-    lines.push(`**助手**：（尚未回复）`);
-    lines.push(``);
+    groups.push(
+      `<div class="group"><div class="ts">${esc(pendingTs)}</div>` +
+      `<div class="msg user"><span class="who">用户</span><div class="body">${esc(pendingUser || '（空）')}</div></div>` +
+      `<div class="msg asst"><span class="who">助手</span><div class="body">（尚未回复）</div></div>` +
+      `</div>`,
+    );
   }
-  const markdown = lines.join('\n');
-  const summary = `已生成聊天记录报告：共 ${pairs} 组对话（${hist.length} 条消息：${userCount} 条用户、${asstCount} 条助手）。`;
-  return { summary, markdown };
+
+  const generatedAt = new Date().toLocaleString('zh-CN', { hour12: false });
+  const html = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>聊天记录报告</title>
+<style>
+  body{margin:0;padding:32px 16px;background:#f5f6f8;font-family:-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;color:#1a1b1c;}
+  .wrap{max-width:860px;margin:0 auto;}
+  h1{font-size:24px;color:#2c5f8a;margin:0 0 8px;}
+  .meta{color:#5f6670;font-size:13px;margin-bottom:24px;line-height:1.7;}
+  .group{background:#fff;border:1px solid #e4e3dd;border-radius:8px;padding:16px 18px;margin-bottom:14px;}
+  .ts{font-size:12px;color:#8a9099;margin-bottom:10px;}
+  .msg{display:flex;gap:10px;margin-bottom:10px;}
+  .msg:last-child{margin-bottom:0;}
+  .who{flex:0 0 40px;font-size:12px;font-weight:600;padding-top:4px;text-align:center;border-radius:4px;height:22px;line-height:22px;}
+  .msg.user .who{background:#e8f1f8;color:#2c5f8a;}
+  .msg.asst .who{background:#eef7ee;color:#35705a;}
+  .body{flex:1;font-size:14px;line-height:1.6;white-space:pre-wrap;word-break:break-word;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>聊天记录报告</h1>
+  <div class="meta">生成时间：${esc(generatedAt)}<br>共 ${pairs} 组对话（${hist.length} 条消息：${userCount} 条用户、${asstCount} 条助手）</div>
+  ${groups.join('\n  ')}
+</div>
+</body>
+</html>
+`;
+  const summary = `已生成聊天记录报告（HTML 格式）：共 ${pairs} 组对话（${hist.length} 条消息：${userCount} 条用户、${asstCount} 条助手）。`;
+  return { summary, html };
 }
 
 async function handleChat(
@@ -4193,15 +4222,15 @@ async function handleChat(
       let savedPath = '';
       try {
         const stamp = new Date().toISOString().slice(0, 19).replace(/[-:T]/g, '');
-        const fname = `聊天记录报告_${stamp}.md`;
+        const fname = `聊天记录报告_${stamp}.html`;
         const fpath = path.join(workspacePath || process.cwd(), fname);
-        fs.writeFileSync(fpath, report.markdown, 'utf8');
+        fs.writeFileSync(fpath, report.html, 'utf8');
         savedPath = fname;
       } catch (e: any) {
         console.warn('[chat-report] write failed: ' + (e?.message || e));
       }
-      console.log(`[v2] CHAT_REPORT: built from ledger (${report.markdown.length} chars) saved=${savedPath}`);
-      const head = savedPath ? `\n\n已保存为工作区文件：${savedPath}` : '';
+      console.log(`[v2] CHAT_REPORT: built from ledger (${report.html.length} chars) saved=${savedPath}`);
+      const head = savedPath ? `\n\n已保存为工作区文件：${savedPath}（HTML 格式，可直接双击打开）` : '';
       return { type: 'chat', text: report.summary + head, toolResults: [] };
     }
   }
