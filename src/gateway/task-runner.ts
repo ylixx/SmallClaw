@@ -127,9 +127,9 @@ export class TaskRunner {
         const result = await ollama.chatWithThinking(messages, 'executor', {
           tools: this.tools,
           temperature: 0.2,     // low temp for task execution
-          num_ctx: 8192,
-          num_predict: 2048,
           think: false,
+          // num_ctx / num_predict intentionally unset: follow the running
+          // backend's context and the model's natural stopping rule.
         });
         response = result.message;
 

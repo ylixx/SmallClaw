@@ -121,9 +121,12 @@ export class OpenAICompatAdapter implements LLMProvider {
       model,
       messages: finalMessages,
       temperature: options?.temperature ?? 0.25,
-      max_tokens: options?.max_tokens ?? 512,
       stream: false,
     };
+    // max_tokens only when explicitly configured — omitting it lets the backend
+    // (llama.cpp / OpenAI / LM Studio) use its own natural stopping rule, so a
+    // long reply is never hard-truncated by a fixed default.
+    if (options?.max_tokens) body.max_tokens = options.max_tokens;
     if (Array.isArray(options?.tools) && options!.tools!.length) {
       body.tools = options!.tools;
       body.tool_choice = 'auto';
@@ -152,9 +155,9 @@ export class OpenAICompatAdapter implements LLMProvider {
       model,
       messages,
       temperature: options?.temperature ?? 0.3,
-      max_tokens: options?.max_tokens ?? 512,
       stream: false,
     };
+    if (options?.max_tokens) body.max_tokens = options.max_tokens;
     if (options?.format === 'json') {
       body.response_format = { type: 'json_object' };
     }

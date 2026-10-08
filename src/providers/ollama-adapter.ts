@@ -51,17 +51,21 @@ export class OllamaAdapter implements LLMProvider {
 
     for (const think of thinkCandidates) {
       try {
+        const opts: any = {
+          temperature: options?.temperature ?? 0.25,
+          top_p: 0.9,
+        };
+        // Context and output limits follow the model/backend when unset —
+        // no hard-coded 4096/256 defaults that silently truncate a 128K model.
+        if (options?.num_ctx) opts.num_ctx = options.num_ctx;
+        if (options?.max_tokens) opts.num_predict = options.max_tokens;
+
         const response: any = await this.client.chat({
           model,
           messages: normalizedMessages as any,
           tools: options?.tools,
           ...(Array.isArray(options?.tools) && options!.tools!.length ? { tool_choice: 'auto' } : {}),
-          options: {
-            temperature: options?.temperature ?? 0.25,
-            top_p: 0.9,
-            num_ctx: options?.num_ctx ?? 4096,
-            num_predict: options?.max_tokens ?? 256,
-          },
+          options: opts,
           ...(think === undefined ? {} : { think }),
           stream: false,
         } as any);
@@ -85,17 +89,19 @@ export class OllamaAdapter implements LLMProvider {
 
     for (const think of thinkCandidates) {
       try {
+        const opts: any = {
+          temperature: options?.temperature ?? 0.3,
+          top_p: 0.9,
+        };
+        if (options?.num_ctx) opts.num_ctx = options.num_ctx;
+        if (options?.max_tokens) opts.num_predict = options.max_tokens;
+
         const response = await this.client.generate({
           model,
           prompt,
           system: options?.system,
           format: options?.format,
-          options: {
-            temperature: options?.temperature ?? 0.3,
-            top_p: 0.9,
-            num_ctx: options?.num_ctx ?? 2048,
-            num_predict: options?.max_tokens ?? 256,
-          },
+          options: opts,
           ...(think === undefined ? {} : { think }),
           stream: false,
         });

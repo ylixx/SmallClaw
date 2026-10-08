@@ -5370,10 +5370,12 @@ RULES:
       const generationPromise = ollama.chatWithThinking(trimInRoundMessages(messages), 'executor', {
         tools,
         temperature: 0.3,
-        num_ctx: 8192,
-        num_predict: 4096,
         think: primaryThinkMode,
         model: String(modelOverride || '').trim() || undefined,
+        // No hard-coded num_ctx / num_predict: context follows the running
+        // llama-server (-c 128K for MiniCPM, whatever the preset starts), and
+        // output length follows the model's natural stopping rule (stall
+        // watchdog below still bounds pathological generations).
       });
 
       // ── Preempt watchdog ────────────────────────────────────────────
