@@ -1192,8 +1192,16 @@ function buildTools() {
       type: 'function',
       function: {
         name: 'list_files',
-        description: 'List workspace files sorted by size, LARGEST FIRST, with size in parentheses (e.g. "report.html (1.2 MB)"). The first entry is always the largest file. Directories are marked with a trailing "/".',
-        parameters: { type: 'object', properties: {}, required: [] },
+        description: 'List workspace files with sizes, sorted by size DESCENDING (largest first) by default. The first line is a summary "[N files, total SIZE, updated DATE]" — use it to answer "how many files / total size / newest file". Optional: pattern (filter by name, e.g. ".pdf" or "report"), sort_by ("size"|"name"|"mtime"; mtime shows modified time and sorts newest first), max_entries (limit output for large folders). Directories are marked with trailing "/".',
+        parameters: {
+          type: 'object',
+          properties: {
+            pattern: { type: 'string', description: 'Optional: only list files whose name contains this substring (case-insensitive), e.g. ".pdf", "report".' },
+            sort_by: { type: 'string', enum: ['size', 'name', 'mtime'], description: 'Sort order. Default "size" (largest first). "name" = alphabetical. "mtime" = newest modified first and each entry shows its modified time.' },
+            max_entries: { type: 'number', description: 'Optional: maximum number of file entries to return (useful for large folders).' },
+          },
+          required: [],
+        },
       },
     },
     {
@@ -2151,26 +2159,55 @@ async function executeToolImpl(name: string, args: any, workspacePath: string, s
   try {
     switch (name) {
       case 'list_files': {
-        // Files sorted by size DESCENDING (largest first) so the model can
-        // answer "which file is largest" from the first entry alone — a 2B
-        // model otherwise recites the whole list and burns its output budget.
-        // Directories (marked with trailing "/") are appended at the end.
+        // File query tool: summary header + entries. Supports pattern filter,
+        // sort (size/name/mtime) and max_entries truncation so a 2B model gets
+        // just what it needs — a giant unfiltered list makes it recite instead
+        // of answer.
+        const pattern = String(args.pattern || '').toLowerCase();
+        const sortBy = args.sort_by === 'name' || args.sort_by === 'mtime' ? args.sort_by : 'size';
+        const maxEntries = Number.isFinite(Number(args.max_entries))
+          ? Math.max(1, Math.floor(Number(args.max_entries)))
+          : 0;
         const entries = fs.readdirSync(workspacePath);
-        const files: { label: string; size: number }[] = [];
+        const files: { name: string; size: number; sizeStr: string; mtime: number }[] = [];
         const dirs: string[] = [];
         for (const f of entries) {
           try {
             const st = fs.statSync(path.join(workspacePath, f));
-            if (st.isDirectory()) { dirs.push(`${f}/`); continue; }
+            if (st.isDirectory()) {
+              if (!pattern || f.toLowerCase().includes(pattern)) dirs.push(`${f}/`);
+              continue;
+            }
+            if (pattern && !f.toLowerCase().includes(pattern)) continue;
             const b = st.size;
             const sizeStr = b >= 1024 * 1024
               ? `${(b / (1024 * 1024)).toFixed(1)} MB`
               : b >= 1024 ? `${(b / 1024).toFixed(1)} KB` : `${b} B`;
-            files.push({ label: `${f} (${sizeStr})`, size: b });
+            files.push({ name: f, size: b, sizeStr, mtime: st.mtimeMs });
           } catch { /* skip unreadable */ }
         }
-        files.sort((a, b) => b.size - a.size);
-        return { name, args, result: JSON.stringify([...files.map(f => f.label), ...dirs]), error: false };
+        if (sortBy === 'name') files.sort((a, b) => a.name.localeCompare(b.name));
+        else if (sortBy === 'mtime') files.sort((a, b) => b.mtime - a.mtime);
+        else files.sort((a, b) => b.size - a.size);
+
+        const totalBytes = files.reduce((s, f) => s + f.size, 0);
+        const totalStr = totalBytes >= 1024 * 1024
+          ? `${(totalBytes / (1024 * 1024)).toFixed(1)} MB`
+          : totalBytes >= 1024 ? `${(totalBytes / 1024).toFixed(1)} KB` : `${totalBytes} B`;
+        const newest = files.length
+          ? new Date(Math.max(...files.map(f => f.mtime))).toISOString().slice(5, 16).replace('T', ' ')
+          : '—';
+        const header = `[${files.length} files, total ${totalStr}, updated ${newest}]`;
+
+        let labels = sortBy === 'mtime'
+          ? files.map(f => {
+              const mt = new Date(f.mtime).toISOString().slice(5, 16).replace('T', ' ');
+              return `${f.name} (${f.sizeStr}, ${mt})`;
+            })
+          : files.map(f => `${f.name} (${f.sizeStr})`);
+        if (maxEntries > 0) labels = labels.slice(0, maxEntries);
+
+        return { name, args, result: JSON.stringify([header, ...labels, ...dirs]), error: false };
       }
 
       case 'read_file': {
@@ -6753,7 +6790,7 @@ RULES:
       // is the largest file. Tell a small model to answer directly instead of
       // reciting the whole list (which burns its output budget).
       const listFilesHint = toolName === 'list_files'
-        ? `\n[list_files entries are sorted by size DESCENDING — the FIRST entry is the largest file. Answer the user's question directly and concisely; do NOT recite the full list.]`
+        ? `\n[list_files: the first line is a summary "[N files, total SIZE, updated DATE]". By default entries are sorted by size DESCENDING so the first entry is the largest file. Answer the user's question directly and concisely from the summary/first entries; do NOT recite the full list.]`
         : '';
       // ── Multi-agent browser interception ────────────────────────────────────
       // When orchestrator is active, LLM never sees raw snapshot/browser data.
