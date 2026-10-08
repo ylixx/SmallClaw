@@ -100,7 +100,7 @@ function isGreetingLikeMessage(text: string): boolean {
   if (/\b(search|open|read|write|file|code|task|build|fix|debug|run|install|http|www\.|\.com|please|could you|can you)\b/i.test(raw)) {
     return false;
   }
-  return /^(hi|hello|hey|yo|sup|howdy|good (morning|afternoon|evening)|hey claw|hello claw|hi claw|hey smallclaw|hello smallclaw|hi smallclaw|how are you)[!.?\s]*$/i.test(raw);
+  return /^(hi|hello|hey|yo|sup|howdy|good (morning|afternoon|evening)|hey claw|hello claw|hi claw|hey smallclaw|hello smallclaw|hi smallclaw|how are you|你好|您好|嗨|哈喽|嗨喽|在吗|早上好|上午好|中午好|下午好|晚上好|早安|午安|晚安)[!.?\s]*$/i.test(raw);
 }
 
 function sanitizeFinalReply(

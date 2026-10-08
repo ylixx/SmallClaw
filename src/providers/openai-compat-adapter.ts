@@ -147,8 +147,14 @@ export class OpenAICompatAdapter implements LLMProvider {
           .split(/(?<=[.!?。！？])\s+/)
           .map((s) => s.trim())
           .filter((s) => s.length > 4);
-        content = sentences.length
-          ? sentences[sentences.length - 1]
+        // Skip meta sentences the gateway's sanitizeFinalReply would strip
+        // ("No tools needed for this greeting", "Understood. I will..."),
+        // otherwise a reasoning-only turn still lands on the generic fallback.
+        const metaRe = /no tools (are|were) needed|greeting only|understood[.,]?\s+i will/i;
+        const usable = sentences.filter((s) => !metaRe.test(s));
+        const src = usable.length ? usable : sentences;
+        content = src.length
+          ? src[src.length - 1]
           : String(reasoning).slice(-200);
       }
     }

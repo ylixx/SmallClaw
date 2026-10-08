@@ -6165,6 +6165,13 @@ RULES:
           // Summarize what tools actually did
           const lastResult = allToolResults[allToolResults.length - 1];
           finalText = lastResult.error ? `Tool failed: ${lastResult.result.slice(0, 200)}` : 'Done!';
+        } else if (greetingLikeTurn) {
+          // Greeting with no tool work: answer directly from the system instead
+          // of the model (2B models burn the budget thinking "no tools needed"
+          // and sanitize strips that line → empty → generic fallback).
+          const cfgNow = getConfig().getConfig() as any;
+          const presetName = String(cfgNow?.llm?.presets?.[String(cfgNow?.llm?.active_preset || '')]?.name || '').trim();
+          finalText = `你好！${presetName ? `我是 ${presetName}。` : ''}有什么可以帮你的吗？`;
         } else {
           finalText = 'Hey! How can I help?';
         }
