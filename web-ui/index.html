@@ -2441,6 +2441,9 @@
         <span id="chat-provider-name">SmallClaw</span>
         <span id="chat-switch-err" style="display:none;color:var(--err);font-size:12px;font-weight:700"></span>
         <span id="queued-prompts-indicator" style="display:none;margin-left:8px;color:var(--brand);font-weight:700"></span>
+        <button id="think-toggle-btn" onclick="toggleThinkFromHint()" title="思考模式：小模型建议关闭（更快），复杂任务可开启。点击切换 Off/Standard，Extended 在 ⚙ 弹层中可选" style="margin-left:10px;border:1px solid var(--line);border-radius:999px;background:transparent;color:var(--text);font-size:12px;padding:2px 10px;cursor:pointer;font-weight:700;white-space:nowrap">
+          思考: <span id="think-toggle-state">Off</span>
+        </button>
       </div>
     </div>
   </div>
@@ -6508,17 +6511,29 @@ async function setQuickSearchRigor(level) {
   }
 }
 
+function toggleThinkFromHint() {
+  setQuickThinking(quickThinkingEffort === 'off' ? 'standard' : 'off');
+}
+
+function renderThinkToggleState() {
+  const el = document.getElementById('think-toggle-state');
+  if (!el) return;
+  el.textContent = quickThinkingEffort === 'off' ? 'Off' : (quickThinkingEffort === 'extended' ? 'Extended' : 'Standard');
+  const btn = document.getElementById('think-toggle-btn');
+  if (btn) btn.style.color = quickThinkingEffort === 'off' ? 'var(--muted)' : 'var(--brand)';
+}
+
 function setQuickThinking(mode) {
   const payload = mode === 'off'
     ? { enabled: false }
     : { enabled: true, level: mode === 'extended' ? 'high' : 'medium' };
   api('/api/settings/think', { method: 'POST', body: JSON.stringify(payload) })
-    .then(r => r.json())
     .then(j => {
       if (!j || j.success === false) throw new Error((j && j.error) || 'failed');
       quickThinkingEffort = mode === 'off' ? 'off' : (mode === 'extended' ? 'extended' : 'standard');
       localStorage.setItem('smallclaw_quick_thinking_effort', quickThinkingEffort);
       updateQuickModeUI();
+      renderThinkToggleState();
       const label = mode === 'off' ? 'Off (不思考)' : (mode === 'extended' ? 'Extended (深度思考)' : 'Standard (标准思考)');
       addProcessEntry('info', `Thinking mode → ${label}，已保存到模型档案「${j.active_preset || ''}」，立即生效。`);
     })
@@ -6529,11 +6544,11 @@ function setQuickThinking(mode) {
 
 function loadQuickThinkingFromBackend() {
   api('/api/settings/think')
-    .then(r => r.json())
     .then(j => {
       if (!j || j.success === false) return;
       quickThinkingEffort = !j.enabled ? 'off' : (j.level === 'high' ? 'extended' : 'standard');
       updateQuickModeUI();
+      renderThinkToggleState();
     })
     .catch(() => {});
 }
