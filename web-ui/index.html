@@ -2815,8 +2815,8 @@
   <!-- PROCESS LOG -->
   <div style="display:flex;flex-direction:column;flex:1 1 320px;overflow:hidden;min-height:280px">
     <div style="padding:8px 16px 6px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);flex-shrink:0">
-      <a href="javascript:void(0)" onclick="openProcessLogFile()" style="font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);text-decoration:none;cursor:pointer;hover:color:var(--brand)">Process Log</a>
-      <button onclick="clearProcessLog()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:10px;font-family:inherit">✕ clear</button>
+      <a href="javascript:void(0)" onclick="openProcessLogFile()" style="font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);text-decoration:none;cursor:pointer;hover:color:var(--brand)">进程日志</a>
+      <button onclick="clearProcessLog()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:10px;font-family:inherit">✕ 清除</button>
     </div>
     <div id="process-log" style="flex:1;overflow-y:auto;padding:8px 12px;font-size:11px;line-height:1.7;font-family:'JetBrains Mono',monospace">
       <div style="color:var(--muted);text-align:center;padding:20px 0;opacity:0.5">Waiting for activity...</div>
@@ -4794,7 +4794,7 @@ function renderChatMessages() {
             <div class="thinking-dot"></div>
           </div>
           <div style="margin-top:8px">
-            <button class="skill-install-btn" style="font-size:10px;padding:3px 9px" onclick="toggleCurrentProcess()">Process</button>
+            <button class="skill-install-btn" style="font-size:10px;padding:3px 9px" onclick="toggleCurrentProcess()">过程</button>
             <div id="current-turn-process" style="display:none;margin-top:8px;border:1px solid var(--line);border-radius:10px;background:var(--panel-2);padding:8px;max-height:220px;overflow:auto;font-size:11px;line-height:1.6"></div>
           </div>
         </div>
@@ -4819,7 +4819,7 @@ function renderProcessPill(entries) {
   const id = 'proc_' + Math.random().toString(36).slice(2);
   return `
     <div style="margin-top:8px">
-      <button class="skill-install-btn" style="font-size:10px;padding:3px 9px" onclick="togglePL('${id}')">Process</button>
+      <button class="skill-install-btn" style="font-size:10px;padding:3px 9px" onclick="togglePL('${id}')">过程</button>
       <div id="${id}" style="display:none;margin-top:8px;border:1px solid var(--line);border-radius:10px;background:var(--panel-2);padding:8px;max-height:220px;overflow:auto;font-size:11px;line-height:1.6">
         ${formatProcessLines(entries)}
       </div>
@@ -4828,7 +4828,7 @@ function renderProcessPill(entries) {
 }
 
 function formatProcessLines(entries) {
-  if (!entries || entries.length === 0) return '<div style="color:var(--muted)">No process details.</div>';
+  if (!entries || entries.length === 0) return '<div style="color:var(--muted)">暂无过程详情</div>';
   const TYPE_COLORS = {
     user: 'var(--text)', think: '#388bfd', tool: '#e3b341',
     result: '#bc8cff', error: 'var(--red)', final: '#56d364',
@@ -10190,9 +10190,9 @@ async function bgtRefreshOpenPanel() {
 
     <!-- Process journal -->
     <div>
-      <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);margin-bottom:6px">Process Log <span style="font-weight:400;opacity:0.6">(latest first)</span></div>
+      <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);margin-bottom:6px">进程日志 <span style="font-weight:400;opacity:0.6">(最新在前)</span></div>
       <div style="font-family:monospace;font-size:11px;border:1px solid var(--line);border-radius:10px;padding:6px 8px;max-height:300px;overflow-y:auto">
-        ${journalHTML || '<div style="color:var(--muted);padding:8px">No entries yet.</div>'}
+        ${journalHTML || '<div style="color:var(--muted);padding:8px">暂无记录</div>'}
       </div>
     </div>
 
