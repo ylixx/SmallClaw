@@ -210,7 +210,36 @@ import { FlowsManager } from './flows-manager';
 
 // ─── Config ────────────────────────────────────────────────────────────────────
 
+// Deployment hardening: the gateway may be launched from any directory
+// (service manager, launcher script, another machine). Derive the project root
+// from __dirname and normalize process.cwd() to it, so the ~20 call sites that
+// assume cwd == project root (soul-loader, session, task-store, skills, vault,
+// scheduler, ...) keep resolving correctly regardless of where it was launched.
+const PROJECT_ROOT = path.join(__dirname, '..', '..');
+try {
+  if (path.resolve(process.cwd()) !== path.resolve(PROJECT_ROOT)) {
+    const before = process.cwd();
+    process.chdir(PROJECT_ROOT);
+    console.log(`[v2] normalized cwd: ${before} -> ${PROJECT_ROOT}`);
+  }
+} catch (err: any) {
+  console.warn(`[v2] failed to normalize cwd: ${err?.message || err}`);
+}
+
 const config = getConfig().getConfig();
+// Deployment check: if workspace.path points at a location whose parent dir
+// does not exist, the config.json was most likely copied from another machine
+// (absolute path baked in). Warn loudly so it can be fixed on first boot.
+{
+  const ws = String((config as any)?.workspace?.path || '').trim();
+  if (ws) {
+    const parent = path.dirname(ws);
+    if (!fs.existsSync(parent)) {
+      console.warn(`[v2] WARNING: workspace.path 的父目录不存在: "${parent}"`);
+      console.warn(`[v2] WARNING: 产物将写入无效位置。请检查 .smallclaw/config.json 的 workspace.path（可能来自其他机器），或设置环境变量 SMALLCLAW_WORKSPACE_DIR 指向本机工作区。当前 workspace.path=${ws}`);
+    }
+  }
+}
 const CONFIG_DIR_PATH = getConfig().getConfigDir();
 const flowsManager = new FlowsManager(CONFIG_DIR_PATH);
 const PORT = config.gateway.port || (process.env.GATEWAY_PORT ? parseInt(process.env.GATEWAY_PORT, 10) : 18789);

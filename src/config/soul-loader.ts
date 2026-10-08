@@ -3,16 +3,19 @@ import path from 'path';
 import os from 'os';
 import { resolveSkillsRoot } from '../skills/store.js';
 
-// Prefer config next to the project, fall back to home
-const PROJECT_CONFIG = path.join(process.cwd(), '.smallclaw');
+// Prefer config next to the project, fall back to home.
+// Project root is derived from __dirname (code location), NOT process.cwd(),
+// so the gateway keeps working no matter where it is launched from.
+const PROJECT_ROOT = path.join(__dirname, '..', '..');
+const PROJECT_CONFIG = path.join(PROJECT_ROOT, '.smallclaw');
 const CONFIG_DIR = fs.existsSync(PROJECT_CONFIG) ? PROJECT_CONFIG : path.join(os.homedir(), '.smallclaw');
 const SOUL_PATHS = [
   path.join(CONFIG_DIR, 'soul.md'),
-  path.join(process.cwd(), 'src', 'config', 'soul.md'),
+  path.join(PROJECT_ROOT, 'src', 'config', 'soul.md'),
 ];
 const MEMORY_PATHS = [
   path.join(CONFIG_DIR, 'memory.md'),
-  path.join(process.cwd(), 'src', 'config', 'memory.md'),
+  path.join(PROJECT_ROOT, 'src', 'config', 'memory.md'),
 ];
 const SKILLS_DIR = resolveSkillsRoot();
 

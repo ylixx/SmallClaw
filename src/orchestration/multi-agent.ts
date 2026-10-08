@@ -169,7 +169,7 @@ export interface EligibilityResult {
 }
 
 function getConfigDir(): string {
-  const project = path.join(process.cwd(), '.smallclaw');
+  const project = path.join(__dirname, '..', '..', '.smallclaw');
   const home = path.join(os.homedir(), '.smallclaw');
   return fs.existsSync(project) ? project : home;
 }

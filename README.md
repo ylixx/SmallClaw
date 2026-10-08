@@ -178,6 +178,13 @@ SmallClaw controls a real browser via Playwright — not just opening a URL for 
    ```
    (Use the Windows Task Scheduler GUI and set the action to run that command)
 
+> **多机器部署（工作区路径）**：工作区默认是 `项目根/workspace`（由代码位置推导，与启动目录无关）。
+> `.smallclaw/config.json` 里的 `workspace.path` 会覆盖默认值——**不要把其他机器上的
+> `config.json` 一起复制**（其中的绝对路径会让产物写到错误位置）。首次在新机器运行前：
+> 删除 `workspace` 字段、或设置环境变量 `SMALLCLAW_WORKSPACE_DIR` 指向本机工作区。
+> 启动日志若出现 `WARNING: workspace.path 的父目录不存在` 即说明路径配置来自其他机器。
+> 知识库数据目录 `knowledge/`（含用户文档与索引）不入库，在新机器上按需导入即可。
+
 #### macOS
 1. Clone the repository: `git clone https://github.com/xposemarket/smallclaw.git && cd smallclaw`
 2. Install dependencies: `npm install`
