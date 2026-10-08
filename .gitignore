@@ -117,5 +117,13 @@ backup_*/
 # --- WORKBUDDY WORKSPACE DATA ---
 .workbuddy/
 
-# local knowledge base runtime data (user documents + index)
-knowledge/
+# --- KNOWLEDGE BASE ---
+# 数据目录：corpus 原始文件 + index 分块索引，均为本地产物（含用户隐私文档），不入库。
+# 目录结构（.gitkeep / README.md）入库，让其他电脑 clone 后知道数据放哪、如何导入。
+knowledge/corpus/*
+knowledge/index/*
+!knowledge/corpus/
+!knowledge/index/
+!knowledge/corpus/.gitkeep
+!knowledge/index/.gitkeep
+!knowledge/README.md

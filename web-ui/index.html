@@ -8759,7 +8759,7 @@ function renderKnowledgeList() {
   if (!el) { addProcessEntry('error', 'KB render: #knowledge-list not found'); return; }
   try {
     if (!Array.isArray(knowledgeFiles) || knowledgeFiles.length === 0) {
-      el.innerHTML = '<div style="padding:16px;font-size:12px;color:#aeb9cb">知识库为空。<br>点上方「选择文件」或输入工作区文件名入库。</div>';
+      el.innerHTML = '<div style="padding:16px;font-size:12px;color:#aeb9cb">知识库为空。<br>点上方「选择文件」或输入工作区文件名入库；<br>也可把 PDF/文档放入 <code style="color:#6ea8fe">knowledge/corpus/</code> 后刷新。</div>';
       return;
     }
     let html = '';
