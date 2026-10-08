@@ -2212,6 +2212,17 @@
   .md-table th, .md-table td { border: 1px solid var(--line); padding: 4px 10px; font-size: 12px; text-align: left; vertical-align: top; }
   .md-table th { background: var(--panel-2); font-weight: 700; }
   .md-code { display: block; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin: 8px 0; overflow-x: auto; font-size: 12px; line-height: 1.5; font-family: 'IBM Plex Mono', Consolas, monospace; white-space: pre; }
+  .md-code code[class*="lang-"]::before { display: block; font-family: inherit; font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); border-bottom: 1px solid var(--line); padding-bottom: 4px; margin-bottom: 6px; }
+  .md-code code.lang-python::before { content: 'python'; }
+  .md-code code.lang-js::before, .md-code code.lang-javascript::before { content: 'javascript'; }
+  .md-code code.lang-bash::before, .md-code code.lang-sh::before { content: 'bash'; }
+  .md-code code.lang-json::before { content: 'json'; }
+  .md-code code.lang-html::before { content: 'html'; }
+  .md-code code.lang-css::before { content: 'css'; }
+  .md-code code.lang-typescript::before, .md-code code.lang-ts::before { content: 'typescript'; }
+  .md-code code.lang-sql::before { content: 'sql'; }
+  .md-task { list-style: none; padding-left: 4px; }
+  .md-task-item input[type=checkbox] { margin-right: 6px; vertical-align: -1px; }
   .msg-content code { background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; font-size: 11.5px; font-family: 'IBM Plex Mono', Consolas, monospace; }
   .md-list { margin: 6px 0; padding-left: 22px; }
   .md-list li { margin: 2px 0; }
@@ -4448,19 +4459,31 @@ function toggleSteps(id) {
 function mdInline(text) {
   const out = [];
   const rest = String(text || '');
-  const TOKEN = /\*\*([^*]+?)\*\*|`([^`]+?)`|\*([^*]+?)\*|\[([^\]]+)\]\(([^)]+)\)/g;
+  const TOKEN = /\*\*([^*]+?)\*\*|~~([^~]+?)~~|`([^`]+?)`|\*([^*]+?)\*|!\[([^\]]*)\]\(([^)]+)\)|\[([^\]]+)\]\(([^)]+)\)/g;
   let last = 0, m;
   while ((m = TOKEN.exec(rest))) {
     if (m.index > last) out.push(escHtml(rest.slice(last, m.index)));
     if (m[1] !== undefined) out.push('<strong>' + escHtml(m[1]) + '</strong>');
-    else if (m[2] !== undefined) out.push('<code>' + escHtml(m[2]) + '</code>');
-    else if (m[3] !== undefined) out.push('<em>' + escHtml(m[3]) + '</em>');
-    else if (m[4] !== undefined) {
-      const url = String(m[5] || '').trim();
+    else if (m[2] !== undefined) out.push('<del>' + escHtml(m[2]) + '</del>');
+    else if (m[3] !== undefined) out.push('<code>' + escHtml(m[3]) + '</code>');
+    else if (m[4] !== undefined) out.push('<em>' + escHtml(m[4]) + '</em>');
+    else if (m[5] !== undefined) {
+      // Image ![alt](url) — only allow http(s) images; render inline img.
+      const imgUrl = String(m[6] || '').trim();
+      const safeImg = /^https?:\/\//i.test(imgUrl) ? imgUrl : '';
+      if (safeImg) {
+        const alt = String(m[5] || '');
+        out.push('<img src="' + escHtml(safeImg) + '" alt="' + escHtml(alt) + '" loading="lazy" style="max-width:100%;border-radius:6px;margin:4px 0;">');
+      } else {
+        out.push(escHtml('![' + m[5] + '](' + m[6] + ')'));
+      }
+    }
+    else if (m[7] !== undefined) {
+      const url = String(m[8] || '').trim();
       const safe = /^(https?:|mailto:)/i.test(url) ? url : '';
       out.push(safe
-        ? '<a href="' + escHtml(safe) + '" target="_blank" rel="noopener noreferrer">' + escHtml(m[4]) + '</a>'
-        : escHtml(m[4] + ' (' + url + ')'));
+        ? '<a href="' + escHtml(safe) + '" target="_blank" rel="noopener noreferrer">' + escHtml(m[7]) + '</a>'
+        : escHtml(m[7] + ' (' + url + ')'));
     }
     last = m.index + m[0].length;
   }
@@ -4477,8 +4500,10 @@ function renderMarkdown(text) {
   if (!raw.trim()) return '';
   // Extract fenced code blocks first so their contents are never parsed as markdown.
   const fenced = [];
-  let body = raw.replace(/```[^\n]*\n([\s\S]*?)```/g, (m, code) => {
-    fenced.push('<pre class="md-code"><code>' + escHtml(code.replace(/\n$/, '')) + '</code></pre>');
+  let body = raw.replace(/```([^\n]*)\n([\s\S]*?)```/g, (m, lang, code) => {
+    const langCls = String(lang || '').trim().replace(/[^a-zA-Z0-9_+-]/g, '');
+    const codeHtml = escHtml(code.replace(/\n$/, ''));
+    fenced.push('<pre class="md-code"><code class="' + (langCls ? 'lang-' + langCls : '') + '">' + codeHtml + '</code></pre>');
     return '\u0000' + (fenced.length - 1) + '\u0000';
   });
   const lines = body.split('\n');
@@ -4492,8 +4517,10 @@ function renderMarkdown(text) {
     const line = lines[i];
     const ph = line.match(/^\u0000(\d+)\u0000$/);
     if (ph) { flushPara(); html.push(fenced[+ph[1]]); continue; }
-    const h = line.match(/^(#{1,5})\s+(.*)$/);
+    const h = line.match(/^(#{1,6})\s+(.*)$/);
     if (h) { flushPara(); html.push('<h' + h[1].length + ' class="md-h">' + mdInline(h[2]) + '</h' + h[1].length + '>'); continue; }
+    const hr = line.trim().match(/^([-*_])\1{2,}\s*$/);
+    if (hr) { flushPara(); html.push('<hr class="md-hr">'); continue; }
     if (line.trim().startsWith('|') && i + 1 < lines.length && isTableSep(lines[i + 1])) {
       flushPara();
       const hdr = splitTableRow(line);
@@ -4504,6 +4531,20 @@ function renderMarkdown(text) {
       html.push('<table class="md-table"><thead><tr>' + hdr.map(c => '<th>' + mdInline(c) + '</th>').join('') + '</tr></thead><tbody>'
         + rows.map(r => '<tr>' + r.map(c => '<td>' + mdInline(c) + '</td>').join('') + '</tr>').join('')
         + '</tbody></table>');
+      continue;
+    }
+    const task = line.match(/^\s*[-*]\s+\[( |x|X)\]\s+(.*)$/);
+    if (task) {
+      flushPara();
+      const items = [{ checked: /[xX]/.test(task[1]), text: task[2] }];
+      while (i + 1 < lines.length) {
+        const n = lines[i + 1].match(/^\s*[-*]\s+\[( |x|X)\]\s+(.*)$/);
+        if (!n) break;
+        items.push({ checked: /[xX]/.test(n[1]), text: n[2] }); i++;
+      }
+      html.push('<ul class="md-list md-task">' + items.map(it =>
+        '<li class="md-task-item"><input type="checkbox" disabled' + (it.checked ? ' checked' : '') + '> <span>' + mdInline(it.text) + '</span></li>'
+      ).join('') + '</ul>');
       continue;
     }
     const ul = line.match(/^\s*[-*]\s+(.*)$/);

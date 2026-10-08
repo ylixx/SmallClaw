@@ -1355,6 +1355,20 @@ function buildTools() {
     {
       type: 'function',
       function: {
+        name: 'run_code',
+        description: 'Execute a short code snippet for REAL and return its actual output. Use this whenever the user asks "write code and show the result", "what does this script output", or any code whose output must be真实运行结果. Supports language "python" (and "javascript"/"node"). The code runs in the workspace directory with a 30s timeout; stdout+stderr (up to 3000 chars) are returned verbatim. Never invent an output — run the code.',
+        parameters: {
+          type: 'object', required: ['language', 'code'],
+          properties: {
+            language: { type: 'string', enum: ['python', 'javascript', 'node'], description: 'Runtime language. python uses the configured SMALLCLAW_PYTHON; javascript/node uses node.' },
+            code: { type: 'string', description: 'The code to execute. For python, write a complete script (imports included).' },
+          },
+        },
+      },
+    },
+    {
+      type: 'function',
+      function: {
         name: 'start_task',
         description: 'Start a multi-step task (browser automation, complex file ops) that runs with a sliding context window for 20+ steps.',
         parameters: {
@@ -2158,6 +2172,62 @@ async function executeToolImpl(name: string, args: any, workspacePath: string, s
 
   try {
     switch (name) {
+      case 'run_code': {
+        // Real code execution: write the snippet to a temp file in the
+        // workspace and run it, returning actual stdout/stderr. Never let the
+        // model invent a "result" — the tool returns the verbatim output.
+        const language = String(args.language || 'python').toLowerCase();
+        const code = String(args.code || '');
+        if (!code.trim()) return { name, args, result: 'No code provided.', error: true };
+        const runPy = language === 'python';
+        const runJs = language === 'javascript' || language === 'node';
+        if (!runPy && !runJs) {
+          return { name, args, result: `Unsupported language "${language}" (use python, javascript, or node).`, error: true };
+        }
+        const osMod = await import('os');
+        const { execFile } = await import('child_process');
+        const cryptoMod = await import('crypto');
+        const ext = runPy ? '.py' : '.js';
+        const tmpFile = path.join(
+          osMod.tmpdir(),
+          `smallclaw_run_${cryptoMod.randomBytes(4).toString('hex')}${ext}`,
+        );
+        fs.writeFileSync(tmpFile, code, 'utf-8');
+        const pythonBin = (process.env.SMALLCLAW_PYTHON || '').trim() || 'python';
+        const bin = runPy ? pythonBin : 'node';
+        let stdout = '';
+        let stderr = '';
+        let timedOut = false;
+        try {
+          await new Promise<void>((resolve, reject) => {
+            execFile(
+              bin,
+              [tmpFile],
+              { cwd: workspacePath, timeout: 30_000, maxBuffer: 8 * 1024 * 1024, windowsHide: true },
+              (err, so, se) => {
+                if (err) {
+                  // timeout / non-zero exit are reported via stderr below
+                  if ((err as any).killed) timedOut = true;
+                }
+                stdout = String(so || '');
+                stderr = String(se || '');
+                resolve();
+              },
+            );
+          });
+        } catch (e) {
+          stderr += String((e as Error)?.message || e);
+        } finally {
+          try { fs.unlinkSync(tmpFile); } catch { /* best effort */ }
+        }
+        const outLines: string[] = [];
+        if (timedOut) outLines.push('[run_code] Timed out after 30s (result truncated).');
+        if (stdout.trim()) outLines.push(stdout.trim());
+        if (stderr.trim()) outLines.push(stderr.trim());
+        const result = outLines.join('\n').slice(0, 3000) || '(no output)';
+        return { name, args, result, error: !!stderr.trim() && !stdout.trim() };
+      }
+
       case 'list_files': {
         // File query tool: summary header + entries. Supports pattern filter,
         // sort (size/name/mtime) and max_entries truncation so a 2B model gets
