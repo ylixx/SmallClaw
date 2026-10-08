@@ -2231,7 +2231,7 @@
     <button class="mode-btn active" id="btn-chat" onclick="setMode('chat')">Chat</button>
     <button class="mode-btn" id="btn-bgtasks" onclick="setMode('bgtasks')">Tasks</button>
     <button class="mode-btn" id="btn-schedule" onclick="setMode('schedule')">Schedule</button>
-    <button class="mode-btn" id="btn-knowledge" onclick="setSidebarTab('knowledge')">知识库</button>
+    <button class="mode-btn" id="btn-knowledge" onclick="setKnowledgeMode()">知识库</button>
   </div>
 
   <div class="status-bar">
@@ -4078,6 +4078,8 @@ function setMode(mode) {
   if (bgtBtn) bgtBtn.classList.toggle('active', mode === 'bgtasks');
   const schedBtn = document.getElementById('btn-schedule');
   if (schedBtn) schedBtn.classList.toggle('active', mode === 'schedule');
+  const kbBtn = document.getElementById('btn-knowledge');
+  if (kbBtn) kbBtn.classList.toggle('active', mode === 'knowledge');
   // Toggle views
   document.getElementById('chat-view').style.display = mode === 'chat' ? 'flex' : 'none';
   const bgtView = document.getElementById('bgtasks-view');
@@ -4092,6 +4094,17 @@ function setMode(mode) {
   // Load data when switching to respective views
   if (mode === 'bgtasks') refreshBgTasks();
   if (mode === 'schedule') refreshSchedules();
+}
+
+// Knowledge base is a chat-mode sidebar view: restore the main view
+// (aside/right panel are hidden by setMode in other modes) then open it.
+function setKnowledgeMode() {
+  if (currentMode !== 'chat') setMode('chat');
+  setSidebarTab('knowledge');
+  const chatBtn = document.getElementById('btn-chat');
+  if (chatBtn) chatBtn.classList.remove('active');
+  const kbBtn = document.getElementById('btn-knowledge');
+  if (kbBtn) kbBtn.classList.add('active');
 }
 
 // --- Heartbeat / Tasks System -----------------------------------------------
