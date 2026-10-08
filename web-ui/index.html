@@ -2399,9 +2399,10 @@
             <button class="quick-mode-opt" id="rigor-fast" onclick="setQuickSearchRigor('fast')">Fast</button>
             <button class="quick-mode-opt" id="rigor-verified" onclick="setQuickSearchRigor('verified')">Verified</button>
             <button class="quick-mode-opt" id="rigor-strict" onclick="setQuickSearchRigor('strict')">Strict</button>
-            <div class="quick-mode-title" style="margin-top:8px">Thinking Effort</div>
-            <button class="quick-mode-opt" id="think-standard" onclick="setQuickThinkingEffort('standard')">Standard</button>
-            <button class="quick-mode-opt" id="think-extended" onclick="setQuickThinkingEffort('extended')">Extended</button>
+            <div class="quick-mode-title" style="margin-top:8px">Thinking Mode</div>
+            <button class="quick-mode-opt" id="think-off" onclick="setQuickThinking('off')" title="不思考：小模型/快响应（默认）">Off</button>
+            <button class="quick-mode-opt" id="think-standard" onclick="setQuickThinking('standard')" title="标准思考">Standard</button>
+            <button class="quick-mode-opt" id="think-extended" onclick="setQuickThinking('extended')" title="深度思考（更慢）">Extended</button>
           </div>
 	        </div>
 	      </div>
@@ -3864,7 +3865,7 @@ let lastTurnKind = '-';
 let settingsTab = 'system';
 let liveTaskSteps = [];
 let quickSearchRigor = 'verified';
-let quickThinkingEffort = localStorage.getItem('smallclaw_quick_thinking_effort') || 'standard';
+let quickThinkingEffort = localStorage.getItem('smallclaw_quick_thinking_effort') || 'off';
 let queuedPrompts = [];
 const MAX_QUEUED_PROMPTS = 8;
 let currentPreflightStatus = '';
@@ -6447,6 +6448,7 @@ async function loadSearchSettingsSummary() {
     quickSearchRigor = s.search_rigor || 'verified';
     updateQuickModeUI();
   } catch {}
+  loadQuickThinkingFromBackend();
 }
 
 function updateQuickModeUI() {
@@ -6456,7 +6458,7 @@ function updateQuickModeUI() {
     const el = document.getElementById(`rigor-${v}`);
     if (el) el.classList.toggle('active', quickSearchRigor === v);
   });
-  ['standard', 'extended'].forEach(v => {
+  ['off', 'standard', 'extended'].forEach(v => {
     const el = document.getElementById(`think-${v}`);
     if (el) el.classList.toggle('active', quickThinkingEffort === v);
   });
@@ -6506,11 +6508,34 @@ async function setQuickSearchRigor(level) {
   }
 }
 
-function setQuickThinkingEffort(level) {
-  quickThinkingEffort = level === 'extended' ? 'extended' : 'standard';
-  localStorage.setItem('smallclaw_quick_thinking_effort', quickThinkingEffort);
-  updateQuickModeUI();
-  addProcessEntry('info', `Thinking effort set to ${quickThinkingEffort} (UI preference).`);
+function setQuickThinking(mode) {
+  const payload = mode === 'off'
+    ? { enabled: false }
+    : { enabled: true, level: mode === 'extended' ? 'high' : 'medium' };
+  api('/api/settings/think', { method: 'POST', body: JSON.stringify(payload) })
+    .then(r => r.json())
+    .then(j => {
+      if (!j || j.success === false) throw new Error((j && j.error) || 'failed');
+      quickThinkingEffort = mode === 'off' ? 'off' : (mode === 'extended' ? 'extended' : 'standard');
+      localStorage.setItem('smallclaw_quick_thinking_effort', quickThinkingEffort);
+      updateQuickModeUI();
+      const label = mode === 'off' ? 'Off (不思考)' : (mode === 'extended' ? 'Extended (深度思考)' : 'Standard (标准思考)');
+      addProcessEntry('info', `Thinking mode → ${label}，已保存到模型档案「${j.active_preset || ''}」，立即生效。`);
+    })
+    .catch(err => {
+      addProcessEntry('error', `Failed to set thinking mode: ${err.message}`);
+    });
+}
+
+function loadQuickThinkingFromBackend() {
+  api('/api/settings/think')
+    .then(r => r.json())
+    .then(j => {
+      if (!j || j.success === false) return;
+      quickThinkingEffort = !j.enabled ? 'off' : (j.level === 'high' ? 'extended' : 'standard');
+      updateQuickModeUI();
+    })
+    .catch(() => {});
 }
 
 function setSettingsTab(tab) {

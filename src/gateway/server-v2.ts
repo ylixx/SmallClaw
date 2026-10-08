@@ -9479,6 +9479,49 @@ app.post('/api/settings/model', (req, res) => {
   res.json({ success: true, model: getConfig().getConfig().models.primary });
 });
 
+// GET /api/settings/think — active model preset's thinking (think) config
+app.get('/api/settings/think', (_req, res) => {
+  try {
+    const cfg = getConfig().getConfig() as any;
+    const activeId = String(cfg.llm?.active_preset || '').trim();
+    const preset = cfg.llm?.presets?.[activeId] || {};
+    const t = preset.think;
+    let enabled = false;
+    let level: 'low' | 'medium' | 'high' = 'medium';
+    if (t === true || t === 'high') { enabled = true; level = 'high'; }
+    else if (t === 'medium') { enabled = true; level = 'medium'; }
+    else if (t === 'low') { enabled = true; level = 'low'; }
+    res.json({ success: true, active_preset: activeId, enabled, level });
+  } catch (err: any) {
+    res.json({ success: false, error: err?.message || String(err) });
+  }
+});
+
+// POST /api/settings/think — set think for the active preset (takes effect
+// immediately: handleChat reads the preset's think on every turn).
+app.post('/api/settings/think', (req, res) => {
+  try {
+    const { enabled, level } = req.body || {};
+    const cm = getConfig();
+    const cfg = cm.getConfig() as any;
+    const activeId = String(cfg.llm?.active_preset || '').trim();
+    if (!activeId) { res.json({ success: false, error: 'no active preset' }); return; }
+    const presets = { ...(cfg.llm?.presets || {}) };
+    const preset = { ...(presets[activeId] || {}) };
+    if (enabled) {
+      const lvl = level === 'low' || level === 'high' ? level : 'medium';
+      preset.think = lvl;
+    } else {
+      preset.think = false;
+    }
+    presets[activeId] = preset;
+    cm.updateConfig({ llm: { ...(cfg.llm || {}), presets } } as any);
+    res.json({ success: true, active_preset: activeId, enabled: !!enabled, level: enabled ? (preset.think || 'medium') : false });
+  } catch (err: any) {
+    res.json({ success: false, error: err?.message || String(err) });
+  }
+});
+
 // Fetch available Ollama models (proxies Ollama /api/tags)
 app.get('/api/ollama/models', async (_req, res) => {
   try {
