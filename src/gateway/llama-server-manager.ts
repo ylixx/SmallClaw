@@ -117,11 +117,16 @@ export class LlamaServerManager {
       '--host', '127.0.0.1',
       '--port', String(this.port),
       '-ngl', String(server.ngl ?? 99),
-      '--ctx-size', String(server.ctx_size ?? 49152),
       '--cache-type-k', 'q8_0',
       '--cache-type-v', 'q8_0',
-      '--reasoning', 'off', // REQUIRED for Qwen3: otherwise it emits only thinking
     ];
+    // Context size follows the preset; when unset, llama.cpp uses the model's
+    // native context. Deliberately no hard-coded default here.
+    if (server.ctx_size) args.push('--ctx-size', String(server.ctx_size));
+    // Reasoning mode is model-specific (Qwen3 needs 'off'); only pass when the
+    // preset configures it, never force it on every model.
+    if (server.reasoning === 'off') args.push('--reasoning', 'off');
+    if (server.reasoning === 'on') args.push('--reasoning', 'on');
     if (server.mmproj_path) args.push('--mmproj', server.mmproj_path);
     if (server.alias) args.push('--alias', server.alias);
 

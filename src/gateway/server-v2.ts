@@ -2038,9 +2038,9 @@ function normalizeToolArgs(rawArgs: any): any {
 const TEXT_SNAPSHOT_MAX_BYTES = 200_000;
 
 // Max chars of a file's content injected into the model context when the system
-// reads a FILE_ANALYSIS target on the model's behalf (MiniCPM5-2B does not
-// reliably issue tool calls itself). Tail-heavy: "last line / last record"
-// questions need the end of the file.
+// reads a FILE_ANALYSIS target on the model's behalf (small local models often
+// do not reliably issue tool calls themselves). Tail-heavy: "last line / last
+// record" questions need the end of the file.
 const ANALYSIS_INJECT_MAX_CHARS = 16_000;
 
 // Resolve the file the user is most likely asking about in a FILE_ANALYSIS
@@ -3440,7 +3440,7 @@ const TOOL_ARG_PARSE_RETRY_HINT =
  *   budget = clamp(window * 0.5, 8000, 60000)
  * Window sources, in priority order:
  *   1. preset.context_window   (explicit, user-configurable per model profile)
- *   2. preset.server.ctx_size  (local llama.cpp presets, e.g. 49152)
+ *   2. preset.server.ctx_size  (local llama.cpp presets; unset = model native)
  *   3. 131072 default for cloud OpenAI-compatible models (128K+ modern models)
  * An explicit SMALLCLAW_HISTORY_BUDGET_TOKENS env var overrides everything, so
  * nothing is hard-locked: a 128K model gets a large history, a 48K local model
@@ -4963,8 +4963,8 @@ RULES:
 
   if (fileOpV2Active && fileOpType === 'FILE_ANALYSIS') {
     // FILE_ANALYSIS now runs on the PRIMARY model, with the system performing
-    // the file read on the model's behalf: the active model (MiniCPM5-2B) does
-    // not reliably issue tool calls on its own, so the user's rule applies —
+    // the file read on the model's behalf: small local models often do not
+    // reliably issue tool calls on their own, so the user's rule applies —
     // when the model can't complete a task alone, call tools to complete it.
     // read_file / doc_read handle PDF & Office files, so the model gets the
     // real file content in context and can answer (e.g. "the last line of
@@ -9646,7 +9646,7 @@ function presetSummary(preset: any, active: boolean): any {
       mmproj_path: preset.server.mmproj_path || '',
       alias: preset.server.alias || '',
       ngl: preset.server.ngl ?? 99,
-      ctx_size: preset.server.ctx_size ?? 49152,
+      ctx_size: preset.server.ctx_size, // unset → model's native context (follows the model)
     };
   }
   return out;

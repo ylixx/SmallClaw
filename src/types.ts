@@ -456,7 +456,8 @@ export interface ModelPresetServer {
   mmproj_path?: string;    // optional multimodal projector (*.gguf)
   alias?: string;          // model alias exposed by llama-server
   ngl?: number;            // GPU layers offloaded (default 99)
-  ctx_size?: number;       // context size (default 49152)
+  ctx_size?: number;       // context size; unset = model's native context (follows the model)
+  reasoning?: 'off' | 'on'; // llama.cpp --reasoning; Qwen3 needs 'off' (thinking-free output)
 }
 
 /** A saved model configuration the user can switch to with one click. */

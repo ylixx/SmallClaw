@@ -3114,7 +3114,7 @@
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
               <div>
                 <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px">上下文 (ctx)</label>
-                <input id="preset-ctx" type="number" value="49152" style="width:100%;border:1px solid var(--line);border-radius:10px;padding:8px;font-size:12px" />
+                <input id="preset-ctx" type="number" placeholder="留空 = 跟随模型原生上下文" style="width:100%;border:1px solid var(--line);border-radius:10px;padding:8px;font-size:12px" />
               </div>
               <div>
                 <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px">GPU 层数 (-ngl)</label>
@@ -6906,7 +6906,7 @@ function openPresetEditor(id) {
     setV('preset-model', '');
     setV('preset-model-path', '');
     setV('preset-mmproj-path', '');
-    setV('preset-ctx', '49152');
+    setV('preset-ctx', '');
     setV('preset-ngl', '99');
     setV('preset-openai-key', '');
     const sel = document.getElementById('preset-provider');
@@ -6970,7 +6970,7 @@ async function savePreset() {
         model_path: gv('preset-model-path'),
         mmproj_path: gv('preset-mmproj-path') || undefined,
         ngl: Number(gv('preset-ngl')) || 99,
-        ctx_size: Number(gv('preset-ctx')) || 49152,
+        ctx_size: Number(gv('preset-ctx')) || undefined, // unset = model's native context
       };
       if (m) preset.server.alias = m;
     }

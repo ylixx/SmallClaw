@@ -118,7 +118,8 @@ export const DEFAULT_CONFIG: SmallClawConfig = {
     },
     // Saved model presets the user can switch between with one click.
     // loadConfig deep-merges these with config.json's llm.presets.
-    active_preset: 'qwen9b-vision',
+    // No active_preset by default: deployments without a config.json fall back
+    // to the provider default instead of a preset whose model path may not exist.
     presets: {
       'qwen9b-vision': {
         id: 'qwen9b-vision',
@@ -131,13 +132,16 @@ export const DEFAULT_CONFIG: SmallClawConfig = {
           },
         },
         server: {
-          model_path:  process.env.LLAMA_CPP_MODEL_PATH
-            ?? 'D:\\models\\Qwen3.8-9B-heretic-uncensored.Q4_K_M\\Qwen3.8-9B-heretic-uncensored.Q4_K_M.gguf',
-          mmproj_path: process.env.LLAMA_CPP_MMPROJ_PATH
-            ?? 'D:\\models\\Qwen3.8-9B-heretic-uncensored.Q4_K_M\\mmproj-Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-BF16.gguf',
+          // NO machine-specific defaults: absolute model paths belong to the
+          // local .smallclaw/config.json (git-ignored), not to DEFAULT_CONFIG.
+          // Set LLAMA_CPP_MODEL_PATH / LLAMA_CPP_MMPROJ_PATH to override.
+          model_path:  process.env.LLAMA_CPP_MODEL_PATH ?? '',
+          mmproj_path: process.env.LLAMA_CPP_MMPROJ_PATH ?? '',
           alias:     'qwen3.8-9b',
           ngl:       99,
-          ctx_size:  49152,
+          // Qwen3 family: llama.cpp must run with --reasoning off or it only
+          // emits thinking. Kept on this preset only — not applied globally.
+          reasoning: 'off',
         },
         builtin: true,
       },
