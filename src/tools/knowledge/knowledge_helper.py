@@ -366,34 +366,39 @@ def op_clear(root):
     return {'ok': True, 'message': 'knowledge base cleared'}
 
 def main():
-    try:
-        raw = sys.stdin.read()
-        if not raw.strip():
-            print(json.dumps({'ok': False, 'error': 'empty payload'}))
-            return
-        payload = json.loads(raw)
-        op = payload.get('op', '')
-        root = payload.get('knowledge_dir') or DEFAULT_ROOT
-        root = os.path.abspath(root)
-        if op == 'status':
-            out = op_status(root)
-        elif op == 'add':
-            out = op_add(root, payload.get('path') or '', payload.get('name'))
-        elif op == 'search':
-            out = op_search(root, payload.get('query', ''), int(payload.get('top_k', 5)))
-        elif op == 'list':
-            out = op_list(root)
-        elif op == 'get':
-            out = op_get(root, payload.get('name', ''), int(payload.get('max_chunks', 10)))
-        elif op == 'remove':
-            out = op_remove(root, payload.get('name', ''))
-        elif op == 'clear':
-            out = op_clear(root)
-        else:
-            out = {'ok': False, 'error': f'unknown op: {op}'}
-        print(json.dumps(out, ensure_ascii=False))
-    except Exception as e:
-        print(json.dumps({'ok': False, 'error': f'{type(e).__name__}: {e}'}))
+    # Persistent worker mode: read one JSON object per line from stdin,
+    # write one JSON object per line to stdout, stay alive for next request.
+    # Falls back to one-shot mode if stdin is not a pipe (e.g. interactive).
+    for raw in sys.stdin:
+        raw = raw.strip()
+        if not raw:
+            continue
+        try:
+            payload = json.loads(raw)
+            op = payload.get('op', '')
+            root = payload.get('knowledge_dir') or DEFAULT_ROOT
+            root = os.path.abspath(root)
+            if op == 'status':
+                out = op_status(root)
+            elif op == 'add':
+                out = op_add(root, payload.get('path') or '', payload.get('name'))
+            elif op == 'search':
+                out = op_search(root, payload.get('query', ''), int(payload.get('top_k', 5)))
+            elif op == 'list':
+                out = op_list(root)
+            elif op == 'get':
+                out = op_get(root, payload.get('name', ''), int(payload.get('max_chunks', 10)))
+            elif op == 'remove':
+                out = op_remove(root, payload.get('name', ''))
+            elif op == 'clear':
+                out = op_clear(root)
+            else:
+                out = {'ok': False, 'error': f'unknown op: {op}'}
+            sys.stdout.write(json.dumps(out, ensure_ascii=False) + '\n')
+            sys.stdout.flush()
+        except Exception as e:
+            sys.stdout.write(json.dumps({'ok': False, 'error': f'{type(e).__name__}: {e}'}, ensure_ascii=False) + '\n')
+            sys.stdout.flush()
 
 if __name__ == '__main__':
     main()

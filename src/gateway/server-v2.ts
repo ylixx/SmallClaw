@@ -1235,12 +1235,12 @@ function buildTools() {
       type: 'function',
       function: {
         name: 'create_file',
-        description: 'Create a NEW file (fails if it exists).',
+        description: 'Create a NEW file (fails if filename already exists). Requires BOTH "filename" and "content". For LARGE files (HTML reports, long docs > 80 lines or > 3000 chars): do NOT write the entire file in one call — it will get truncated. Instead: (1) create_file with just the skeleton (doctype + head + empty body + closing tags), then (2) use insert_after to append each section one at a time. Always end HTML files with </html>. If the file already exists and you want to create a DIFFERENT new file, choose a new filename — do not reuse the source filename.',
         parameters: {
           type: 'object', required: ['filename', 'content'],
           properties: {
-            filename: { type: 'string', description: 'Name of the new file' },
-            content: { type: 'string', description: 'Content for the new file' },
+            filename: { type: 'string', description: 'Name of the new file, e.g. "report.html". Must not already exist.' },
+            content: { type: 'string', description: 'Full file content. For large files, write only the skeleton first, then use insert_after.' },
           },
         },
       },
@@ -1949,7 +1949,7 @@ function resolveToolFilePath(
   filename: unknown,
 ): { ok: true; path: string } | { ok: false; error: string } {
   const raw = String(filename ?? '').trim();
-  if (!raw) return { ok: false, error: 'Filename required' };
+  if (!raw) return { ok: false, error: 'Missing required parameter "filename". You must pass a filename in the tool call arguments, e.g. {"filename": "report.html", "content": "..."}. Do not retry without it.' };
   if (raw.includes('\0')) return { ok: false, error: 'Invalid filename' };
 
   const resolved = realpathForGuard(path.resolve(String(workspacePath || ''), raw));
@@ -2337,8 +2337,15 @@ async function executeToolImpl(name: string, args: any, workspacePath: string, s
             error: true,
           };
         }
-        if (fs.existsSync(filePath)) return { name, args, result: `"${filename}" already exists. Use replace_lines or insert_after to edit.`, error: true };
-        fs.writeFileSync(filePath, args.content || '', 'utf-8');
+        if (fs.existsSync(filePath)) return { name, args, result: `"${filename}" already exists. If you meant to EDIT this file, use replace_lines or insert_after. If you meant to CREATE A NEW FILE (e.g. a report based on it), choose a different filename (e.g. "report.html") — do NOT reuse the source filename.`, error: true };
+        const content = typeof args.content === 'string' ? args.content : '';
+        if (!content.trim()) return { name, args, result: 'Missing required parameter "content". Pass the full file content as a string, e.g. {"filename": "report.html", "content": "<html>...</html>"}.', error: true };
+        fs.writeFileSync(filePath, content, 'utf-8');
+        // Completeness check: HTML files must end with </html>
+        const lower = filename.toLowerCase();
+        if ((lower.endsWith('.html') || lower.endsWith('.htm')) && !content.trimEnd().endsWith('</html>')) {
+          return { name, args, result: `${filename} created but appears INCOMPLETE: missing closing </html> tag (file has ${content.split('\n').length} lines, ends with: ...${content.slice(-80).replace(/\n/g,' ')}. Use insert_after to append the remaining sections and closing tags, then read_file to verify.`, error: false };
+        }
         return { name, args, result: `${filename} created`, error: false };
       }
 
@@ -3944,6 +3951,28 @@ async function handleChat(
   const browserAdvisorSeenFeedKeys = new Set<string>();
   const orchRuntimeCfg = getOrchestrationConfig();
   const fileOpSettings = resolveFileOpSettings(orchRuntimeCfg as any);
+
+  // 根据当前激活的 provider 自适应文件操作阈值：
+  // 云端 API 大模型（openai / openai_codex）放宽到上限，本地小模型保持保守值，
+  // 用户切档案时无需手动改 config.json。
+  {
+    const rawCfgNow = getConfig().getConfig();
+    const llmNow: any = rawCfgNow.llm || {};
+    const activePresetNow = llmNow.presets?.[String(llmNow.active_preset || '')];
+    const effProviderNow = String(activePresetNow?.provider || llmNow.provider || 'ollama');
+    const isCloud = effProviderNow === 'openai' || effProviderNow === 'openai_codex';
+    if (isCloud) {
+      fileOpSettings.primary_create_max_lines = 400;
+      fileOpSettings.primary_create_max_chars = 40000;
+      fileOpSettings.primary_edit_max_lines = 50;
+      fileOpSettings.primary_edit_max_chars = 4000;
+    } else {
+      fileOpSettings.primary_create_max_lines = 100;
+      fileOpSettings.primary_create_max_chars = 6000;
+      fileOpSettings.primary_edit_max_lines = 20;
+      fileOpSettings.primary_edit_max_chars = 1500;
+    }
+  }
   const fileOpRouterEnabled =
     orchestrationSkillEnabled
     && (orchRuntimeCfg?.enabled ?? false)

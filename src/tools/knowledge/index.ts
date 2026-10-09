@@ -25,25 +25,70 @@ function candidateHelperPaths(): string[] {
   ];
 }
 
-function resolveHelperPath(): string | null {
-  for (const candidate of candidateHelperPaths()) {
-    try {
-      if (fs.existsSync(candidate)) return candidate;
-    } catch { /* try next */ }
-  }
-  return null;
-}
+// ── Cached python path & persistent worker ───────────────────────────────────
+let cachedPython: string | null | undefined;
+let cachedHelper: string | null | undefined;
+let worker: { proc: any; pending: Array<{ resolve: (r: KnowledgeCallResult) => void; timer: NodeJS.Timeout }>; buf: string } | null = null;
 
 function findPython(): string | null {
+  if (cachedPython !== undefined) return cachedPython;
   const env = process.env.SMALLCLAW_PYTHON;
-  if (env && fs.existsSync(env)) return env;
+  if (env && fs.existsSync(env)) { cachedPython = env; return cachedPython; }
   for (const name of ['python', 'python3']) {
     try {
       const r = spawnSync(name, ['-c', 'print(1)'], { timeout: 8000, windowsHide: true });
-      if (r.status === 0 && String(r.stdout || '').trim() === '1') return name;
+      if (r.status === 0 && String(r.stdout || '').trim() === '1') { cachedPython = name; return cachedPython; }
     } catch { /* try next */ }
   }
+  cachedPython = null;
   return null;
+}
+
+function resolveHelperPath(): string | null {
+  if (cachedHelper !== undefined) return cachedHelper;
+  cachedHelper = null;
+  for (const candidate of candidateHelperPaths()) {
+    try { if (fs.existsSync(candidate)) { cachedHelper = candidate; break; } } catch { /* try next */ }
+  }
+  return cachedHelper;
+}
+
+function startWorker(): { proc: any; pending: any[]; buf: string } | null {
+  const helper = resolveHelperPath();
+  const python = findPython();
+  if (!helper || !python) return null;
+  const proc = spawn(python, [helper], {
+    windowsHide: true,
+    env: { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' },
+  });
+  const w: any = { proc, pending: [], buf: '' };
+  proc.stdout?.on('data', (chunk: Buffer) => {
+    w.buf += chunk.toString();
+    let idx: number;
+    while ((idx = w.buf.indexOf('\n')) >= 0) {
+      const line = w.buf.slice(0, idx).trim();
+      w.buf = w.buf.slice(idx + 1);
+      if (!line) continue;
+      let parsed: any;
+      try { parsed = JSON.parse(line); } catch { continue; }
+      const next = w.pending.shift();
+      if (next) { clearTimeout(next.timer); next.resolve(parsed); }
+    }
+  });
+  proc.stderr?.on('data', () => { /* ignore */ });
+  proc.on('exit', () => {
+    // Reject any pending requests, worker will restart on next call.
+    w.pending.forEach((p: any) => { clearTimeout(p.timer); p.resolve({ ok: false, error: 'knowledge worker exited' }); });
+    w.pending = [];
+    worker = null;
+  });
+  return w;
+}
+
+function getWorker(): { proc: any; pending: any[]; buf: string } | null {
+  if (worker && !worker.proc.killed) return worker;
+  worker = startWorker();
+  return worker;
 }
 
 export function runKnowledge(
@@ -51,70 +96,22 @@ export function runKnowledge(
   opts?: { timeoutMs?: number },
 ): Promise<KnowledgeCallResult> {
   const timeoutMs = opts?.timeoutMs ?? 60000;
-  const helper = resolveHelperPath();
-  if (!helper) {
-    return Promise.resolve({ ok: false, error: 'knowledge helper script not found (knowledge_helper.py)' });
-  }
-  const python = findPython();
-  if (!python) {
-    return Promise.resolve({ ok: false, error: 'Python interpreter not found. Set SMALLCLAW_PYTHON to enable the knowledge base.' });
+  const w = getWorker();
+  if (!w) {
+    const helper = resolveHelperPath();
+    const python = findPython();
+    if (!helper) return Promise.resolve({ ok: false, error: 'knowledge helper script not found (knowledge_helper.py)' });
+    if (!python) return Promise.resolve({ ok: false, error: 'Python interpreter not found. Set SMALLCLAW_PYTHON to enable the knowledge base.' });
+    return Promise.resolve({ ok: false, error: 'failed to start knowledge worker' });
   }
   return new Promise<KnowledgeCallResult>((resolve) => {
-    let settled = false;
-    const finish = (value: KnowledgeCallResult) => {
-      if (settled) return;
-      settled = true;
-      resolve(value);
-    };
-    let child: ReturnType<typeof spawn>;
-    try {
-      child = spawn(python, [helper], {
-        windowsHide: true,
-        env: { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' },
-      });
-    } catch (err: any) {
-      finish({ ok: false, error: `failed to start knowledge helper: ${err?.message || err}` });
-      return;
-    }
-    let stdout = '';
-    let stderr = '';
     const timer = setTimeout(() => {
-      try { child.kill(); } catch { /* ignore */ }
-      finish({ ok: false, error: `knowledge helper timed out after ${Math.round(timeoutMs / 1000)}s` });
+      const idx = w.pending.findIndex((p: any) => p.resolve === resolve);
+      if (idx >= 0) w.pending.splice(idx, 1);
+      resolve({ ok: false, error: `knowledge worker timed out after ${Math.round(timeoutMs / 1000)}s` });
     }, timeoutMs);
-    child.stdout?.on('data', (chunk) => { stdout += String(chunk); });
-    child.stderr?.on('data', (chunk) => { stderr += String(chunk); });
-    child.on('error', (err) => {
-      clearTimeout(timer);
-      finish({ ok: false, error: `knowledge helper spawn failed: ${err?.message || err}` });
-    });
-    child.on('close', (code) => {
-      clearTimeout(timer);
-      const trimmed = stdout.trim();
-      if (!trimmed) {
-        finish({ ok: false, error: `knowledge helper produced no output (exit ${code})`, detail: stderr.slice(-600) || undefined });
-        return;
-      }
-      let parsed: any;
-      try {
-        parsed = JSON.parse(trimmed);
-      } catch (err: any) {
-        finish({ ok: false, error: `knowledge helper returned invalid JSON: ${err?.message || err}`, detail: trimmed.slice(0, 400) });
-        return;
-      }
-      if (!parsed || typeof parsed !== 'object') {
-        finish({ ok: false, error: 'knowledge helper returned an unexpected payload' });
-        return;
-      }
-      finish(parsed as KnowledgeCallResult);
-    });
-    const stdin = child.stdin;
-    if (stdin) {
-      stdin.on('error', () => { /* helper may exit early */ });
-      stdin.end(JSON.stringify(payload));
-    } else {
-      finish({ ok: false, error: 'knowledge helper stdin unavailable' });
-    }
+    w.pending.push({ resolve, timer });
+    w.proc.stdin.write(JSON.stringify(payload) + '\n');
   });
 }
 
