@@ -4339,7 +4339,7 @@ async function handleChat(
   // The injection also demands a terse answer and caps output tokens: without
   // that, MiniCPM5-2B retells the whole ledger (~1000+ tok at ~3 tok/s → the
   // turn appears frozen for minutes).
-  const SESSION_META_RE = /(最后|最近|上一|刚才|几组|多少组|几轮|多少轮|几条|多少条|总共|一共|聊天记录|对话内容|历史对话|说过什么|之前说了|都说了)/i;
+  const SESSION_META_RE = /((最后|最近|上一|刚才)(的)?(聊天|对话|消息|会话|一轮|一组|一条|几句|几轮|几组))|(几组|多少组|几轮|多少轮|几条|多少条|总共|一共)|(聊天记录|对话内容|历史对话|说过什么|之前说了|都说了)/i;
   let metaQuestionInjected = false;
   // Ledger for both meta questions and chat-log reports (shared, excludes the
   // current question itself — it was already stored by /api/chat).
@@ -4347,7 +4347,7 @@ async function handleChat(
   const metaHist = (metaSession?.history || []).filter(
     (m: any) => !(m.role === 'user' && String(m.content || '') === message),
   );
-  if (!isBootStartupTurn && SESSION_META_RE.test(message)) {
+  if (!isBootStartupTurn && !/@[^\s@，。；、！？?？\n]/.test(message) && SESSION_META_RE.test(message)) {
     if (metaHist.length > 0) {
       const metaUserMsgs = metaHist.filter((m: any) => m.role === 'user').length;
       const metaAsstMsgs = metaHist.filter((m: any) => m.role === 'assistant').length;
@@ -4463,7 +4463,7 @@ async function handleChat(
     try {
       const getPromise = executeKnowledgeTool(
         'knowledge_get',
-        { name: String(atRefMatch[1]).trim(), max_chunks: 8 },
+        { name: String(atRefMatch[1]).trim(), max_chunks: 40, query: message },
         KNOWLEDGE_DIR,
       );
       const timeoutPromise = new Promise<{ ok: boolean; chunks?: any[]; name?: string }>((resolve) => {
@@ -4471,7 +4471,7 @@ async function handleChat(
       });
       const refOutcome = await Promise.race([getPromise, timeoutPromise]);
       if (refOutcome.ok && Array.isArray(refOutcome.chunks) && refOutcome.chunks.length > 0) {
-        const refText = String(refOutcome.chunks.join('\n---\n')).slice(0, 9000);
+        const refText = String(refOutcome.chunks.join('\n---\n')).slice(0, 24000);
         messages.push({
           role: 'user',
           content:

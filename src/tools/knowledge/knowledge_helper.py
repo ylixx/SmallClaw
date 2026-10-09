@@ -344,8 +344,31 @@ def op_remove(root, name):
             pass
     return {'ok': True, 'removed': name, 'total_files': len(idx['docs'])}
 
-def op_get(root, name, max_chunks=10):
-    """Return chunks of one stored file by (fuzzy) name — used by @-references."""
+def _query_terms_raw(query):
+    """Extract coarse query words (CJK runs + latin words) for substring scoring."""
+    words = []
+    for m in re.finditer(r'[\u4e00-\u9fff]+|[A-Za-z0-9_]+', query):
+        w = m.group().strip()
+        if not w:
+            continue
+        if len(w) == 1 and w in STOP_WORDS:
+            continue
+        words.append(w)
+    return words
+
+def _score_chunk(chunk, words):
+    """Substring overlap score: longer matched words weigh more."""
+    s = 0.0
+    for w in words:
+        if w in chunk:
+            s += len(w) * len(w)  # quadratic: 钾(1) < 结果(4) < 申请时间(16)
+    return s
+
+def op_get(root, name, max_chunks=10, query=''):
+    """Return chunks of one stored file by (fuzzy) name — used by @-references.
+    If query is given, chunks containing query terms rank first (so relevant
+    content such as the latest record is not skipped by the leading-N slice),
+    then remaining chunks are appended in document order to fill max_chunks."""
     idx = load_index(root)
     target = None
     for d in idx.get('docs', []):
@@ -356,6 +379,24 @@ def op_get(root, name, max_chunks=10):
     if target is None:
         return {'ok': False, 'error': f'not found: {name}'}
     chunks = target.get('chunks', [])
+    words = _query_terms_raw(query or '')
+    if words:
+        scored = sorted(
+            ((_score_chunk(c, words), i) for i, c in enumerate(chunks)),
+            key=lambda x: (-x[0], x[1]),
+        )
+        picked = [i for _, i in scored if _score_chunk(chunks[i], words) > 0]
+        # fill the rest in document order
+        for i in range(len(chunks)):
+            if len(picked) >= max_chunks:
+                break
+            if i not in picked:
+                picked.append(i)
+        picked = picked[:max_chunks]
+        picked.sort()  # keep document order for the model
+        return {'ok': True, 'name': target['name'],
+                'chunks': [chunks[i] for i in picked],
+                'total_chunks': len(chunks), 'matched': len(picked)}
     return {'ok': True, 'name': target['name'],
             'chunks': chunks[:max_chunks], 'total_chunks': len(chunks)}
 
@@ -387,7 +428,7 @@ def main():
             elif op == 'list':
                 out = op_list(root)
             elif op == 'get':
-                out = op_get(root, payload.get('name', ''), int(payload.get('max_chunks', 10)))
+                out = op_get(root, payload.get('name', ''), int(payload.get('max_chunks', 10)), payload.get('query') or '')
             elif op == 'remove':
                 out = op_remove(root, payload.get('name', ''))
             elif op == 'clear':

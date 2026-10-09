@@ -204,8 +204,9 @@ export function executeKnowledgeTool(name: string, args: any, knowledgeDir: stri
     case 'knowledge_get': {
       const n = String(args?.name || '').trim();
       if (!n) return Promise.resolve({ ok: false, error: 'name required' });
-      const maxC = Math.min(Math.max(parseInt(String(args?.max_chunks ?? '10'), 10) || 10, 1), 20);
-      return runKnowledge({ op: 'get', name: n, max_chunks: maxC, knowledge_dir: dir }, { timeoutMs: 30000 });
+      const maxC = Math.min(Math.max(parseInt(String(args?.max_chunks ?? '10'), 10) || 10, 1), 40);
+      const q = String(args?.query || '').trim();
+      return runKnowledge({ op: 'get', name: n, max_chunks: maxC, query: q, knowledge_dir: dir }, { timeoutMs: 30000 });
     }
     case 'knowledge_list':
       return runKnowledge({ op: 'list', knowledge_dir: dir }, { timeoutMs: 30000 });
