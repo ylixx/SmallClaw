@@ -8931,26 +8931,41 @@ async function runFlow(id) {
       addProcessEntry('error', `流程运行失败 (${res.status}): ${errText.slice(0, 200)}`);
       return;
     }
+    // SSE 格式与主聊天一致：`data: {"type":"done",...}`（事件名在 JSON 的 type 字段，
+    // 不是 `event:` 行）。按行解析，与 sendChat 同一套规则。
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
-    let buf = '';
+    let buffer = '';
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-      buf += decoder.decode(value, { stream: true });
-      let idx;
-      while ((idx = buf.indexOf('\n\n')) >= 0) {
-        const block = buf.slice(0, idx); buf = buf.slice(idx + 2);
-        const ev = /^event: (.+)$/m.exec(block);
-        const dt = /^data: (.+)$/m.exec(block);
-        if (!ev || !dt) continue;
-        if (ev[1] === 'done') {
-          let reply = dt[1];
-          try { reply = (JSON.parse(dt[1]).reply || '').slice(0, 120); } catch {}
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop(); // keep incomplete line
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        let payload;
+        try { payload = JSON.parse(line.slice(6)); } catch { continue; }
+        if (payload.type === 'done') {
+          const reply = typeof payload.reply === 'string' ? payload.reply : '';
+          const artifacts = Array.isArray(payload.artifacts) ? payload.artifacts : [];
           addProcessEntry('final', '流程完成 ✓');
-          addProcessEntry('final', String(reply).slice(0, 200));
-        } else if (ev[1] === 'error') {
-          addProcessEntry('error', '流程失败: ' + dt[1].slice(0, 200));
+          addProcessEntry('final', (reply || '').slice(0, 200));
+          // 把最终答复与产物卡片渲染到聊天区（与主聊天链路一致）
+          if (reply || artifacts.length) {
+            chatHistory.push({
+              role: 'ai',
+              content: reply || '流程完成',
+              artifacts,
+              steps: [],
+              mode: 'flow',
+              thinking: '',
+              processEntries: [],
+            });
+            renderChatMessages();
+          }
+        } else if (payload.type === 'error') {
+          addProcessEntry('error', '流程失败: ' + String(payload.message || '').slice(0, 200));
         }
       }
     }

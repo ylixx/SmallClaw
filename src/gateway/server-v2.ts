@@ -23,6 +23,7 @@ import {
   resolveAgentWorkspace,
 } from '../config/config';
 import { getMCPManager, type MCPTool } from './mcp-manager';
+import { extractFlowArtifacts } from './flow-artifacts';
 import { getVault } from '../security/vault';
 import { getOllamaClient } from '../agents/ollama-client';
 import { spawnAgent } from '../agents/spawner';
@@ -7891,6 +7892,7 @@ app.post('/api/flows/:id/run', async (req, res) => {
         sections: [{ type: result.type === 'execute' ? 'tool_results' : 'text', content: result.text }],
         thinking: result.thinking,
         results: result.toolResults,
+        artifacts: extractFlowArtifacts(result.toolResults, getConfig().getWorkspacePath()),
       });
     }
   } catch (err: any) {
@@ -8009,6 +8011,7 @@ app.post('/api/chat', async (req, res) => {
         reply: result.text, mode: result.type,
         sections: [{ type: result.type === 'execute' ? 'tool_results' : 'text', content: result.text }],
         thinking: result.thinking, results: result.toolResults,
+        artifacts: extractFlowArtifacts(result.toolResults, getConfig().getWorkspacePath()),
       });
     }
   } catch (err: any) {
