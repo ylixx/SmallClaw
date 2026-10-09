@@ -132,4 +132,96 @@ export class FlowsManager {
     }
     return null;
   }
+
+  // ─── Write-side helpers (create / update / remove) ───────────────────────
+
+  private validateInput(data: any): { ok: boolean; error?: string } {
+    const d = data && typeof data === 'object' ? data : {};
+    if (!String(d.name || '').trim()) return { ok: false, error: 'Name is required' };
+    if (!Array.isArray(d.triggers) || d.triggers.length === 0) {
+      return { ok: false, error: 'At least one trigger phrase is required' };
+    }
+    if (!String(d.instruction || '').trim()) return { ok: false, error: 'Instruction is required' };
+    return { ok: true };
+  }
+
+  private sanitizeId(raw: string): string {
+    return String(raw || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9-]/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '');
+  }
+
+  private writeFile(flow: FlowTemplate): void {
+    if (!fs.existsSync(this.dir)) fs.mkdirSync(this.dir, { recursive: true });
+    const target = path.join(this.dir, `${flow.id}.json`);
+    fs.writeFileSync(target, JSON.stringify(flow, null, 2), 'utf-8');
+    this.cache = null; // invalidate so the next list() rescans immediately
+  }
+
+  /**
+   * Create a new flow template and persist it to disk. Takes effect
+   * immediately (no gateway restart). id is sanitized and defaults to a
+   * slug of the name when not provided.
+   */
+  create(data: any): FlowTemplate {
+    const check = this.validateInput(data);
+    if (!check.ok) throw new Error(check.error || 'Invalid flow input');
+    const id = this.sanitizeId(data.id || String(data.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-'));
+    if (!id) throw new Error('Invalid flow ID');
+    const flow: FlowTemplate = {
+      id,
+      name: String(data.name || '').trim(),
+      triggers: (data.triggers || []).map((t: any) => String(t || '').trim().toLowerCase()).filter(Boolean),
+      description: String(data.description || '').trim(),
+      skill: String(data.skill || '').trim() || undefined,
+      instruction: String(data.instruction || '').trim(),
+      output_note: String(data.output_note || '').trim(),
+    };
+    if (flow.triggers.length === 0) throw new Error('At least one trigger phrase is required');
+    this.writeFile(flow);
+    console.log(`[flows] Created: ${flow.name} (${flow.id})`);
+    return flow;
+  }
+
+  /** Update an existing flow template in place. Returns null when unknown. */
+  update(id: string, data: any): FlowTemplate | null {
+    const existing = this.get(id);
+    if (!existing) return null;
+    const merged: any = {
+      id: existing.id,
+      name: data.name !== undefined ? data.name : existing.name,
+      triggers: data.triggers !== undefined ? data.triggers : existing.triggers,
+      description: data.description !== undefined ? data.description : (existing.description || ''),
+      skill: data.skill !== undefined ? data.skill : (existing.skill || ''),
+      instruction: data.instruction !== undefined ? data.instruction : existing.instruction,
+      output_note: data.output_note !== undefined ? data.output_note : (existing.output_note || ''),
+    };
+    const check = this.validateInput(merged);
+    if (!check.ok) throw new Error(check.error || 'Invalid flow input');
+    const flow: FlowTemplate = {
+      id: existing.id,
+      name: String(merged.name || '').trim(),
+      triggers: (merged.triggers || []).map((t: any) => String(t || '').trim().toLowerCase()).filter(Boolean),
+      description: String(merged.description || '').trim(),
+      skill: String(merged.skill || '').trim() || undefined,
+      instruction: String(merged.instruction || '').trim(),
+      output_note: String(merged.output_note || '').trim(),
+    };
+    if (flow.triggers.length === 0) throw new Error('At least one trigger phrase is required');
+    this.writeFile(flow);
+    console.log(`[flows] Updated: ${flow.name} (${flow.id})`);
+    return flow;
+  }
+
+  /** Delete a flow template by id. Returns false when unknown. */
+  remove(id: string): boolean {
+    const target = path.join(this.dir, `${String(id || '').trim()}.json`);
+    if (!fs.existsSync(target)) return false;
+    fs.rmSync(target, { force: true });
+    this.cache = null;
+    console.log(`[flows] Deleted: ${id}`);
+    return true;
+  }
 }

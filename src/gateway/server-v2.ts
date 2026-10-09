@@ -7808,6 +7808,34 @@ app.get('/api/flows/:id', (req, res) => {
   res.json({ success: true, flow });
 });
 
+// POST /api/flows — create a flow template (persisted to .smallclaw/flows/)
+app.post('/api/flows', (req, res) => {
+  try {
+    const flow = flowsManager.create(req.body || {});
+    res.json({ success: true, flow });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+// PUT /api/flows/:id — update a flow template in place
+app.put('/api/flows/:id', (req, res) => {
+  try {
+    const flow = flowsManager.update(String(req.params.id), req.body || {});
+    if (!flow) { res.status(404).json({ success: false, error: 'Flow not found' }); return; }
+    res.json({ success: true, flow });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+// DELETE /api/flows/:id — remove a flow template
+app.delete('/api/flows/:id', (req, res) => {
+  const removed = flowsManager.remove(String(req.params.id));
+  if (!removed) { res.status(404).json({ success: false, error: 'Flow not found' }); return; }
+  res.json({ success: true });
+});
+
 // POST /api/flows/:id/run — execute a flow explicitly (SSE stream, same
 // pipeline as /api/chat: agent loop + tools + skills + retries)
 app.post('/api/flows/:id/run', async (req, res) => {

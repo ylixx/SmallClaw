@@ -2327,6 +2327,9 @@
     <div style="padding:0 14px 4px;font-size:11px;color:var(--muted);line-height:1.5">
       点击 ▶ 运行流程；或在聊天里直接说触发词（如"生成周报"）。
     </div>
+    <div style="padding:0 14px 8px">
+      <button class="sidebar-action" onclick="openCreateFlowModal()" style="width:100%">+ 新建流程</button>
+    </div>
     <div id="flows-list" style="flex:1;min-height:0;overflow-y:auto;padding:10px">
       <div class="empty-state" style="padding:16px">Loading flows...</div>
     </div>
@@ -2876,6 +2879,54 @@
     <div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 16px;border-top:1px solid var(--line)">
       <button class="btn btn-sm" style="background:var(--panel-2);color:var(--muted);border:1px solid var(--line)" onclick="closeSkillModal()">Cancel</button>
       <button class="btn btn-sm" id="skill-modal-save-btn" onclick="saveSkillFromModal()">Create Skill</button>
+    </div>
+  </div>
+</div>
+
+<!-- FLOW TEMPLATE MODAL -->
+<div id="flow-modal" style="display:none;position:fixed;inset:0;background:rgba(10,20,40,0.35);z-index:9999;align-items:center;justify-content:center;padding:18px">
+  <div style="width:min(560px,96vw);max-height:90vh;overflow:auto;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow-md)">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--line)">
+      <div style="font-weight:800" id="flow-modal-title">Create Flow</div>
+      <button class="btn btn-sm" style="background:var(--panel-2);color:var(--muted);border:1px solid var(--line)" onclick="closeFlowModal()">Close</button>
+    </div>
+    <div style="padding:14px 16px;display:flex;flex-direction:column;gap:12px">
+      <div style="display:flex;gap:10px">
+        <div style="flex:2">
+          <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:700">Name</label>
+          <input id="flow-modal-name" style="width:100%;border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:13px;font-family:'Manrope',sans-serif" placeholder="e.g. 周报生成" />
+        </div>
+        <div style="flex:1">
+          <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:700">ID <span style="font-weight:400">(新建时可选)</span></label>
+          <input id="flow-modal-id" style="width:100%;border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:13px;font-family:'IBM Plex Mono',monospace" placeholder="auto" />
+        </div>
+      </div>
+      <div>
+        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:700">Trigger phrases <span style="font-weight:400">(每行一个，聊天里命中即触发)</span></label>
+        <textarea id="flow-modal-triggers" style="width:100%;min-height:64px;border:1px solid var(--line);border-radius:10px;padding:10px;font-size:12px;font-family:'IBM Plex Mono',monospace;line-height:1.6;resize:vertical" placeholder="生成周报&#10;写周报"></textarea>
+      </div>
+      <div>
+        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:700">Short Description</label>
+        <input id="flow-modal-desc" style="width:100%;border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:13px;font-family:'Manrope',sans-serif" placeholder="这个流程做什么？" />
+      </div>
+      <div style="display:flex;gap:10px">
+        <div style="flex:1">
+          <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:700">Related Skill <span style="font-weight:400">(可选)</span></label>
+          <input id="flow-modal-skill" style="width:100%;border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:12px;font-family:'IBM Plex Mono',monospace" placeholder="analysis-report" />
+        </div>
+        <div style="flex:1.5">
+          <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:700">Output Note <span style="font-weight:400">(可选)</span></label>
+          <input id="flow-modal-output" style="width:100%;border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:12px;font-family:'Manrope',sans-serif" placeholder="工作区中的 <主题>分析报告_<日期>.html" />
+        </div>
+      </div>
+      <div>
+        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:700">Instruction <span style="font-weight:400">(注入模型的执行规范；可用 {{skill:id}} 引用技能正文)</span></label>
+        <textarea id="flow-modal-instruction" style="width:100%;min-height:150px;border:1px solid var(--line);border-radius:10px;padding:10px;font-size:12px;font-family:'IBM Plex Mono',monospace;line-height:1.6;resize:vertical" placeholder="执行「周报生成」流程，严格遵循下方技能规范：{{skill:weekly-report}}"></textarea>
+      </div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 16px;border-top:1px solid var(--line)">
+      <button class="btn btn-sm" style="background:var(--panel-2);color:var(--muted);border:1px solid var(--line)" onclick="closeFlowModal()">Cancel</button>
+      <button class="btn btn-sm" id="flow-modal-save-btn" onclick="saveFlowFromModal()">Create Flow</button>
     </div>
   </div>
 </div>
@@ -8855,6 +8906,8 @@ async function loadFlows() {
           </div>
           <div class="skill-card-actions">
             <button class="skill-mini-btn" onclick="event.stopPropagation();runFlow('${escHtml(f.id)}')" title="运行流程" aria-label="Run flow">▶</button>
+            <button class="skill-mini-btn" onclick="event.stopPropagation();editFlow('${escHtml(f.id)}')" title="编辑流程" aria-label="Edit flow">✎</button>
+            <button class="skill-remove-btn" onclick="event.stopPropagation();deleteFlow('${escHtml(f.id)}')" title="删除流程" aria-label="Delete flow">✕</button>
           </div>
         </div>
       </div>
@@ -8904,6 +8957,110 @@ async function runFlow(id) {
     addProcessEntry('info', '流程运行结束');
   } catch (err) {
     addProcessEntry('error', '流程运行错误: ' + err.message);
+  }
+}
+
+// ---- Flow template create / edit / delete ----
+let editingFlowId = null;
+
+function openCreateFlowModal() {
+  editingFlowId = null;
+  document.getElementById('flow-modal-title').textContent = 'Create Flow';
+  document.getElementById('flow-modal-save-btn').textContent = 'Create Flow';
+  document.getElementById('flow-modal-id').value = '';
+  document.getElementById('flow-modal-id').disabled = false;
+  document.getElementById('flow-modal-name').value = '';
+  document.getElementById('flow-modal-triggers').value = '';
+  document.getElementById('flow-modal-desc').value = '';
+  document.getElementById('flow-modal-skill').value = '';
+  document.getElementById('flow-modal-output').value = '';
+  document.getElementById('flow-modal-instruction').value = '';
+  document.getElementById('flow-modal').style.display = 'flex';
+  document.getElementById('flow-modal-name').focus();
+}
+
+async function editFlow(id) {
+  try {
+    const res = await api('/api/flows/' + encodeURIComponent(id));
+    if (!res.success) { alert('Flow not found'); return; }
+    const f = res.flow;
+    editingFlowId = id;
+    document.getElementById('flow-modal-title').textContent = 'Edit Flow';
+    document.getElementById('flow-modal-save-btn').textContent = 'Save Changes';
+    document.getElementById('flow-modal-id').value = f.id || '';
+    document.getElementById('flow-modal-id').disabled = true;
+    document.getElementById('flow-modal-name').value = f.name || '';
+    document.getElementById('flow-modal-triggers').value = (f.triggers || []).join('\n');
+    document.getElementById('flow-modal-desc').value = f.description || '';
+    document.getElementById('flow-modal-skill').value = f.skill || '';
+    document.getElementById('flow-modal-output').value = f.output_note || '';
+    document.getElementById('flow-modal-instruction').value = f.instruction || '';
+    document.getElementById('flow-modal').style.display = 'flex';
+    document.getElementById('flow-modal-name').focus();
+  } catch (err) {
+    alert('Error loading flow: ' + err.message);
+  }
+}
+
+function closeFlowModal() {
+  document.getElementById('flow-modal').style.display = 'none';
+  editingFlowId = null;
+}
+
+async function saveFlowFromModal() {
+  const name = document.getElementById('flow-modal-name').value.trim();
+  const id = document.getElementById('flow-modal-id').value.trim();
+  const triggers = document.getElementById('flow-modal-triggers').value.split('\n').map(s => s.trim()).filter(Boolean);
+  const description = document.getElementById('flow-modal-desc').value.trim();
+  const skill = document.getElementById('flow-modal-skill').value.trim();
+  const output_note = document.getElementById('flow-modal-output').value.trim();
+  const instruction = document.getElementById('flow-modal-instruction').value.trim();
+
+  if (!name) { alert('Name is required'); return; }
+  if (triggers.length === 0) { alert('At least one trigger phrase is required'); return; }
+  if (!instruction) { alert('Instruction is required'); return; }
+
+  const btn = document.getElementById('flow-modal-save-btn');
+  btn.disabled = true;
+  btn.textContent = 'Saving...';
+
+  const payload = { name, triggers, description, skill, instruction, output_note };
+  if (!editingFlowId) payload.id = id;
+
+  try {
+    let res;
+    if (editingFlowId) {
+      res = await api('/api/flows/' + encodeURIComponent(editingFlowId), { method: 'PUT', body: JSON.stringify(payload) });
+    } else {
+      res = await api('/api/flows', { method: 'POST', body: JSON.stringify(payload) });
+    }
+    if (res.success) {
+      addProcessEntry('info', `流程「${name}」${editingFlowId ? '已更新' : '已创建'}！`);
+      closeFlowModal();
+      loadFlows();
+    } else {
+      alert('保存失败: ' + (res.error || 'unknown error'));
+    }
+  } catch (err) {
+    alert('Error: ' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = editingFlowId ? 'Save Changes' : 'Create Flow';
+  }
+}
+
+async function deleteFlow(id) {
+  if (!confirm(`删除流程「${id}」？此操作不可撤销。`)) return;
+  try {
+    const res = await api('/api/flows/' + encodeURIComponent(id), { method: 'DELETE' });
+    if (res.success) {
+      addProcessEntry('info', `流程「${id}」已删除。`);
+      loadFlows();
+    } else {
+      alert('删除失败: ' + (res.error || 'unknown error'));
+    }
+  } catch (err) {
+    alert('Error: ' + err.message);
   }
 }
 
