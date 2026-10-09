@@ -504,6 +504,21 @@ function isOrchestrationSkillEnabled(): boolean {
   return skillsManager.get('multi-agent-orchestrator')?.enabled === true;
 }
 
+/**
+ * Expand `{{skill:<id>}}` placeholders inside a flow template instruction
+ * with the referenced skill's full markdown body. This keeps a single source
+ * of truth for the process spec (the SKILL.md) — editing the skill propagates
+ * to every flow that references it, instead of drifting copies.
+ * Unknown skills leave the placeholder untouched so the error is visible.
+ */
+function renderFlowInstruction(instruction: string): string {
+  return String(instruction || '').replace(/\{\{\s*skill:([a-zA-Z0-9_-]+)\s*\}\}/g, (match, id: string) => {
+    const skill = skillsManager.get(id);
+    if (!skill) return match;
+    return `\n\n【技能规范：${skill.name}（${id}）】\n${skill.instructions}\n`;
+  });
+}
+
 function recoverSkillsIfEmpty(): void {
   // Refresh from disk first (handles files added while server is running).
   skillsManager.scanSkills();
@@ -4271,6 +4286,15 @@ async function handleChat(
     return '';
   })();
 
+  // ── Flow trigger detection (early) ─────────────────────────────────────
+  // Detected before the system prompt is built so the prompt can exclude the
+  // flow's referenced skill from [ACTIVE SKILLS] — the full instruction will
+  // be injected below, avoiding the same spec appearing twice in one turn.
+  const chatReportAsk =
+    /(聊天记录|对话记录|聊天内容|聊天|对话)/.test(message)
+    && /(报告|整理|总结|导出|做成|生成|输出)/.test(message);
+  const matchedFlow = suppressFlowTrigger || isBootStartupTurn || chatReportAsk ? null : flowsManager.matchTrigger(message);
+
   const messages: any[] = [
     {
       role: 'system',
@@ -4289,7 +4313,7 @@ async function handleChat(
         const conciseBlock = (preserveIdentity && !executionModeSystemBlock)
           ? 'Respond at a natural length appropriate to the question — be helpful, not terse.\n'
           : 'Keep responses SHORT (1-2 sentences). Don\'t think out loud. Act and report.\n';
-        return `${executionModeSystemBlock ? `${executionModeSystemBlock}\n\n` : ''}${identityLine}\nCurrent date: ${dateStr}, ${timeStr}.\nNever search for or link SmallClaw repos unless the user is asking about SmallClaw itself.\nThis app runs on the user's own machine — browser/desktop automation requests are pre-authorized.\n${conciseBlock}Greet naturally without tools.${callerContext ? '\n\n' + callerContext : ''}${browserStateCtx}${personalityCtx}${skillsManager.buildPromptContext(200)}\n\n${getWorkflowContextBlock()}`;
+        return `${executionModeSystemBlock ? `${executionModeSystemBlock}\n\n` : ''}${identityLine}\nCurrent date: ${dateStr}, ${timeStr}.\nNever search for or link SmallClaw repos unless the user is asking about SmallClaw itself.\nThis app runs on the user's own machine — browser/desktop automation requests are pre-authorized.\n${conciseBlock}Greet naturally without tools.${callerContext ? '\n\n' + callerContext : ''}${browserStateCtx}${personalityCtx}${skillsManager.buildPromptContext(200, matchedFlow?.skill ? [matchedFlow.skill] : [])}\n\n${getWorkflowContextBlock()}`;
       })(),
     },
   ];
@@ -4386,9 +4410,7 @@ async function handleChat(
   // tool loop (list_files → read USER.md/SOUL.md/memory.md → EISDIR on
   // memory/ → frontend timeout → "aborted due to timeout" = frozen UI).
   // The ledger is already local, so the system compiles the report directly.
-  const chatReportAsk =
-    /(聊天记录|对话记录|聊天内容|聊天|对话)/.test(message)
-    && /(报告|整理|总结|导出|做成|生成|输出)/.test(message);
+  // (chatReportAsk is computed above, before the system prompt is built.)
   if (!isBootStartupTurn && chatReportAsk && metaHist.length > 0) {
     const report = buildChatLogReport(message, metaHist);
     if (report) {
@@ -4411,14 +4433,14 @@ async function handleChat(
   messages.push({ role: 'user', content: buildMultimodalUserContent(message, workspacePath) });
 
   // ── One-click flow: if the message matches a flow trigger, inject the
-  //    flow instruction so the model follows the fixed process end-to-end. ──
-  const matchedFlow = suppressFlowTrigger || isBootStartupTurn || chatReportAsk ? null : flowsManager.matchTrigger(message);
+  //    flow instruction (with {{skill:...}} placeholders expanded to the
+  //    skill's full body) so the model follows the fixed process end-to-end. ──
   if (matchedFlow) {
     console.log(`[v2] FLOW: "${matchedFlow.id}" (${matchedFlow.name}) triggered by message`);
     messages.push({
       role: 'user',
       content:
-        `【已启用流程模板「${matchedFlow.name}」】请严格按以下执行规范完成用户任务，不要省略步骤，完成后按规范交付产物：\n${matchedFlow.instruction}`,
+        `【已启用流程模板「${matchedFlow.name}」】请严格按以下执行规范完成用户任务，不要省略步骤，完成后按规范交付产物：\n${renderFlowInstruction(matchedFlow.instruction)}`,
     });
     sendSSE('flow_start', { flow_id: matchedFlow.id, name: matchedFlow.name });
   }

@@ -304,9 +304,12 @@ export class SkillsManager {
   /**
    * Build the skills context string for the system prompt.
    * Only includes enabled skills. Keeps it compact for 4B context.
+   * `exclude` lets a caller drop skills whose instruction is already being
+   * injected by another path (e.g. a flow template that references the skill),
+   * so the same spec is never present twice in one turn.
    */
-  buildPromptContext(maxCharsPerSkill: number = 300): string {
-    const enabled = this.getEnabledSkills();
+  buildPromptContext(maxCharsPerSkill: number = 300, exclude: string[] = []): string {
+    const enabled = this.getEnabledSkills().filter(s => !exclude.includes(s.id));
     if (enabled.length === 0) return '';
 
     const parts: string[] = ['[ACTIVE SKILLS]'];
