@@ -2554,6 +2554,15 @@
           <button onclick="parseSchedulePattern()" style="border:1px solid var(--brand);background:var(--brand);color:white;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">解析</button>
         </div>
         <div id="schedule-pattern-preview" style="font-size:11px;color:var(--muted);padding:6px 8px;background:var(--panel-2);border-radius:6px;display:none"></div>
+        <div style="margin-top:8px;padding:10px;background:var(--panel-2);border-radius:8px;font-size:11px;line-height:1.8">
+          <div style="font-weight:700;margin-bottom:4px;color:var(--text)">常用 cron 示例（分 时 日 月 周）：</div>
+          <div><code style="font-family:monospace;background:rgba(0,0,0,.05);padding:1px 5px;border-radius:3px">0 9 * * *</code> — 每天早上 9:00</div>
+          <div><code style="font-family:monospace;background:rgba(0,0,0,.05);padding:1px 5px;border-radius:3px">0 18 * * *</code> — 每天下午 18:00</div>
+          <div><code style="font-family:monospace;background:rgba(0,0,0,.05);padding:1px 5px;border-radius:3px">*/30 * * * *</code> — 每 30 分钟</div>
+          <div><code style="font-family:monospace;background:rgba(0,0,0,.05);padding:1px 5px;border-radius:3px">0 9 * * 1</code> — 每周一早上 9:00</div>
+          <div><code style="font-family:monospace;background:rgba(0,0,0,.05);padding:1px 5px;border-radius:3px">0 9 1 * *</code> — 每月 1 号早上 9:00</div>
+          <div><code style="font-family:monospace;background:rgba(0,0,0,.05);padding:1px 5px;border-radius:3px">0 9 * * 1-5</code> — 工作日（周一到周五）早上 9:00</div>
+        </div>
       </div>
       <div>
         <label style="display:block;font-size:12px;font-weight:700;color:var(--text);margin-bottom:6px">时区</label>
