@@ -1,0 +1,9 @@
+{
+  "id": "ppt-generate",
+  "name": "PPT 一键生成",
+  "triggers": ["生成PPT", "做PPT", "制作PPT", "演示文稿", "课件", "汇报PPT", "PPT"],
+  "description": "根据主题或材料生成结构化的 .pptx 演示文稿（标题页深色主视觉 + 内容页品牌色排版，内置美化）。",
+  "skill": "ppt-generate",
+  "instruction": "执行「PPT 一键生成」流程，严格遵循下方技能规范：{{skill:ppt-generate}}",
+  "output_note": "工作区中的 <主题>.pptx"
+}

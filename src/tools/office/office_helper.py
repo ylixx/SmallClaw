@@ -1211,23 +1211,57 @@ def outline_to_markdown(slides):
     return "\n".join(out).rstrip()
 
 
-def _append_outline_slides(prs, slides):
+def _append_outline_slides(prs, slides, accent="2C5F8A"):
+    """Append slides from an outline with built-in styling:
+    标题页 = 深色主视觉（大标题 + 副标题）；内容页 = 品牌色标题 + 深灰正文。"""
+    from pptx.util import Inches as PptxInches, Pt as PptxPt
+    from pptx.dml.color import RGBColor
+
     layouts = list(prs.slide_layouts)
-    title_layout = layouts[0]
+    blank = layouts[6] if len(layouts) > 6 else layouts[0]
     content_layout = layouts[1] if len(layouts) > 1 else layouts[0]
+    accent_rgb = RGBColor.from_string(accent)
+    dark = RGBColor.from_string("1F3864")
+    white = RGBColor.from_string("FFFFFF")
+    sub_rgb = RGBColor.from_string("B8C4D9")
+    body_rgb = RGBColor.from_string("333333")
+
     for slide_spec in slides:
         is_title = slide_spec.get("kind") == "title"
-        layout = title_layout if is_title else content_layout
-        slide = prs.slides.add_slide(layout)
-        for shape in slide.placeholders:
+        title = slide_spec.get("title") or "演示文稿"
+        bullets = slide_spec.get("bullets") or []
+        if is_title:
+            slide = prs.slides.add_slide(blank)
             try:
-                idx = shape.placeholder_format.idx
+                slide.background.fill.solid()
+                slide.background.fill.fore_color.rgb = dark
             except Exception:
-                continue
-            if idx == 0 and slide_spec.get("title"):
-                set_shape_text(shape, slide_spec["title"])
-            elif idx == 1 and slide_spec.get("bullets"):
-                set_shape_text(shape, "\n".join(slide_spec["bullets"]))
+                pass
+            tb = slide.shapes.add_textbox(PptxInches(0.8), PptxInches(2.0), PptxInches(8.4), PptxInches(1.8))
+            tf = tb.text_frame
+            tf.word_wrap = True
+            tf.text = title
+            p = tf.paragraphs[0]
+            p.font.size = PptxPt(40)
+            p.font.bold = True
+            p.font.color.rgb = white
+            if bullets:
+                sub = tf.add_paragraph()
+                sub.text = bullets[0]
+                sub.font.size = PptxPt(18)
+                sub.font.color.rgb = sub_rgb
+        else:
+            slide = prs.slides.add_slide(content_layout)
+            for shape in slide.placeholders:
+                try:
+                    idx = shape.placeholder_format.idx
+                except Exception:
+                    continue
+                if idx == 0 and title:
+                    set_shape_text(shape, title, font={"size": PptxPt(28), "bold": True, "rgb": accent_rgb})
+                elif idx == 1 and bullets:
+                    set_shape_text(shape, "\n".join(bullets), font={"size": PptxPt(18), "rgb": body_rgb})
+    return prs
 
 
 # ─── Write planning ───────────────────────────────────────────────────────────
