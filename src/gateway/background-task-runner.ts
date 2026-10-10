@@ -478,7 +478,7 @@ export class BackgroundTaskRunner {
         retryStrategy.clearState(task.id);
         return {
           ok: false,
-          reason: `Task paused after transport retries were exhausted at step ${task.currentStepIndex + 1}.`,
+          reason: `任务已暂停：在第 ${task.currentStepIndex + 1} 步传输重试次数已用尽。`,
           detail: errSnippet,
         };
       }
@@ -490,7 +490,7 @@ export class BackgroundTaskRunner {
         });
         return {
           ok: false,
-          reason: `Task paused because the model returned an unrecoverable error at step ${task.currentStepIndex + 1}.`,
+          reason: `任务已暂停：模型在第 ${task.currentStepIndex + 1} 步返回了无法恢复的错误。`,
           detail: text.slice(0, 600),
         };
       }
@@ -500,7 +500,7 @@ export class BackgroundTaskRunner {
 
     return {
       ok: false,
-      reason: 'Task paused because no valid result was produced.',
+      reason: '任务已暂停：未产生有效结果。',
       detail: 'No result after retry loop.',
     };
   }
