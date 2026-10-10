@@ -991,6 +991,112 @@ def op_read(payload):
     raise OfficeError("Unsupported format: %s" % fmt)
 
 
+# ─── Pivot (数据透视/分组汇总) ───────────────────────────────────────────────
+
+def op_pivot(payload):
+    """按一列分组，对若干值列做 sum/avg/count/min/max 聚合，输出 Markdown 汇总表。"""
+    path = payload.get("path")
+    check_readable(path)
+    ext = os.path.splitext(str(path))[1].lower()
+    if ext == ".csv":
+        import csv as _csv
+
+        with open(path, "r", encoding="utf-8-sig", errors="replace") as fh:
+            rows = list(_csv.reader(fh))
+    elif ext == ".xlsx":
+        wb = _load_xlsx_values(path)
+        sheet = _sheet_or_default(wb, payload.get("sheet"))
+        ws = wb[sheet]
+        rows = [
+            [ws.cell(row=r, column=c).value for c in range(1, (ws.max_column or 1) + 1)]
+            for r in range(1, (ws.max_row or 1) + 1)
+        ]
+    else:
+        raise OfficeError("pivot supports .xlsx and .csv only (got %s)" % ext)
+    rows = [r for r in rows if any(str(c or "").strip() != "" for c in r)]
+    if not rows:
+        raise OfficeError("data is empty")
+    header = [str(h or "").strip() for h in rows[0]]
+    data = rows[1:]
+
+    group = str(payload.get("group") or "").strip()
+    value_cols = payload.get("values") or []
+    agg = str(payload.get("agg") or "sum").strip().lower()
+    if agg not in ("sum", "avg", "count", "min", "max"):
+        raise OfficeError("agg must be one of: sum, avg, count, min, max")
+    if not group:
+        raise OfficeError("pivot requires 'group' (column name to group by)")
+    if not value_cols:
+        raise OfficeError("pivot requires 'values' (list of value column names)")
+
+    def resolve_col(name):
+        name = str(name or "").strip()
+        # 列字母：A, B, ..., Z, AA...
+        if re.fullmatch(r"[A-Za-z]{1,3}", name):
+            col = 0
+            for ch in name.upper():
+                col = col * 26 + (ord(ch) - 64)
+            if 1 <= col <= len(header):
+                return col - 1
+        # 表头精确匹配
+        for i, h in enumerate(header):
+            if h == name:
+                return i
+        # 1-based 数字下标
+        try:
+            i = int(name) - 1
+            if 0 <= i < len(header):
+                return i
+        except Exception:
+            pass
+        raise OfficeError("column '%s' not found. Available: %s" % (name, ", ".join(header) or "(无表头)"))
+
+    gi = resolve_col(group)
+    vi = [resolve_col(v) for v in value_cols]
+
+    from collections import OrderedDict
+
+    groups = OrderedDict()
+    for row in data:
+        gkey = str(row[gi] if gi < len(row) else "").strip() or "(空)"
+        if gkey not in groups:
+            groups[gkey] = [[] for _ in vi]
+        for k, i in enumerate(vi):
+            v = row[i] if i < len(row) else None
+            try:
+                groups[gkey][k].append(float(str(v).replace(",", "").strip()))
+            except Exception:
+                groups[gkey][k].append(None)
+
+    agg_label = {"sum": "合计", "avg": "平均", "count": "计数", "min": "最小", "max": "最大"}.get(agg, agg)
+    out_rows = []
+    for gkey, colvals in groups.items():
+        line = [gkey]
+        for vals in colvals:
+            numeric = [v for v in vals if v is not None]
+            if agg == "count":
+                line.append(len(vals))
+            elif agg == "min":
+                line.append(round(min(numeric), 4) if numeric else None)
+            elif agg == "max":
+                line.append(round(max(numeric), 4) if numeric else None)
+            elif agg == "avg":
+                line.append(round(sum(numeric) / len(numeric), 4) if numeric else None)
+            else:
+                line.append(round(sum(numeric), 4) if numeric else None)
+        out_rows.append(line)
+
+    headers = [header[gi]] + ["%s(%s)" % (agg_label, header[i]) for i in vi]
+    md = md_table(headers, out_rows)
+    return {
+        "format": ext.lstrip("."),
+        "group": header[gi],
+        "agg": agg,
+        "groups": len(out_rows),
+        "markdown": "**数据透视 · 按 `%s` 分组 · %s**\n\n%s" % (header[gi], agg_label, md),
+    }
+
+
 # ─── Markdown parsing (docx content / pptx outline) ──────────────────────────
 
 HEADING_RE = re.compile(r"^(#{1,6})\s+(.*)$")
@@ -1377,6 +1483,32 @@ def _plan_xlsx(ops, path, out_path=None, created=False):
                 # Mirror it so later ops in the same call can target the new sheet.
                 if name not in state["wb_values"].sheetnames:
                     state["wb_values"].create_sheet(title=name)
+            elif kind == "formula":
+                ref = str(op.get("ref") or "").strip().replace("$", "")
+                formula = str(op.get("formula") or "").strip()
+                if not ref or not formula:
+                    raise OfficeError("formula op requires 'ref' (e.g. 'D2') and 'formula' (e.g. '=SUM(B2:B10)')")
+                sheet_name, f_min_col, f_min_row, _, _ = parse_sheet_ref(ref, op.get("sheet"))
+                # 小模型容错：新建文件默认表名归一
+                if sheet_name and sheet_name not in state["wb_values"].sheetnames:
+                    if created and len(state["wb_edit"].sheetnames) == 1:
+                        sheet_name = state["wb_edit"].sheetnames[0]
+                sheet_name = _sheet_or_default(state["wb_values"], sheet_name, state["wb_values"])
+                if not sheet_exists(sheet_name):
+                    if created and len(state["wb_edit"].sheetnames) == 1:
+                        sheet_name = state["wb_edit"].sheetnames[0]
+                    else:
+                        raise OfficeError("Worksheet '%s' not found. Available: %s" % (sheet_name, ", ".join(state["wb_edit"].sheetnames)))
+                plans.append(
+                    {
+                        "ok": True,
+                        "op": kind,
+                        "target": "%s!%s" % (sheet_name, ref),
+                        "markdown": "**工作表 `%s` · `%s` ← 公式 `%s`**" % (sheet_name, ref, formula),
+                        "changed": 1,
+                        "_apply": {"sheet": sheet_name, "row": f_min_row, "col": f_min_col, "formula": formula},
+                    }
+                )
             elif kind == "chart":
                 ctype = str(op.get("type") or "bar").strip().lower()
                 if ctype not in XLSX_CHART_TYPES:
@@ -1420,7 +1552,7 @@ def _plan_xlsx(ops, path, out_path=None, created=False):
                 )
             else:
                 raise OfficeError(
-                    "Unsupported xlsx op '%s'. Supported: cells, rows, add_sheet, chart" % kind
+                    "Unsupported xlsx op '%s'. Supported: cells, rows, add_sheet, chart, formula" % kind
                 )
         except OfficeError as exc:
             plans.append(_op_error(op, str(exc), getattr(exc, "detail", None)))
@@ -1436,6 +1568,9 @@ def _plan_xlsx(ops, path, out_path=None, created=False):
                 for i, row_vals in enumerate(spec["values"]):
                     for j, value in enumerate(row_vals):
                         ws.cell(row=spec["min_row"] + i, column=spec["min_col"] + j, value=value)
+            elif plan["op"] == "formula":
+                ws = wb[spec["sheet"]]
+                ws.cell(row=spec["row"], column=spec["col"]).value = spec["formula"]
             elif plan["op"] == "add_sheet":
                 wb.create_sheet(title=spec["name"])
             elif plan["op"] == "chart":
@@ -1458,7 +1593,7 @@ def _drop_unused_default_sheet(wb, plans):
     for plan in plans:
         if not plan.get("ok"):
             continue
-        if plan["op"] in ("cells", "rows", "chart"):
+        if plan["op"] in ("cells", "rows", "chart", "formula"):
             used.add(plan["_apply"]["sheet"])
         elif plan["op"] == "add_sheet":
             used.add(plan["_apply"]["name"])
@@ -2748,6 +2883,8 @@ def main():
             data = op_inspect(payload)
         elif op == "read":
             data = op_read(payload)
+        elif op == "pivot":
+            data = op_pivot(payload)
         elif op == "ocr":
             data = pdf_ocr_pages(payload.get("path"), payload.get("pages"))
         elif op == "parse_lab":
@@ -2761,7 +2898,7 @@ def main():
         elif op == "batch":
             data = op_batch(payload)
         else:
-            raise OfficeError("Unknown op '%s'. Expected: capabilities, inspect, read, write, convert, chart, batch, ocr, parse_lab" % op)
+            raise OfficeError("Unknown op '%s'. Expected: capabilities, inspect, read, pivot, write, convert, chart, batch, ocr, parse_lab" % op)
         emit({"ok": True, "data": data})
         return 0
     except OfficeError as exc:

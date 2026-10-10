@@ -28,7 +28,7 @@ const PROBE_RETRY_MS = 60000;
 const PREVIEW_TTL_MS = 15 * 60 * 1000;
 const PREVIEW_MAX_ENTRIES = 200;
 
-const XLSX_OPS = new Set(['cells', 'rows', 'add_sheet', 'chart']);
+const XLSX_OPS = new Set(['cells', 'rows', 'add_sheet', 'chart', 'formula']);
 const DOCX_OPS = new Set(['replace', 'insert', 'heading', 'table', 'add_table', 'add_image', 'content']);
 const PPTX_OPS = new Set(['set_text', 'title', 'textbox', 'table', 'image', 'delete_shape', 'add_slide', 'outline']);
 
@@ -563,6 +563,39 @@ export function getOfficeToolDefinitions(): any[] {
     },
   });
 
+  if (cachedCaps.formats.xlsx || cachedCaps.formats.csv) {
+    defs.push({
+      type: 'function',
+      function: {
+        name: 'doc_pivot',
+        description:
+          'Pivot / group-by summary of an .xlsx or .csv: pick a group column and value columns, aggregate with sum/avg/count/min/max, return a Markdown summary table. Use for 数据透视 / 分组统计 / 汇总分析 / 各品类合计.',
+        parameters: {
+          type: 'object',
+          required: ['filename', 'group', 'values'],
+          properties: {
+            filename: { type: 'string', description: '.xlsx or .csv path' },
+            sheet: { type: 'string', description: 'xlsx only: sheet name (default first sheet).' },
+            group: {
+              type: 'string',
+              description: 'Column to group by: exact header name (e.g. "地区") or column letter (e.g. "A").',
+            },
+            values: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Value columns to aggregate: header names or column letters.',
+            },
+            agg: {
+              type: 'string',
+              enum: ['sum', 'avg', 'count', 'min', 'max'],
+              description: 'Aggregation function (default sum).',
+            },
+          },
+        },
+      },
+    });
+  }
+
   defs.push({
     type: 'function',
     function: {
@@ -570,7 +603,7 @@ export function getOfficeToolDefinitions(): any[] {
       description:
         'Create or edit an .xlsx / .docx / .pptx (created from scratch if missing). ALWAYS call mode:"preview" first: returns a rendered Markdown preview plus preview_id and writes NOTHING to disk. Only after the user approves, call mode:"apply" with the returned preview_id to actually write the file. NEVER claim a file was created from a preview-only call.\n'
         + 'ops by format:\n'
-        + 'xlsx: {op:"cells",sheet,ref,values} | {op:"rows",sheet,at,values} | {op:"add_sheet",name} | {op:"chart",range,type:"bar|line|pie|area|scatter",title,anchor}. NOTE: a newly created .xlsx has ONE worksheet named "Sheet" (not "Sheet1") — you may omit the sheet field entirely for simple tables.\n'
+        + 'xlsx: {op:"cells",sheet,ref,values} | {op:"rows",sheet,at,values} | {op:"add_sheet",name} | {op:"chart",range,type:"bar|line|pie|area|scatter",title,anchor} | {op:"formula",sheet,ref,formula:"=SUM(B2:B10)"}. NOTE: a newly created .xlsx has ONE worksheet named "Sheet" (not "Sheet1") — you may omit the sheet field entirely for simple tables.\n'
         + 'docx: NEW document = one op {op:"content",markdown:"<full markdown>"} (headings + paragraphs + tables in a single call - always prefer this). Existing document edits: {op:"heading",at:"#append"|"#12",level,text} | {op:"insert",after:"#append"|"#12",text} | {op:"add_table",rows} | {op:"add_image",image} | table cells: at:"#T0",r,c\n'
         + 'pptx: {op:"outline",markdown} ("# deck title", "## slide", "- bullet", "---" = next slide - builds a whole deck in one call) | {op:"add_slide",title,bullets} | existing slides: title/set_text/textbox/table/image/delete_shape with slide numbers.',
       parameters: {
@@ -802,6 +835,17 @@ export async function executeOfficeTool(
     const res = await runOfficeHelper(payload, { timeoutMs: DEFAULT_TIMEOUT_MS });
     if (!res.ok) return { result: describeError(res), error: true };
     return { result: clipResult(String(res.data?.markdown || res.data?.text || '(empty)')), error: false };
+  }
+
+  if (name === 'doc_pivot') {
+    const payload: Record<string, any> = { op: 'pivot', path: filePath };
+    if (args.sheet) payload.sheet = String(args.sheet).trim();
+    payload.group = String(args.group || '').trim();
+    if (Array.isArray(args.values)) payload.values = args.values.map(String);
+    if (['sum', 'avg', 'count', 'min', 'max'].includes(String(args.agg || 'sum'))) payload.agg = String(args.agg);
+    const res = await runOfficeHelper(payload, { timeoutMs: DEFAULT_TIMEOUT_MS });
+    if (!res.ok) return { result: describeError(res), error: true };
+    return { result: clipResult(String(res.data?.markdown || '(empty)')), error: false };
   }
 
   if (name === 'doc_convert') {
