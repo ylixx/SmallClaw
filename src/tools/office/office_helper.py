@@ -1264,6 +1264,9 @@ def _plan_xlsx(ops, path, out_path=None, created=False):
                     values = op.get("values")
                     if not isinstance(values, list) or not values:
                         raise OfficeError("rows op requires a non-empty 'values' array of arrays")
+                    # 小模型容错：扁平数组按单列多行处理
+                    if all(not isinstance(r, list) for r in values):
+                        values = [[r] for r in values]
                     values = [r if isinstance(r, list) else [r] for r in values]
                 else:
                     ref = str(op.get("ref") or "").strip().replace("$", "")
@@ -1273,6 +1276,13 @@ def _plan_xlsx(ops, path, out_path=None, created=False):
                     values = op.get("values")
                     if not isinstance(values, list) or not values:
                         raise OfficeError("cells op requires a non-empty 'values' array of arrays")
+                    # 小模型容错：values 常写成扁平数组 ["a","b"]。
+                    # 若引用是单行多列（如 A1:B1）→ 视为一行；否则视为单列多行。
+                    if all(not isinstance(r, list) for r in values):
+                        if max_col is not None and max_col > min_col and max_col - min_col + 1 == len(values):
+                            values = [values]
+                        else:
+                            values = [[r] for r in values]
                     values = [r if isinstance(r, list) else [r] for r in values]
                     if max_col is None:
                         max_col = min_col
@@ -1292,9 +1302,18 @@ def _plan_xlsx(ops, path, out_path=None, created=False):
                     elif len(values) == height and len(values[0]) == 1 and width > 1:
                         values = [[row[0]] for row in values]
 
+                # 小模型容错：新建文件默认工作表名是 "Sheet"（非 "Sheet1"），
+                # 模型常猜错名字导致 "Worksheet not found"。新建且只有一个
+                # 工作表时，自动归一为用户指定的任意名字 → 默认表。
+                if sheet_name and sheet_name not in state["wb_values"].sheetnames:
+                    if created and len(state["wb_edit"].sheetnames) == 1:
+                        sheet_name = state["wb_edit"].sheetnames[0]
                 sheet_name = _sheet_or_default(state["wb_values"], sheet_name, state["wb_values"])
                 if not sheet_exists(sheet_name):
-                    raise OfficeError("Worksheet '%s' not found. Available: %s" % (sheet_name, ", ".join(state["wb_edit"].sheetnames)))
+                    if created and len(state["wb_edit"].sheetnames) == 1:
+                        sheet_name = state["wb_edit"].sheetnames[0]
+                    else:
+                        raise OfficeError("Worksheet '%s' not found. Available: %s" % (sheet_name, ", ".join(state["wb_edit"].sheetnames)))
                 md, changed = xlsx_range_preview(
                     state["wb_values"][sheet_name], sheet_name, min_col, min_row, values
                 )
