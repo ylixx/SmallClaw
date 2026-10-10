@@ -9815,23 +9815,25 @@ function renderScheduleList() {
     const lastRun = job.last_run ? new Date(job.last_run).toLocaleString() : 'Never';
     const statusClass = job.status === 'active' ? 'status-active' : job.status === 'paused' ? 'status-paused' : 'status-failed';
     
+    const statusText = job.status === 'active' ? '运行中' : job.status === 'paused' ? '已暂停' : job.status === 'failed' ? '失败' : job.status || '未知';
+
     return `
       <div style="display:flex;align-items:start;justify-content:space-between;gap:12px;padding:12px;background:var(--panel);border:1px solid var(--line);border-radius:10px;cursor:pointer" onclick="editSchedule('${job.id}')">
         <div style="flex:1;min-width:0">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-            <div style="font-weight:700;font-size:13px">${job.name || 'Untitled'}</div>
-            <span class="${statusClass}" style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;${job.status === 'active' ? 'background:#c8f0c4;color:#0d5c2f' : job.status === 'paused' ? 'background:#fff4d6;color:#7d5700' : 'background:#ffd6d6;color:#8b0000'}">${job.status || 'unknown'}</span>
+            <div style="font-weight:700;font-size:13px">${job.name || '未命名'}</div>
+            <span class="${statusClass}" style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;${job.status === 'active' ? 'background:#c8f0c4;color:#0d5c2f' : job.status === 'paused' ? 'background:#fff4d6;color:#7d5700' : 'background:#ffd6d6;color:#8b0000'}">${statusText}</span>
           </div>
-          <div style="font-size:12px;color:var(--muted);line-height:1.4;margin-bottom:6px">${job.prompt ? job.prompt.slice(0, 60) + (job.prompt.length > 60 ? '...' : '') : 'No prompt'}</div>
+          <div style="font-size:12px;color:var(--muted);line-height:1.4;margin-bottom:6px">${job.prompt ? job.prompt.slice(0, 60) + (job.prompt.length > 60 ? '...' : '') : '暂无提示词'}</div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:11px;color:var(--muted)">
-            <div><strong>Next:</strong> ${nextRun}</div>
-            <div><strong>Last:</strong> ${lastRun}</div>
+            <div><strong>下次运行：</strong> ${nextRun}</div>
+            <div><strong>上次运行：</strong> ${lastRun}</div>
           </div>
         </div>
         <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0">
-          <button onclick="event.stopPropagation(); runScheduleNow('${job.id}')" style="border:1px solid var(--line);background:var(--panel-2);color:var(--muted);border-radius:6px;padding:4px 10px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap" title="Run now">Run Now</button>
-          <button onclick="event.stopPropagation(); toggleSchedulePause('${job.id}')" style="border:1px solid var(--line);background:var(--panel-2);color:var(--muted);border-radius:6px;padding:4px 10px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap" title="Toggle pause">${job.status === 'active' ? 'Pause' : 'Resume'}</button>
-          <button onclick="event.stopPropagation(); deleteSchedule('${job.id}')" style="border:1px solid #ff6b6b;background:#ffe0e0;color:#8b0000;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap" title="Delete">Delete</button>
+          <button onclick="event.stopPropagation(); runScheduleNow('${job.id}')" style="border:1px solid var(--line);background:var(--panel-2);color:var(--muted);border-radius:6px;padding:4px 10px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap" title="立即运行">立即运行</button>
+          <button onclick="event.stopPropagation(); toggleSchedulePause('${job.id}')" style="border:1px solid var(--line);background:var(--panel-2);color:var(--muted);border-radius:6px;padding:4px 10px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap" title="暂停/恢复">${job.status === 'active' ? '暂停' : '恢复'}</button>
+          <button onclick="event.stopPropagation(); deleteSchedule('${job.id}')" style="border:1px solid #ff6b6b;background:#ffe0e0;color:#8b0000;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap" title="删除">删除</button>
         </div>
       </div>
     `;
