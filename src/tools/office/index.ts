@@ -649,6 +649,44 @@ export function getOfficeToolDefinitions(): any[] {
     });
   }
 
+  if (cachedCaps.formats.pdf || cachedCaps.formats.convert) {
+    defs.push({
+      type: 'function',
+      function: {
+        name: 'doc_batch',
+        description:
+          'Batch document operations: merge_pdf (merge PDFs into one), split_pdf (split a PDF by page ranges or every-N pages), convert_all (convert every file of an extension in a directory to a target format). Use for 批量转换 / PDF合并 / PDF拆分 / 批量处理.',
+        parameters: {
+          type: 'object',
+          required: ['action'],
+          properties: {
+            action: {
+              type: 'string',
+              enum: ['merge_pdf', 'split_pdf', 'convert_all'],
+              description: 'Which batch operation to run.',
+            },
+            files: { type: 'array', items: { type: 'string' }, description: 'merge_pdf: list of PDF paths to merge (in order).' },
+            out: { type: 'string', description: 'merge_pdf: output merged PDF path.' },
+            path: { type: 'string', description: 'split_pdf: source PDF path.' },
+            out_dir: { type: 'string', description: 'split_pdf: output directory (default = same as source).' },
+            pages: {
+              type: 'string',
+              description:
+                'split_pdf: page groups like "1-3,5" or a single number N to split every N pages (e.g. "2" = chunks of 2).',
+            },
+            dir: { type: 'string', description: 'convert_all: directory to scan for files.' },
+            to: {
+              type: 'string',
+              enum: ['pdf', 'docx', 'xlsx', 'pptx', 'txt', 'csv', 'html'],
+              description: 'convert_all: target format.',
+            },
+            ext: { type: 'string', description: 'convert_all: only convert files with this extension (e.g. ".md" or "md").' },
+          },
+        },
+      },
+    });
+  }
+
   if (cachedCaps.formats.ocr) {
     defs.push({
       type: 'function',

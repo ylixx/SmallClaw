@@ -2602,6 +2602,134 @@ def _embed_chart(target, image_path, title=""):
 
 # ─── Dispatch ─────────────────────────────────────────────────────────────────
 
+# ─── Batch ops ─────────────────────────────────────────────────────────────────
+
+def _parse_page_groups(spec):
+    """'1-3,5,8-10' -> [(1,3),(5,5),(8,10)]."""
+    groups = []
+    for part in str(spec or "").split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if "-" in part:
+            a, b = part.split("-", 1)
+            try:
+                groups.append((int(a), int(b)))
+            except Exception:
+                raise OfficeError("Invalid page range '%s' (expected like '1-3,5')" % part)
+        else:
+            try:
+                n = int(part)
+            except Exception:
+                raise OfficeError("Invalid page number '%s'" % part)
+            groups.append((n, n))
+    return groups
+
+
+def op_batch(payload):
+    """批量处理：merge_pdf 合并 / split_pdf 拆分 / convert_all 批量转换。"""
+    action = str(payload.get("action") or "").strip()
+
+    if action == "merge_pdf":
+        files = payload.get("files") or []
+        out = payload.get("out")
+        if not files:
+            raise OfficeError("merge_pdf requires 'files' (list of PDF paths)")
+        if not out:
+            raise OfficeError("merge_pdf requires 'out' (output PDF path)")
+        try:
+            import pymupdf
+        except Exception:
+            import fitz as pymupdf
+
+        merged = pymupdf.open()
+        for f in files:
+            check_readable(f)
+            if os.path.splitext(str(f))[1].lower() != ".pdf":
+                raise OfficeError("merge_pdf only supports PDF inputs: %s" % f)
+            doc = fitz.open(f)
+            merged.insert_pdf(doc)
+            doc.close()
+        page_count = merged.page_count
+        merged.save(out)
+        merged.close()
+        return {"action": "merge_pdf", "out": out, "pages": page_count}
+
+    if action == "split_pdf":
+        src = payload.get("path")
+        check_readable(src)
+        out_dir = payload.get("out_dir") or os.path.dirname(os.path.abspath(src))
+        pages = payload.get("pages")
+        if not pages:
+            raise OfficeError("split_pdf requires 'pages' (e.g. '1-3,5' or '2' for every 2 pages)")
+        try:
+            import pymupdf
+        except Exception:
+            import fitz as pymupdf
+
+        doc = pymupdf.open(src)
+        total = doc.page_count
+        groups = _parse_page_groups(pages)
+        results = []
+        stem = os.path.splitext(os.path.basename(src))[0]
+        if len(groups) == 1 and groups[0][0] == groups[0][1] and "," not in str(pages):
+            every = groups[0][0]
+            for start in range(0, total, every):
+                end = min(start + every - 1, total - 1)
+                out = os.path.join(out_dir, "%s_p%02d-%02d.pdf" % (stem, start + 1, end + 1))
+                part = pymupdf.open()
+                part.insert_pdf(doc, from_page=start, to_page=end)
+                part.save(out)
+                part.close()
+                results.append({"pages": "%d-%d" % (start + 1, end + 1), "out": out})
+        else:
+            for (a, b) in groups:
+                if a < 1 or b > total:
+                    raise OfficeError("Page range %d-%d out of bounds (document has %d pages)" % (a, b, total))
+                out = os.path.join(out_dir, "%s_p%02d-%02d.pdf" % (stem, a, b))
+                part = pymupdf.open()
+                part.insert_pdf(doc, from_page=a - 1, to_page=b - 1)
+                part.save(out)
+                part.close()
+                results.append({"pages": "%d-%d" % (a, b), "out": out})
+        doc.close()
+        return {"action": "split_pdf", "parts": results}
+
+    if action == "convert_all":
+        base = payload.get("dir") or payload.get("path")
+        if not base or not os.path.isdir(base):
+            raise OfficeError("convert_all requires 'dir' (existing directory path)")
+        to = str(payload.get("to") or "").strip().lower().lstrip(".")
+        only = str(payload.get("ext") or "").strip().lower()
+        if only and not only.startswith("."):
+            only = "." + only
+        if to not in CONVERT_TARGETS:
+            raise OfficeError("Unsupported target '%s'. Supported: %s" % (to, ", ".join(CONVERT_TARGETS)))
+        results = []
+        for name in sorted(os.listdir(base)):
+            fpath = os.path.join(base, name)
+            if not os.path.isfile(fpath):
+                continue
+            ext = os.path.splitext(name)[1].lower()
+            if only and ext != only:
+                continue
+            if ext not in CONVERT_SOURCES or ext == ".%s" % to:
+                continue
+            try:
+                res = op_convert({"path": fpath, "to": to})
+                results.append({"file": name, "ok": True, "out": res.get("out")})
+            except Exception as exc:
+                results.append({"file": name, "ok": False, "error": str(exc)})
+        return {
+            "action": "convert_all",
+            "total": len(results),
+            "ok": sum(1 for r in results if r["ok"]),
+            "results": results,
+        }
+
+    raise OfficeError("Unknown batch action '%s'. Supported: merge_pdf, split_pdf, convert_all" % action)
+
+
 def main():
     try:
         payload = json.loads(sys.stdin.read() or "{}")
@@ -2630,8 +2758,10 @@ def main():
             data = op_convert(payload)
         elif op == "chart":
             data = op_chart(payload)
+        elif op == "batch":
+            data = op_batch(payload)
         else:
-            raise OfficeError("Unknown op '%s'. Expected: capabilities, inspect, read, write, convert, chart, ocr, parse_lab" % op)
+            raise OfficeError("Unknown op '%s'. Expected: capabilities, inspect, read, write, convert, chart, batch, ocr, parse_lab" % op)
         emit({"ok": True, "data": data})
         return 0
     except OfficeError as exc:
