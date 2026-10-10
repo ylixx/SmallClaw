@@ -12,10 +12,12 @@
 
 import fs from 'fs';
 import path from 'path';
+import { spawn } from 'child_process';
 import type { OfficeToolOutcome, OfficePathGuard } from '../office';
 
 const RENDER_TIMEOUT_MS = 60000;
 const GENERATE_TIMEOUT_MS = 180000;
+const EDIT_TIMEOUT_MS = 120000;
 const MAX_HTML_CHARS = 200000;
 const MAX_PROMPT_CHARS = 4000;
 
@@ -319,8 +321,113 @@ function imageGenerateConfig(): { endpoint: string; apiKey: string; model: strin
   }
 }
 
-export function isImageGenerateConfigured(): boolean {
-  return Boolean(imageGenerateConfig().endpoint);
+export function isImageGenerateConfigured(): boolean {  return Boolean(imageGenerateConfig().endpoint);
+}
+
+// ─── image_edit (PIL, fully offline) ──────────────────────────────────────────
+
+let editPython: string | null | undefined;
+let editHelper: string | null | undefined;
+
+async function findEditPython(): Promise<string | null> {
+  if (editPython !== undefined && editPython !== null) return editPython;
+  const candidates = [
+    process.env.SMALLCLAW_PYTHON,
+    'python',
+    'py',
+  ].filter(Boolean) as string[];
+  for (const c of candidates) {
+    try {
+      const res = await new Promise<boolean>((resolve) => {
+        const p = spawn(c, ['-c', 'import PIL, sys; print(sys.version.split()[0])'], { windowsHide: true });
+        let ok = false;
+        p.on('close', (code) => { ok = code === 0; resolve(ok); });
+        p.on('error', () => resolve(false));
+      });
+      if (res) { editPython = c; return c; }
+    } catch { /* try next */ }
+  }
+  editPython = null;
+  return null;
+}
+
+function resolveEditHelper(): string | null {
+  if (editHelper) return editHelper;
+  const here = __dirname;
+  const candidates = [
+    path.join(here, 'image_edit.py'),
+    path.join(here, '..', '..', '..', 'src', 'tools', 'image', 'image_edit.py'),
+    path.join(process.cwd(), 'src', 'tools', 'image', 'image_edit.py'),
+  ];
+  for (const c of candidates) {
+    if (fs.existsSync(c)) { editHelper = c; return c; }
+  }
+  return null;
+}
+
+function runImageEdit(payload: Record<string, any>): Promise<OfficeToolOutcome> {
+  return new Promise(async (resolve) => {
+    const helper = resolveEditHelper();
+    if (!helper) return resolve({ result: 'image_edit helper not found (image_edit.py)', error: true });
+    const python = await findEditPython();
+    if (!python) {
+      return resolve({ result: 'Python with Pillow not found. Set SMALLCLAW_PYTHON or install Pillow.', error: true });
+    }
+    let child: ReturnType<typeof spawn>;
+    try {
+      child = spawn(python, ['-X', 'utf8', helper], { windowsHide: true });
+    } catch (err) {
+      return resolve({ result: `image_edit spawn failed: ${(err as Error)?.message || err}`, error: true });
+    }
+    let out = '';
+    let err = '';
+    child.stdout?.on('data', (c) => (out += c));
+    child.stderr?.on('data', (c) => (err += c));
+    const timer = setTimeout(() => {
+      try { child.kill(); } catch { /* noop */ }
+    }, EDIT_TIMEOUT_MS);
+    child.on('error', (e) => { clearTimeout(timer); resolve({ result: `image_edit failed: ${e.message}`, error: true }); });
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      try {
+        const parsed = JSON.parse(out);
+        if (parsed?.ok) return resolve({ result: JSON.stringify(parsed.data, null, 2), error: false });
+        const detail = parsed?.detail ? `\n${parsed.detail}` : '';
+        return resolve({ result: `${parsed?.error || 'image_edit failed'}${detail}`, error: true });
+      } catch {
+        return resolve({ result: `image_edit returned invalid output (exit ${code}). stderr: ${err.slice(0, 300)}`, error: true });
+      }
+    });
+    child.stdin?.end(JSON.stringify(payload));
+  });
+}
+
+async function executeImageEdit(
+  args: any,
+  workspacePath: string,
+  guard?: OfficePathGuard,
+): Promise<OfficeToolOutcome> {
+  const action = asText(args?.action);
+  if (!['cutout', 'compress', 'watermark'].includes(action)) {
+    return { result: `image_edit action must be one of: cutout, compress, watermark (got "${action}")`, error: true };
+  }
+  const src = asText(args?.filename || args?.path || args?.image);
+  if (!src) return { result: 'filename is required (image path to edit)', error: true };
+  const resolved = resolveDynamicPath(workspacePath, src, guard);
+  if (!resolved.ok) return { result: resolved.error, error: true };
+  if (!fs.existsSync(resolved.path)) return { result: `source image not found: ${src}`, error: true };
+
+  const outName = asText(args?.out);
+  const payload: Record<string, any> = { action, path: resolved.path };
+  if (outName) {
+    const ro = resolveDynamicPath(workspacePath, outName, guard);
+    if (!ro.ok) return { result: ro.error, error: true };
+    payload.out = ro.path;
+  }
+  for (const k of ['color', 'threshold', 'trim', 'quality', 'target_kb', 'max_dim', 'text', 'image', 'opacity', 'position', 'size', 'max_width', 'color']) {
+    if (args?.[k] !== undefined && args?.[k] !== null && args?.[k] !== '') payload[k] = args[k];
+  }
+  return runImageEdit(payload);
 }
 
 async function executeImageGenerate(
@@ -454,6 +561,42 @@ export function getImageToolDefinitions(): any[] {
       },
     });
   }
+  defs.push({
+    type: 'function',
+    function: {
+      name: 'image_edit',
+      description:
+        'Edit an image locally with Pillow (offline): cutout (remove a solid/near-uniform background -> transparent PNG), compress (reduce file size via quality / target_kb / max_dim), watermark (overlay text or an image watermark). Use for 抠图/去背景、图片压缩、加水印.',
+      parameters: {
+        type: 'object',
+        required: ['action', 'filename'],
+        properties: {
+          action: {
+            type: 'string',
+            enum: ['cutout', 'compress', 'watermark'],
+            description: 'cutout = remove background to transparent PNG; compress = reduce size; watermark = overlay text/image.',
+          },
+          filename: { type: 'string', description: 'Path of the image to edit (in the workspace).' },
+          out: { type: 'string', description: 'Output path (default: <name>_cutout.png / _compressed.jpg / _watermarked.png).' },
+          color: { type: 'string', description: 'cutout: background color to remove, e.g. "ffffff" (default = auto-detect from corners/edges).' },
+          threshold: { type: 'number', description: 'cutout: color-distance tolerance 0-200 (default 40). Higher removes more.' },
+          trim: { type: 'boolean', description: 'cutout: crop to content bounding box after removal.' },
+          quality: { type: 'number', description: 'compress: JPEG/WebP quality 20-95 (default 80).' },
+          target_kb: { type: 'number', description: 'compress: target file size in KB; auto-finds best quality.' },
+          max_dim: { type: 'number', description: 'compress: downscale so max side is this many px.' },
+          text: { type: 'string', description: 'watermark: watermark text (one of text/image required).' },
+          image: { type: 'string', description: 'watermark: path to a watermark image instead of text.' },
+          opacity: { type: 'number', description: 'watermark: opacity 0.0-1.0 (default 0.35).' },
+          position: {
+            type: 'string',
+            description: 'watermark: top-left/top-right/bottom-left/bottom-right/center (default bottom-right).',
+          },
+          size: { type: 'number', description: 'watermark: font size in px (default auto).' },
+          max_width: { type: 'number', description: 'watermark(image): max width as fraction of source (default 0.3).' },
+        },
+      },
+    },
+  });
   return defs;
 }
 
@@ -466,5 +609,6 @@ export async function executeImageTool(
 ): Promise<OfficeToolOutcome> {
   if (name === 'image_render') return executeImageRender(args, workspacePath, guard);
   if (name === 'image_generate') return executeImageGenerate(args, workspacePath, guard);
+  if (name === 'image_edit') return executeImageEdit(args, workspacePath, guard);
   return { result: `Unknown image tool: ${name}`, error: true };
 }
