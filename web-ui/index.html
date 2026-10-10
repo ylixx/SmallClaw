@@ -10002,7 +10002,7 @@ async function runScheduleNow(jobId) {
     
     if (result.success) {
       await refreshSchedules();
-      alert('Schedule running now...');
+      alert('任务已触发，正在运行...');
     } else {
       alert('Error: ' + (result.error || 'Failed to run'));
     }
