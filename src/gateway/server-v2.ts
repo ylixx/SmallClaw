@@ -1224,7 +1224,7 @@ function buildTools() {
       type: 'function',
       function: {
         name: 'grep_content',
-        description: 'Search file contents inside the workspace with a regex and return "file:line: text" matches. Use when you need to FIND where something is written (a config key, function name, string) — do NOT guess file by file. Patterns are JavaScript RegExp (e.g. "compactionThreshold", "memoryFlush.*threshold"). Large dirs (node_modules/.git/dist) are skipped; invalid regex returns an error.',
+        description: 'Search file contents inside the workspace with a regex and return "file:line: text" matches. Use when you need to FIND where something is written (a config key, function name, string) — do NOT guess file by file. Patterns are JavaScript RegExp (e.g. "compactionThreshold", "memoryFlush.*threshold"). Large dirs (node_modules/.git/dist) are skipped; invalid regex returns an error. If the first pattern returns NO matches, do NOT conclude the file lacks the content: re-search with shorter or synonymous keywords (e.g. "产物" → "交付物"/"产出"/"验收"/"deliverable"), and if the document may be English also try English keywords (e.g. deliverable/output/acceptance/criteria). When searching a specific file use path="FULLPLAN.md" style exact filenames (note: project docs like FULLPLAN.md live in the workspace directory).',
         parameters: {
           type: 'object', required: ['pattern'],
           properties: {
@@ -1462,7 +1462,7 @@ function buildTools() {
               },
             },
             model_override: { type: 'string', description: 'Optional model override for this job' },
-            confirm: { type: 'boolean', description: 'Must be true for create/update/delete' },
+            confirm: { type: 'boolean', description: 'Must be true for create/update/delete. When the user has already explicitly asked you to create/update/delete a job in this conversation, set confirm=true in the SAME call — do not stall waiting for a second confirmation. Also accepts the string "true".' },
             limit: { type: 'number', description: 'Optional max jobs for list' },
           },
         },
@@ -2047,6 +2047,14 @@ function normalizeScheduleJobAction(raw: any): ScheduleJobAction | null {
     return v as ScheduleJobAction;
   }
   return null;
+}
+
+/**
+ * 布尔确认容错：小模型 JSON 输出常把 true 写成字符串 'true'/'True'/'TRUE'。
+ * 只有显式确认值才返回 true，保持安全闸门语义不变。
+ */
+function isConfirmed(value: any): boolean {
+  return value === true || (typeof value === 'string' && value.trim().toLowerCase() === 'true');
 }
 
 function summarizeCronJob(job: any): Record<string, any> {
@@ -2697,7 +2705,7 @@ async function executeToolImpl(name: string, args: any, workspacePath: string, s
         }
 
         const requiresConfirm = action === 'create' || action === 'update' || action === 'delete';
-        if (requiresConfirm && args.confirm !== true) {
+        if (requiresConfirm && !isConfirmed(args.confirm)) {
           return {
             name,
             args,
@@ -7383,7 +7391,7 @@ async function handleTaskControlAction(sessionId: string, args: any): Promise<Ta
       }
       return { success: false, action, code: 'no_candidate', message: resolved.err };
     }
-    if (action === 'cancel' && args?.confirm !== true) {
+    if (action === 'cancel' && !isConfirmed(args?.confirm)) {
       return { success: false, action, code: 'needs_confirmation', message: 'cancel requires confirm=true.' };
     }
     const task = loadTask(resolved.task.id);
@@ -7403,7 +7411,7 @@ async function handleTaskControlAction(sessionId: string, args: any): Promise<Ta
   }
 
   if (action === 'delete') {
-    if (args?.confirm !== true) {
+    if (!isConfirmed(args?.confirm)) {
       return { success: false, action, code: 'needs_confirmation', message: 'delete requires confirm=true.' };
     }
     const resolved = resolveCandidateForAction('delete');
@@ -9365,7 +9373,7 @@ app.post('/api/schedules', (req: any, res: any) => {
   const { name, pattern, prompt, timezone, delivery_channel, confirm } = req.body;
   
   // Require confirmation for create
-  if (confirm !== true) {
+  if (!isConfirmed(confirm)) {
     return res.json({
       success: false,
       needs_confirmation: true,
@@ -9404,7 +9412,7 @@ app.post('/api/schedules', (req: any, res: any) => {
 app.put('/api/schedules/:id', (req: any, res: any) => {
   const { name, pattern, prompt, timezone, delivery_channel, confirm } = req.body;
   
-  if (confirm !== true) {
+  if (!isConfirmed(confirm)) {
     return res.json({
       success: false,
       needs_confirmation: true,
@@ -9430,7 +9438,7 @@ app.put('/api/schedules/:id', (req: any, res: any) => {
 app.delete('/api/schedules/:id', (req: any, res: any) => {
   const { confirm } = req.body;
   
-  if (confirm !== true) {
+  if (!isConfirmed(confirm)) {
     return res.json({
       success: false,
       needs_confirmation: true,
