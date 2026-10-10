@@ -1317,56 +1317,223 @@ def outline_to_markdown(slides):
     return "\n".join(out).rstrip()
 
 
-def _append_outline_slides(prs, slides, accent="2C5F8A"):
-    """Append slides from an outline with built-in styling:
-    标题页 = 深色主视觉（大标题 + 副标题）；内容页 = 品牌色标题 + 深灰正文。"""
-    from pptx.util import Inches as PptxInches, Pt as PptxPt
+# ─── PPT outline rendering (Doubao-style theming) ────────────────────────────
+
+# 4 套内置主题：primary(主色) / secondary(辅色) / deep(封面结尾深底) / text(正文色) / muted(次要文字) / line(分割线)
+PPT_THEMES = {
+    "business-blue": {"primary": "2C5F8A", "secondary": "9DB8D2", "deep": "1F3864", "text": "222222", "muted": "7F7F7F", "line": "D9E1EA"},
+    "tech-teal": {"primary": "0F766E", "secondary": "99C9C4", "deep": "0B3B38", "text": "1F2937", "muted": "7C8A8A", "line": "D5E6E3"},
+    "minimal-dark": {"primary": "2B2B3A", "secondary": "9A9AAF", "deep": "15151F", "text": "2A2A33", "muted": "8A8A97", "line": "E2E2E8"},
+    "fresh-green": {"primary": "3E8E4E", "secondary": "A8D5B0", "deep": "25592E", "text": "2B2B2B", "muted": "7F8F81", "line": "DCE9DE"},
+}
+DEFAULT_PPT_THEME = "business-blue"
+END_TITLES = ("谢谢", "感谢观看", "谢谢观看", "谢谢大家", "敬请指正", "Thanks", "Thank you", "Thank You", "THANKS")
+SLIDE_W_IN = 13.333
+SLIDE_H_IN = 7.5
+
+try:
+    from pptx.dml.color import RGBColor as _PPTX_RGB
+except Exception:  # pragma: no cover
+    _PPTX_RGB = None
+
+
+def _white_rgb():
+    return _PPTX_RGB.from_string("FFFFFF")
+
+
+def _theme_rgb(theme_name, key):
     from pptx.dml.color import RGBColor
+
+    t = PPT_THEMES.get((theme_name or "").strip().lower())
+    if not t:
+        t = PPT_THEMES[DEFAULT_PPT_THEME]
+    return RGBColor.from_string(t[key])
+
+
+def _add_rect(slide, x, y, w, h, color, shape_type="RECTANGLE"):
+    from pptx.enum.shapes import MSO_SHAPE
+    from pptx.util import Inches as PptxInches
+
+    st = MSO_SHAPE.OVAL if shape_type == "OVAL" else MSO_SHAPE.RECTANGLE
+    shp = slide.shapes.add_shape(st, PptxInches(x), PptxInches(y), PptxInches(w), PptxInches(h))
+    shp.fill.solid()
+    shp.fill.fore_color.rgb = color
+    shp.line.fill.background()
+    shp.shadow.inherit = False
+    return shp
+
+
+def _add_text(slide, x, y, w, h, text, size, color, bold=False, align="left", valign="top"):
+    from pptx.util import Inches as PptxInches, Pt as PptxPt
+    from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
+
+    box = slide.shapes.add_textbox(PptxInches(x), PptxInches(y), PptxInches(w), PptxInches(h))
+    tf = box.text_frame
+    tf.word_wrap = True
+    tf.margin_left = 0
+    tf.margin_right = 0
+    tf.margin_top = 0
+    tf.margin_bottom = 0
+    tf.vertical_anchor = {"top": MSO_ANCHOR.TOP, "middle": MSO_ANCHOR.MIDDLE, "bottom": MSO_ANCHOR.BOTTOM}[valign]
+    p = tf.paragraphs[0]
+    p.alignment = {"left": PP_ALIGN.LEFT, "center": PP_ALIGN.CENTER, "right": PP_ALIGN.RIGHT}[align]
+    p.font.size = PptxPt(size)
+    p.font.bold = bold
+    p.font.color.rgb = color
+    p.font.name = "Microsoft YaHei"
+    p.space_after = 0
+    p.space_before = 0
+    p.text = text
+    return box
+
+
+def _render_title_slide(slide, t, theme, title, subtitle, author):
+    """封面：深色底 + 几何装饰 + 大标题 + 副标题 + 日期页脚。"""
+    primary = _theme_rgb(theme, "primary")
+    secondary = _theme_rgb(theme, "secondary")
+    deep = _theme_rgb(theme, "deep")
+    muted = _theme_rgb(theme, "muted")
+    white = _white_rgb()
+    try:
+        slide.background.fill.solid()
+        slide.background.fill.fore_color.rgb = deep
+    except Exception:
+        pass
+    # 装饰：左上主色色带 + 左上角细线 + 右下辅色圆 + 左下主色小圆
+    _add_rect(slide, 0, 0, 2.4, 0.16, primary)
+    _add_rect(slide, 0, 0.16, 0.04, 2.0, secondary)
+    _add_rect(slide, 11.4, 6.2, 1.93, 1.3, secondary, "OVAL")
+    _add_rect(slide, 0.7, 6.15, 0.42, 0.42, primary, "OVAL")
+    # 大标题
+    _add_text(slide, 1.2, 2.45, 10.9, 1.7, title, 40, white, bold=True)
+    # 副标题（第一条要点或“副标题”）
+    sub = subtitle or (t.get("bullets") or [None])[0]
+    if sub:
+        _add_text(slide, 1.2, 4.15, 10.9, 0.8, str(sub), 18, secondary)
+    # 日期与作者
+    from datetime import date
+
+    _add_text(slide, 1.2, 6.35, 6.0, 0.4, date.today().strftime("%Y年%m月%d日"), 12, muted)
+    if author:
+        _add_text(slide, 9.6, 6.35, 2.5, 0.4, str(author), 12, muted, align="right")
+
+
+def _render_toc_slide(slide, t, theme, titles):
+    """目录页：标题栏 + 编号列表（两列）。"""
+    primary = _theme_rgb(theme, "primary")
+    secondary = _theme_rgb(theme, "secondary")
+    text_c = _theme_rgb(theme, "text")
+    muted = _theme_rgb(theme, "muted")
+    _add_rect(slide, 0.55, 0.5, 0.14, 0.55, primary)
+    _add_text(slide, 0.9, 0.42, 8.0, 0.7, "目录 CONTENTS", 28, text_c, bold=True)
+    _add_rect(slide, 0.55, 1.28, 12.23, 0.02, secondary)
+    col_w = 5.9
+    per_col = 6
+    for i, ttl in enumerate(titles):
+        col = i // per_col
+        row = i % per_col
+        x = 0.9 + col * (col_w + 0.9)
+        y = 1.75 + row * 0.72
+        num = _add_text(slide, x, y, 0.8, 0.5, "%02d" % (i + 1), 18, primary, bold=True)
+        _add_text(slide, x + 0.95, y + 0.02, col_w - 1.1, 0.5, str(ttl), 18, text_c)
+
+
+def _render_content_slide(slide, t, theme, page_no, total, author):
+    """内容页：标题栏（主色竖条 + 标题 + 分割线）+ 分层圆点要点 + 页脚页码。"""
+    primary = _theme_rgb(theme, "primary")
+    secondary = _theme_rgb(theme, "secondary")
+    text_c = _theme_rgb(theme, "text")
+    muted = _theme_rgb(theme, "muted")
+    line = _theme_rgb(theme, "line")
+    title = t.get("title") or "演示文稿"
+    bullets = t.get("bullets") or []
+    # 标题栏
+    _add_rect(slide, 0.55, 0.5, 0.14, 0.55, primary)
+    _add_text(slide, 0.9, 0.42, 11.2, 0.7, str(title), 26, text_c, bold=True)
+    _add_rect(slide, 0.55, 1.28, 12.23, 0.02, secondary)
+    # 要点（一级主色圆点 / 二级灰色小圆点）
+    y = 1.75
+    for b in bullets:
+        btext = str(b).strip()
+        if not btext:
+            continue
+        if btext.startswith("- "):
+            btext = btext[2:].strip()
+            _add_rect(slide, 1.35, y + 0.09, 0.09, 0.09, muted, "OVAL")
+            _add_text(slide, 1.62, y + 0.02, 10.6, 0.42, btext, 16, muted)
+            y += 0.42
+        else:
+            _add_rect(slide, 0.9, y + 0.07, 0.13, 0.13, primary, "OVAL")
+            _add_text(slide, 1.2, y + 0.01, 11.3, 0.5, btext, 18, text_c)
+            y += 0.52
+    # 页脚
+    _add_rect(slide, 0.55, 7.08, 12.23, 0.012, line)
+    if author:
+        _add_text(slide, 0.55, 7.16, 6.0, 0.3, str(author), 10, muted)
+    _add_text(slide, 12.0, 7.16, 0.8, 0.3, "%d / %d" % (page_no, total), 10, muted, align="right")
+
+
+def _render_end_slide(slide, t, theme, author):
+    """结尾页：主色底 + 谢谢观看。"""
+    primary = _theme_rgb(theme, "primary")
+    deep = _theme_rgb(theme, "deep")
+    secondary = _theme_rgb(theme, "secondary")
+    white = _white_rgb()
+    try:
+        slide.background.fill.solid()
+        slide.background.fill.fore_color.rgb = primary
+    except Exception:
+        pass
+    _add_rect(slide, 0, 7.2, 13.333, 0.3, deep)
+    _add_rect(slide, 0, 0, 0.2, 7.2, deep)
+    _add_rect(slide, 12.0, 0, 1.333, 0.16, secondary)
+    title = t.get("title") or "谢谢观看"
+    _add_text(slide, 3.67, 2.7, 6.0, 1.2, str(title), 36, white, bold=True, align="center")
+    sub = (t.get("bullets") or [None])[0]
+    if sub:
+        _add_text(slide, 3.67, 4.1, 6.0, 0.6, str(sub), 16, secondary, align="center")
+    if author:
+        _add_text(slide, 3.67, 5.2, 6.0, 0.4, str(author), 12, secondary, align="center")
+
+
+def _append_outline_slides(prs, slides, theme=None, title=None, author=None):
+    """按大纲生成豆包风格幻灯片：
+    封面（深色主视觉）→ 目录（内容页 ≥ 5 时自动插入）→ 内容页（标题栏+圆点要点+页码）→ 结尾页。
+    theme: business-blue / tech-teal / minimal-dark / fresh-green；title/author 用于封面与页脚。"""
+    from pptx.util import Inches as PptxInches
+
+    theme = theme or DEFAULT_PPT_THEME
+    if not isinstance(slides, list) or not slides:
+        return prs
 
     layouts = list(prs.slide_layouts)
     blank = layouts[6] if len(layouts) > 6 else layouts[0]
-    content_layout = layouts[1] if len(layouts) > 1 else layouts[0]
-    accent_rgb = RGBColor.from_string(accent)
-    dark = RGBColor.from_string("1F3864")
-    white = RGBColor.from_string("FFFFFF")
-    sub_rgb = RGBColor.from_string("B8C4D9")
-    body_rgb = RGBColor.from_string("333333")
 
-    for slide_spec in slides:
-        is_title = slide_spec.get("kind") == "title"
-        title = slide_spec.get("title") or "演示文稿"
-        bullets = slide_spec.get("bullets") or []
-        if is_title:
-            slide = prs.slides.add_slide(blank)
-            try:
-                slide.background.fill.solid()
-                slide.background.fill.fore_color.rgb = dark
-            except Exception:
-                pass
-            tb = slide.shapes.add_textbox(PptxInches(0.8), PptxInches(2.0), PptxInches(8.4), PptxInches(1.8))
-            tf = tb.text_frame
-            tf.word_wrap = True
-            tf.text = title
-            p = tf.paragraphs[0]
-            p.font.size = PptxPt(40)
-            p.font.bold = True
-            p.font.color.rgb = white
-            if bullets:
-                sub = tf.add_paragraph()
-                sub.text = bullets[0]
-                sub.font.size = PptxPt(18)
-                sub.font.color.rgb = sub_rgb
+    content_slides = [s for s in slides if s.get("kind") != "title"]
+    # 标题页：第一个 kind==title 的页当封面；没有则用 title 参数或第一页标题
+    title_spec = next((s for s in slides if s.get("kind") == "title"), None)
+    if title_spec is None and content_slides:
+        title_spec = {"kind": "title", "title": title or content_slides[0].get("title") or "演示文稿", "bullets": []}
+    if title_spec is not None:
+        _render_title_slide(prs.slides.add_slide(blank), title_spec, theme, title_spec.get("title") or "演示文稿", None, author)
+
+    toc_titles = [s.get("title") for s in content_slides if s.get("title")]
+    # 目录页：内容页 ≥ 5 且非结尾页时插入
+    if len(content_slides) >= 5:
+        end_titles = [s for s in content_slides if str(s.get("title") or "").strip() in END_TITLES]
+        listed = [s for s in content_slides if s not in end_titles]
+        if len(listed) >= 5:
+            _render_toc_slide(prs.slides.add_slide(blank), title_spec or {}, theme, [s.get("title") for s in listed])
+
+    rendered = []
+    for s in content_slides:
+        rendered.append(s)
+        s_title = str(s.get("title") or "").strip()
+        is_end = s_title in END_TITLES
+        if is_end:
+            _render_end_slide(prs.slides.add_slide(blank), s, theme, author)
         else:
-            slide = prs.slides.add_slide(content_layout)
-            for shape in slide.placeholders:
-                try:
-                    idx = shape.placeholder_format.idx
-                except Exception:
-                    continue
-                if idx == 0 and title:
-                    set_shape_text(shape, title, font={"size": PptxPt(28), "bold": True, "rgb": accent_rgb})
-                elif idx == 1 and bullets:
-                    set_shape_text(shape, "\n".join(bullets), font={"size": PptxPt(18), "rgb": body_rgb})
+            _render_content_slide(prs.slides.add_slide(blank), s, theme, len(rendered), len(content_slides), author)
     return prs
 
 
@@ -1896,6 +2063,10 @@ def _plan_pptx(ops, path, out_path, created=False):
     from pptx.util import Inches as PptxInches, Pt
 
     prs = Presentation(path) if os.path.isfile(path) else Presentation()
+    if not os.path.isfile(path):
+        # 新建演示文稿统一 16:9
+        prs.slide_width = PptxInches(SLIDE_W_IN)
+        prs.slide_height = PptxInches(SLIDE_H_IN)
     plans = []
 
     for op in ops:
@@ -2067,13 +2238,19 @@ def _plan_pptx(ops, path, out_path, created=False):
                 slides = parse_outline_slides(text)
                 if not slides:
                     raise OfficeError("outline markdown produced no slides")
+                theme = str(op.get("theme") or DEFAULT_PPT_THEME).strip().lower()
+                if theme not in PPT_THEMES:
+                    raise OfficeError("theme must be one of: %s" % ", ".join(sorted(PPT_THEMES)))
+                ppt_title = str(op.get("title") or "").strip() or None
+                author = str(op.get("author") or "").strip() or None
                 plans.append(
                     {
                         "ok": True,
                         "op": kind,
                         "target": "%d slide(s)" % len(slides),
-                        "markdown": "**按大纲生成幻灯片（%d 页）**\n\n%s" % (len(slides), outline_to_markdown(slides)),
-                        "_apply": {"slides": slides, "mode": "outline"},
+                        "markdown": "**按大纲生成幻灯片（%d 页，主题 %s）**\n\n%s"
+                        % (len(slides), theme, outline_to_markdown(slides)),
+                        "_apply": {"slides": slides, "mode": "outline", "theme": theme, "title": ppt_title, "author": author},
                     }
                 )
             else:
@@ -2153,7 +2330,13 @@ def _plan_pptx(ops, path, out_path, created=False):
                     elif idx == 1 and spec["bullets"]:
                         set_shape_text(shape, "\n".join(spec["bullets"]))
             elif mode == "outline":
-                _append_outline_slides(prs, spec["slides"])
+                _append_outline_slides(
+                    prs,
+                    spec["slides"],
+                    theme=spec.get("theme") or DEFAULT_PPT_THEME,
+                    title=spec.get("title"),
+                    author=spec.get("author"),
+                )
         tmp = path + ".tmp-%d" % os.getpid()
         prs.save(tmp)
         os.replace(tmp, out_path or path)

@@ -605,7 +605,7 @@ export function getOfficeToolDefinitions(): any[] {
         + 'ops by format:\n'
         + 'xlsx: {op:"cells",sheet,ref,values} | {op:"rows",sheet,at,values} | {op:"add_sheet",name} | {op:"chart",range,type:"bar|line|pie|area|scatter",title,anchor} | {op:"formula",sheet,ref,formula:"=SUM(B2:B10)"}. NOTE: a newly created .xlsx has ONE worksheet named "Sheet" (not "Sheet1") — you may omit the sheet field entirely for simple tables.\n'
         + 'docx: NEW document = one op {op:"content",markdown:"<full markdown>"} (headings + paragraphs + tables in a single call - always prefer this). Existing document edits: {op:"heading",at:"#append"|"#12",level,text} | {op:"insert",after:"#append"|"#12",text} | {op:"add_table",rows} | {op:"add_image",image} | table cells: at:"#T0",r,c\n'
-        + 'pptx: {op:"outline",markdown} ("# deck title", "## slide", "- bullet", "---" = next slide - builds a whole deck in one call) | {op:"add_slide",title,bullets} | existing slides: title/set_text/textbox/table/image/delete_shape with slide numbers.',
+        + 'pptx: {op:"outline",markdown,theme?,title?,author?} ("# deck title", "## slide", "- bullet", "---" = next slide) — theme: business-blue(default)/tech-teal/minimal-dark/fresh-green. Doubao-style rendering: styled cover, auto TOC (≥5 content slides), header bar + dotted bullets + page numbers, end page for 谢谢/感谢观看. | {op:"add_slide",title,bullets} | existing slides: title/set_text/textbox/table/image/delete_shape with slide numbers.',
       parameters: {
         type: 'object',
         required: ['filename', 'ops'],
