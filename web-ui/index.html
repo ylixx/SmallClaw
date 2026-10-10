@@ -2303,7 +2303,7 @@
       </div>
     </div>
     <div id="jobs-list">
-      <div class="empty-state">No chats yet.<br>Start a new conversation.</div>
+      <div class="empty-state">暂无对话。<br>开始新的对话吧。</div>
     </div>
   </div>
 
@@ -2314,7 +2314,7 @@
       <button class="sidebar-action" onclick="openCreateSkillModal()">+ Create</button>
     </div>
     <div id="skills-list" style="flex:1;min-height:0;overflow-y:auto;padding:10px">
-      <div class="empty-state" style="padding:16px">Loading skills...</div>
+      <div class="empty-state" style="padding:16px">正在加载技能...</div>
     </div>
   </div>
 
@@ -2331,7 +2331,7 @@
       <button class="sidebar-action" onclick="openCreateFlowModal()" style="width:100%">+ 新建流程</button>
     </div>
     <div id="flows-list" style="flex:1;min-height:0;overflow-y:auto;padding:10px">
-      <div class="empty-state" style="padding:16px">Loading flows...</div>
+      <div class="empty-state" style="padding:16px">正在加载工作流...</div>
     </div>
   </div>
 
@@ -2356,7 +2356,7 @@
       </div>
     </div>
     <div id="knowledge-list" style="flex:1 1 auto;min-height:260px;overflow-y:auto;padding:10px">
-      <div class="empty-state" style="padding:16px">Loading knowledge base...</div>
+      <div class="empty-state" style="padding:16px">正在加载知识库...</div>
     </div>
   </div>
 </aside>
@@ -2771,10 +2771,10 @@
       <div class="task-progress-wrap"><div class="task-progress-fill" id="r-task-progress-bar"></div></div>
       <div class="agent-context-scroll" id="r-agent-context-scroll">
         <div class="task-list" id="r-turn-execution">
-          <div style="font-size:11px;color:var(--muted)">No active turn execution yet.</div>
+          <div style="font-size:11px;color:var(--muted)">暂无执行记录。</div>
         </div>
         <div class="task-list" id="r-task-list">
-          <div style="font-size:11px;color:var(--muted)">No tasks yet.</div>
+          <div style="font-size:11px;color:var(--muted)">暂无任务。</div>
         </div>
         <div class="task-list" id="r-live-steps">
           <div style="font-size:11px;color:var(--muted)">No live tool steps.</div>
@@ -5574,7 +5574,7 @@ async function loadArtifactsChanges() {
   const res = await apiJson('/api/artifacts?sessionId=' + encodeURIComponent(activeChatSessionId || 'default'));
   const items = res.ok && Array.isArray(res.data.artifacts) ? res.data.artifacts : [];
   if (!items.length) {
-    view.innerHTML = '<div style="font-size:12px;color:var(--muted);padding:8px">No file changes recorded yet in this session.</div>';
+    view.innerHTML = '<div style="font-size:12px;color:var(--muted);padding:8px">本次会话暂无文件变更记录。</div>';
     return;
   }
   let html = '';
@@ -6231,7 +6231,7 @@ function renderAgentExecutionPanel() {
     const arrow = agent.expanded ? '▼' : '▶';
     const logsHtml = agent.logs.length > 0
       ? agent.logs.map(log => `<div class="agent-log-entry"><span class="agent-log-entry-time">${escHtml(log.ts)}</span><span class="agent-log-entry-type">[${escHtml(log.type.toUpperCase())}]</span><span class="agent-log-entry-content">${escHtml(log.content)}</span></div>`).join('')
-      : '<div style="color:var(--muted);opacity:0.6">No logs yet</div>';
+      : '<div style="color:var(--muted);opacity:0.6">暂无日志</div>';
 
     return `
       <div class="agent-item ${agent.expanded ? 'expanded' : ''}" onclick="toggleAgentPanel('${agent.id}')">
@@ -6797,7 +6797,7 @@ async function loadCredVaultStatus() {
     const data = await api('/api/credentials/status');
     const keys = data.keys || [];
     if (!keys.length) {
-      el.innerHTML = '<span style="color:var(--warn)">⚠ No credentials stored yet.</span>';
+      el.innerHTML = '<span style="color:var(--warn)">⚠ 暂无凭据存储。</span>';
       return;
     }
     el.innerHTML = keys.map(k => {
@@ -6827,7 +6827,7 @@ async function loadCredVaultLog() {
   try {
     const data = await api('/api/credentials/audit');
     const lines = (data.lines || []).slice(-18).reverse();
-    if (!lines.length) { el.textContent = 'No audit entries yet.'; return; }
+    if (!lines.length) { el.textContent = '暂无审计记录。'; return; }
     el.innerHTML = lines.map(l => {
       const safe = l.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
       const color = l.includes('SET') ? 'var(--ok)' : l.includes('GET') ? 'var(--brand)' : l.includes('DEL') ? 'var(--err)' : 'var(--muted)';
@@ -7269,7 +7269,7 @@ async function refreshProviderModels() {
         if (models.length) sel.value = models[0];
       }
     });
-    if (msg) msg.textContent = models.length ? `${models.length} model(s) found.` : 'No models found — is the server running?';
+    if (msg) msg.textContent = models.length ? `找到 ${models.length} 个模型。` : '未找到模型——服务器是否在运行？';
   } catch (e) {
     if (msg) msg.textContent = 'Failed to fetch models.';
   }
@@ -7443,7 +7443,7 @@ async function loadAgentSessionContext() {
     if (execPanel) {
       const cur = data.current_turn_execution;
       if (!cur || typeof cur !== 'object') {
-        execPanel.innerHTML = '<div style="font-size:11px;color:var(--muted)">No active turn execution yet.</div>';
+        execPanel.innerHTML = '<div style="font-size:11px;color:var(--muted)">暂无执行记录。</div>';
       } else {
         const objective = escHtml(String(cur.objective_raw || '(no objective)').slice(0, 220));
         const status = escHtml(String(cur.status || 'planned'));
@@ -7507,7 +7507,7 @@ async function loadAgentSessionContext() {
     if (taskList) {
       const tasks = Array.isArray(data.tasks) ? data.tasks : [];
       if (!tasks.length) {
-        taskList.innerHTML = '<div style="font-size:11px;color:var(--muted)">No tasks yet.</div>';
+        taskList.innerHTML = '<div style="font-size:11px;color:var(--muted)">暂无任务。</div>';
       } else {
         taskList.innerHTML = tasks.slice(0, 20).map(t => {
           const title = escHtml(String(t.title || '').slice(0, 120));
@@ -7541,7 +7541,7 @@ async function loadAgentSessionContext() {
       } else {
         const turns = data.recent_turns || [];
         if (!turns.length) {
-          rt.innerHTML = 'No turn objectives yet.';
+          rt.innerHTML = '暂无目标。';
         } else {
           rt.innerHTML = turns.map(t => {
             const kind = escHtml(String(t.kind || 'turn'));
@@ -7695,7 +7695,7 @@ function renderAgentsList() {
   const el = document.getElementById('settings-agents-list');
   if (!el) return;
   if (!agentsConfigList.length) {
-    el.innerHTML = '<div style="color:var(--muted)">No agents found.</div>';
+    el.innerHTML = '<div style="color:var(--muted)">未找到代理。</div>';
     return;
   }
   el.innerHTML = agentsConfigList.map((a) => {
@@ -7881,7 +7881,7 @@ async function loadAgentRunHistory() {
     const data = await api(`/api/agents/history?agentId=${encodeURIComponent(selectedAgentId)}&limit=12`);
     const rows = Array.isArray(data?.history) ? data.history : [];
     if (!rows.length) {
-      el.innerHTML = '<div style="color:var(--muted)">No runs yet.</div>';
+      el.innerHTML = '<div style="color:var(--muted)">暂无运行记录。</div>';
       return;
     }
     el.innerHTML = rows.map((r) => {
@@ -8222,7 +8222,7 @@ async function runMission() {
 function renderSessionsList() {
   const el = document.getElementById('jobs-list');
   if (!chatSessions || chatSessions.length === 0) {
-    el.innerHTML = '<div class="empty-state">No chats yet.<br>Start a new conversation.</div>';
+    el.innerHTML = '<div class="empty-state">暂无对话。<br>开始新的对话吧。</div>';
     return;
   }
   const sorted = [...chatSessions].sort((a, b) => (b.updatedAt || b.createdAt) - (a.updatedAt || a.createdAt));
@@ -10169,8 +10169,8 @@ function renderBgTasks() {
   if (bgtTasks.length === 0) {
     board.innerHTML = `<div style="text-align:center;padding:60px 24px;color:var(--muted);font-size:13px;flex:1">
       <div style="font-size:36px;margin-bottom:12px">Tasks</div>
-      <div style="font-weight:700;margin-bottom:4px">No background tasks yet</div>
-      <div style="font-size:12px">Ask SmallClaw to do something in the background and it'll appear here.</div>
+      <div style="font-weight:700;margin-bottom:4px">暂无后台任务</div>
+      <div style="font-size:12px">在对话中让 SmallClaw 后台执行任务，任务会出现在这里。</div>
     </div>`;
   }
 }
