@@ -9878,7 +9878,7 @@ async function parseSchedulePattern() {
   const pattern = document.getElementById('schedule-pattern').value.trim();
   const timezone = document.getElementById('schedule-timezone').value;
   if (!pattern) {
-    alert('Enter a schedule pattern (e.g., "daily at 09:00" or "0 9 * * *")');
+    alert('请输入触发规则，例如："daily at 18:00"（每天18点）或 "0 9 * * *"（cron 表达式）');
     return;
   }
   
@@ -9894,12 +9894,12 @@ async function parseSchedulePattern() {
       preview.style.display = 'block';
       preview.style.color = 'var(--muted)';
     } else {
-      preview.textContent = `⚠ ${result.error || 'Invalid pattern'}`;
+      preview.textContent = `⚠ ${result.error || '格式不正确'}`;
       preview.style.display = 'block';
       preview.style.color = '#ff6b6b';
     }
   } catch (err) {
-    document.getElementById('schedule-pattern-preview').textContent = '⚠ Parse failed';
+    document.getElementById('schedule-pattern-preview').textContent = '⚠ 解析失败';
     document.getElementById('schedule-pattern-preview').style.display = 'block';
     document.getElementById('schedule-pattern-preview').style.color = '#ff6b6b';
   }
@@ -9912,9 +9912,9 @@ async function saveSchedule() {
   const timezone = document.getElementById('schedule-timezone').value;
   const channel = document.getElementById('schedule-channel').value;
   
-  if (!name) return alert('Schedule name is required');
-  if (!pattern) return alert('Schedule pattern is required');
-  if (!prompt) return alert('Prompt/action is required');
+  if (!name) return alert('请填写任务名称');
+  if (!pattern) return alert('请填写触发规则');
+  if (!prompt) return alert('请填写任务内容');
   
   const method = editingScheduleId ? 'PUT' : 'POST';
   const path = editingScheduleId ? `/api/schedules/${editingScheduleId}` : '/api/schedules';
