@@ -958,15 +958,15 @@ function readDailyMemoryContext(workspacePath: string, maxTokens: number = 800):
 function detectToolCategories(text: string): Set<string> {
   const lower = String(text || '').toLowerCase();
   const cats = new Set<string>();
-  const WEB = ['search', 'find', 'look up', 'google', 'what is', 'who is', 'news', 'latest', 'research', 'look into', 'check online', 'summarize', 'article', 'read about'];
-  const BROWSER = ['open', 'login', 'log in', 'website', 'click', 'fill', 'form', 'navigate', 'go to', 'browse', 'sign in', 'download'];
-  const DESKTOP = ['desktop', 'screenshot', 'window', 'focus window', 'app', 'screen', 'type into', 'drag', 'clipboard'];
-  const FILES = ['read file', 'write file', 'edit file', 'create file', 'modify', 'replace', 'open file', 'delete file', 'rename', 'copy file', 'make a file', 'update the file', 'change the file', 'save to'];
-  const TASK = ['task', 'background', 'run this', 'start a', 'status', 'paused', 'resume', 'in progress', 'what tasks', 'running tasks'];
-  const SCHEDULE = ['schedule', 'every day', 'every week', 'at ', 'recurring', 'cron', 'automate', 'remind me', 'daily', 'weekly'];
-  const SHELL = ['run command', 'execute', 'terminal', 'powershell', 'script', 'command line', 'cmd', 'bash'];
-  const MEMORY = ['remember', 'note that', 'save that', 'write that down', 'dont forget', "don't forget", 'keep in mind', 'update my', 'add to my', 'i prefer', 'i like', 'i hate', 'i use', 'my name', 'call me', 'i work', 'my project', 'my stack'];
-  const DEBUG = ['why', 'error', 'failed', 'how does', 'architecture', 'debug', 'caused', 'broke', 'not working', 'explain how', 'whats wrong', "what's wrong"];
+  const WEB = ['search', 'find', 'look up', 'google', 'what is', 'who is', 'news', 'latest', 'research', 'look into', 'check online', 'summarize', 'article', 'read about', '查一下', '搜索', '查找', '资讯', '新闻', '搜一搜', '百度'];
+  const BROWSER = ['open', 'login', 'log in', 'website', 'click', 'fill', 'form', 'navigate', 'go to', 'browse', 'sign in', 'download', '打开网页', '浏览器', '登录', '网址'];
+  const DESKTOP = ['desktop', 'screenshot', 'window', 'focus window', 'app', 'screen', 'type into', 'drag', 'clipboard', '桌面', '截图', '窗口'];
+  const FILES = ['read file', 'write file', 'edit file', 'create file', 'modify', 'replace', 'open file', 'delete file', 'rename', 'copy file', 'make a file', 'update the file', 'change the file', 'save to', '文件', '读取', '列出', '目录', '工作区', '看看', '读一下', '列表', '打开文件', '文件夹', '里面有哪些', '有什么文件'];
+  const TASK = ['task', 'background', 'run this', 'start a', 'status', 'paused', 'resume', 'in progress', 'what tasks', 'running tasks', '任务', '待办', '进度', '后台'];
+  const SCHEDULE = ['schedule', 'every day', 'every week', 'at ', 'recurring', 'cron', 'automate', 'remind me', 'daily', 'weekly', '定时', '提醒', '每天', '每周', '周期'];
+  const SHELL = ['run command', 'execute', 'terminal', 'powershell', 'script', 'command line', 'cmd', 'bash', '命令', '终端', '脚本', '运行'];
+  const MEMORY = ['remember', 'note that', 'save that', 'write that down', 'dont forget', "don't forget", 'keep in mind', 'update my', 'add to my', 'i prefer', 'i like', 'i hate', 'i use', 'my name', 'call me', 'i work', 'my project', 'my stack', '记忆', '记住', '记得', '忘了', '以前', '上次', '偏好', '喜欢'];
+  const DEBUG = ['why', 'error', 'failed', 'how does', 'architecture', 'debug', 'caused', 'broke', 'not working', 'explain how', 'whats wrong', "what's wrong", '为什么', '报错', '怎么回事', '坏了', '查原因', '分析原因'];
   if (WEB.some(k => lower.includes(k))) cats.add('web');
   if (BROWSER.some(k => lower.includes(k))) cats.add('browser');
   if (DESKTOP.some(k => lower.includes(k))) cats.add('desktop');
@@ -1152,15 +1152,22 @@ async function buildPersonalityContext(
     if (TOOL_BLOCKS[cat]) toolBlockParts.push(TOOL_BLOCKS[cat]);
   }
 
-  // Build memory snippets for categories related to detected tool groups
+  // Build memory snippets for categories related to detected tool groups.
+  // Inject only when the message signals that domain; cap the size; mark the
+  // block background-only so unrelated memory never steers the current task.
   const memoryCategoryKeywords: string[] = [];
   for (const cat of cats) {
     const memCats = TOOL_TO_MEMORY_CATS[cat] || [];
     memoryCategoryKeywords.push(...memCats);
   }
-  const memorySnippets = memoryCategoryKeywords.length > 0
+  const rawMemorySnippets = memoryCategoryKeywords.length > 0
     ? readMemorySnippets(workspacePath, memoryCategoryKeywords)
     : '';
+  const memorySnippets = rawMemorySnippets.length > 1500 ? rawMemorySnippets.slice(0, 1500) : rawMemorySnippets;
+  const memoryBlock = memorySnippets
+    ? `[RELEVANT_MEMORY — 相关背景记忆，仅供背景参考；与当前任务无关时请忽略，不要据此编造事实]\n${memorySnippets}`
+    : '';
+  console.log(`[v2] memory injection: cats=${Array.from(cats).join(',')} snippets=${memorySnippets.length} chars`);
 
   // Tier 3: complex/multi-domain — add tools.md hint
   const isComplex = cats.size >= 3 || /\b(how do i|help me|can you|i need to|i want to)\b/i.test(messageText);
@@ -1171,12 +1178,12 @@ async function buildPersonalityContext(
 
   const parts = [
     identity ? `[IDENTITY]\n${identity}` : '',
-    user ? `[USER]\n${user}` : '',
+    user ? `[USER — 用户档案背景，仅当与当前任务相关时参考]\n${user}` : '',
     soul ? `[SOUL]\n${soul}` : '',
-    intradayNotes ? `[TODAY_NOTES]\n${intradayNotes}` : '',
+    intradayNotes ? `[TODAY_NOTES — 今日笔记背景，仅当与当前任务相关时参考]\n${intradayNotes}` : '',
     recentConvBlock || '',
     toolBlockParts.length > 0 ? `[TOOLS]\n${toolBlockParts.join('\n\n')}${toolsHint}` : (toolsHint ? `[TOOLS]${toolsHint}` : ''),
-    memorySnippets ? `[RELEVANT_MEMORY]\n${memorySnippets}` : '',
+    memoryBlock,
     self ? `[SELF]\n${self}` : '',
   ].filter(Boolean);
 
