@@ -78,6 +78,16 @@ A running log of features, fixes, and improvements added to SmallClaw. Each entr
 - 验证：`typecheck` 0 错；默认 `npm test` 71 passed/2 skipped；`SMALLCLAW_SMOKE=1 npm run smoke` 2 passed，`/api/tools` 仍锁定 53 个工具名（含 `request_secondary_assist`，证明注入正确、行为字节级不变），网关启动/清理无残留。
 - 备份点：`git tag backup/pre-phase2b-20261011`。
 
+### 2026-10-11 — server-v2 Split Phase 2c: filterToolsByIntent Cluster → tool-registry.ts (L)
+
+- 把 **零外部/server-v2 状态依赖**的 `filterToolsByIntent` 簇搬入 `tool-registry.ts`：`filterToolsByIntent()`（原 3160）+ 11 个 `CAT_*` 常量（原 3139-3158）+ 紧邻的纯函数 `detectToolCategories()`（原 850）。
+- server-v2.ts 改为 `import { filterToolsByIntent, detectToolCategories }`（`detectToolCategories` 在原 1035 行另有调用，一并保留引用）；旧定义从 server-v2 完全清除、无残留。
+- 该簇正是 `/api/tools` 端点（锁 53 工具名）的核心路径——搬移后快照比对通过，证明字节级行为不变。
+- ⚠️ **`applyToolPolicy`（原 1324，连带 `checkToolDenied` 1347）本轮未搬**：其依赖簇牵连 5 个 helper + 9 个 `*_TOOL_NAMES` 集合 + `TOOL_GROUPS` + 外部 import（`isPlanTool`/`getAgentById`/`getDefaultAgent`），且 `profileAllowsTool`/`TOOL_GROUPS` 仍被 server-v2 别处使用——牵一发动全身，拆为独立 **Phase 2d** 谨慎小步。
+- server-v2.ts 净减 94 行（10,115 → 10,020，累计净减 794 行）；tool-registry.ts 763 行。
+- 验证：`typecheck` 0 错；默认 `npm test` 71 passed/2 skipped；`SMALLCLAW_SMOKE=1 npm run smoke` 2 passed，`/api/tools` 仍锁定 53 个工具名（字节级不变），网关启动/清理无残留。
+- 备份点：`git tag backup/pre-phase2c-20261011`。
+
 ---
 
 ### 2026-10-04 — 2026-10-11 — Feature & Hardening Wave (D)

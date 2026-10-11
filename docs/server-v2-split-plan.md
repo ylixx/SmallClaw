@@ -1,6 +1,6 @@
 # server-v2.ts 拆分方案（规划文档）
 
-> 状态：Phase 0（安全网）✅、Phase 1（config-bootstrap + 失败熔断）✅、Phase 2a（工具压缩纯函数 → tool-registry）✅、Phase 2b（buildTools 整簇 → tool-registry）✅ 已完成并验证；Phase 2c（filterToolsByIntent + applyToolPolicy）、Phase 1.5（Model-Busy 守卫）、Phase 3–6 待执行。`server-v2.ts` 现为 **10,115 行**（原 10,814，累计净减 699 行），业务行为字节级不变。
+> 状态：Phase 0（安全网）✅、Phase 1（config-bootstrap + 失败熔断）✅、Phase 2a（工具压缩纯函数 → tool-registry）✅、Phase 2b（buildTools 整簇 → tool-registry）✅、Phase 2c（filterToolsByIntent 簇 → tool-registry）✅ 已完成并验证；Phase 2d（applyToolPolicy policy 簇）、Phase 1.5（Model-Busy 守卫）、Phase 3–6 待执行。`server-v2.ts` 现为 **10,020 行**（原 10,814，累计净减 794 行），业务行为字节级不变。
 > 目标：把 `src/gateway/server-v2.ts`（**10,814 行 / 100+ 导出符号**）从巨型单体拆成按域组织的模块，保留 `server-v2.ts` 作为"组合根（composition root）"——只做模块装配、Express 路由、SSE 接线，业务细节下沉到子模块。
 
 ---
@@ -75,7 +75,11 @@
   - **唯一真障碍 — `isOrchestrationSkillEnabled`**（依赖 server-v2 的 `skillsManager` 单例，无法平移）：改为通过 `buildTools(tier?, deps?)` 的 `deps.isOrchestrationSkillEnabled` 参数注入，server-v2 在 3 个调用点（含 `/api/tools` 端点）传入真实实现；`isOrchestrationSkillEnabled` 仍留在 server-v2（3945/9938 行亦用）。此为唯一必要的微小签名调整，行为不变。
   - server-v2.ts 净减 ~581 行（10,814 → 10,115，累计净减 699 行）；tool-registry.ts 现 ~664 行。
   - 验收（已通过）：`typecheck` 0 错；默认 `npm test` 71 passed/2 skipped；`SMALLCLAW_SMOKE=1 npm run smoke` 2 passed，`/api/tools` 仍锁定 53 个工具名（含 `request_secondary_assist`，证明注入正确、行为字节级不变），网关启动/清理无残留。
-- **Phase 2c（稍后）**：再搬 `filterToolsByIntent`(3778) + `applyToolPolicy`(1942) 到同一 `tool-registry.ts`。
+- **Phase 2c（部分完成 ✅：filterToolsByIntent 簇已搬；applyToolPolicy 因耦合深拆出为 Phase 2d）**：
+  - ✅ **已搬 `filterToolsByIntent` 簇**（原 3133-3203）：`filterToolsByIntent()` + 11 个 `CAT_*` 常量 + 紧邻的纯函数 `detectToolCategories()`（原 850）。**零外部/server-v2 状态依赖**（仅彼此 + `ModelTier` 类型 + `console`/`Set`），干净整体搬入 `tool-registry.ts` 并 `export`；server-v2 改为 `import { filterToolsByIntent, detectToolCategories }`（`detectToolCategories` 在 1035 行亦有调用）。server-v2.ts 净减 94 行（10,115 → 10,020，累计净减 794 行）；tool-registry.ts 763 行。
+  - ⚠️ **`applyToolPolicy`（原 1324，连带 `checkToolDenied` 1347）本轮未搬**：探查发现其依赖簇远超"纯数据"——牵连 5 个 helper（`matchToolPattern`/`profileAllowsTool`/`resolveAgentToolPolicy`/`resolveGlobalEnabledSet`/`sessionGlobalAllowlist`）+ 9 个 `*_TOOL_NAMES` 集合 + `TOOL_GROUPS` + 外部 import（`isPlanTool`/`getAgentById`/`getDefaultAgent`）。`profileAllowsTool`/`TOOL_GROUPS` 还被 server-v2 别处（1587 等）使用，牵一发动全身。拆为独立 **Phase 2d** 谨慎小步。
+  - 验收（filterToolsByIntent 部分，已通过）：`typecheck` 0 错；默认 `npm test` 71 passed/2 skipped；`SMALLCLAW_SMOKE=1 npm run smoke` 2 passed，`/api/tools` 仍锁定 53 个工具名（`filterToolsByIntent` 正是该端点核心路径，字节级不变），网关启动/清理无残留。备份点：`git tag backup/pre-phase2c-20261011`。
+- **Phase 2d（待执行）**：搬 `applyToolPolicy` + `checkToolDenied` + 其 policy helper 簇（含 `sessionGlobalAllowlist`/`resolveSessionAgent`/`resolveAgentToolPolicy`/`resolveGlobalEnabledSet`/`matchToolPattern`/`profileAllowsTool` + 9 个 `*_TOOL_NAMES` + `TOOL_GROUPS`）到同一 `tool-registry.ts`；因 `profileAllowsTool`/`TOOL_GROUPS` 仍被 server-v2 使用，需一并 `export` 后由 server-v2 回引，避免重复定义。
 
 - 验收：**搬移前后 `/api/tools` 输出逐字节一致**（快照比对通过）；`tsc` 0 错。
 

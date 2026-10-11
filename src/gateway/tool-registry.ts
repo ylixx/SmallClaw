@@ -662,3 +662,102 @@ export function buildTools(tier?: ModelTier, deps?: { isOrchestrationSkillEnable
   }
   return toolDefs;
 }
+
+// ─── Intent-based tool filtering (from server-v2.ts, Phase 2c) ───
+
+// Intent detection: returns matched tool categories for the message
+export function detectToolCategories(text: string): Set<string> {
+  const lower = String(text || '').toLowerCase();
+  const cats = new Set<string>();
+  const WEB = ['search', 'find', 'look up', 'google', 'what is', 'who is', 'news', 'latest', 'research', 'look into', 'check online', 'summarize', 'article', 'read about', '查一下', '搜索', '查找', '资讯', '新闻', '搜一搜', '百度'];
+  const BROWSER = ['open', 'login', 'log in', 'website', 'click', 'fill', 'form', 'navigate', 'go to', 'browse', 'sign in', 'download', '打开网页', '浏览器', '登录', '网址'];
+  const DESKTOP = ['desktop', 'screenshot', 'window', 'focus window', 'app', 'screen', 'type into', 'drag', 'clipboard', '桌面', '截图', '窗口'];
+  const FILES = ['read file', 'write file', 'edit file', 'create file', 'modify', 'replace', 'open file', 'delete file', 'rename', 'copy file', 'make a file', 'update the file', 'change the file', 'save to', '文件', '读取', '列出', '目录', '工作区', '看看', '读一下', '列表', '打开文件', '文件夹', '里面有哪些', '有什么文件'];
+  const TASK = ['task', 'background', 'run this', 'start a', 'status', 'paused', 'resume', 'in progress', 'what tasks', 'running tasks', '任务', '待办', '进度', '后台'];
+  const SCHEDULE = ['schedule', 'every day', 'every week', 'at ', 'recurring', 'cron', 'automate', 'remind me', 'daily', 'weekly', '定时', '提醒', '每天', '每周', '周期'];
+  const SHELL = ['run command', 'execute', 'terminal', 'powershell', 'script', 'command line', 'cmd', 'bash', '命令', '终端', '脚本', '运行'];
+  const MEMORY = ['remember', 'note that', 'save that', 'write that down', 'dont forget', "don't forget", 'keep in mind', 'update my', 'add to my', 'i prefer', 'i like', 'i hate', 'i use', 'my name', 'call me', 'i work', 'my project', 'my stack', '记忆', '记住', '记得', '忘了', '以前', '上次', '偏好', '喜欢'];
+  const DEBUG = ['why', 'error', 'failed', 'how does', 'architecture', 'debug', 'caused', 'broke', 'not working', 'explain how', 'whats wrong', "what's wrong", '为什么', '报错', '怎么回事', '坏了', '查原因', '分析原因'];
+  if (WEB.some(k => lower.includes(k))) cats.add('web');
+  if (BROWSER.some(k => lower.includes(k))) cats.add('browser');
+  if (DESKTOP.some(k => lower.includes(k))) cats.add('desktop');
+  if (FILES.some(k => lower.includes(k))) cats.add('files');
+  if (TASK.some(k => lower.includes(k))) cats.add('task');
+  if (SCHEDULE.some(k => lower.includes(k))) cats.add('schedule');
+  if (SHELL.some(k => lower.includes(k))) cats.add('shell');
+  if (MEMORY.some(k => lower.includes(k))) cats.add('memory');
+  if (DEBUG.some(k => lower.includes(k))) cats.add('debug');
+  return cats;
+}
+
+// ── On-demand tool definition injection ───────────────────────────────────────
+// buildTools() returns 56 definitions (~30K chars ≈ 8.3K tokens) — the single
+// biggest prompt cost. Injecting all of them every turn drowns a 2B model.
+// Keep a compact always-on core; browser/desktop/office/knowledge/subagent
+// groups are added only when the message signals that intent (same detector
+// that drives TOOL_BLOCKS). Unknown tools stay so nothing silently breaks.
+const CAT_ALWAYS_TOOLS = new Set([
+  // 任何消息都注入的最小只读核心
+  'list_files', 'read_file', 'web_search', 'web_fetch', 'memory_read',
+]);
+const CAT_FILE_WRITE_TOOLS = new Set([
+  'create_file', 'replace_lines', 'insert_after', 'delete_lines',
+  'find_replace', 'delete_file', 'write_note', 'run_code',
+]);
+const CAT_TASK_TOOLS = new Set([
+  'start_task', 'task_control', 'schedule_job', 'parse_schedule_pattern',
+]);
+const CAT_SUBAGENT_TOOLS = new Set(['spawn_subagent']);
+const CAT_MEMORY_WRITE_TOOLS = new Set(['memory_write', 'memory_browse']);
+const CAT_BROWSER_PREFIX = 'browser_';
+const CAT_DESKTOP_PREFIX = 'desktop_';
+const CAT_OFFICE_PREFIX = 'doc_';
+const CAT_KNOWLEDGE_PREFIX = 'knowledge_';
+const CAT_PLAN_PREFIX = 'plan_';
+const CAT_OFFICE_EXTRAS = new Set(['image_render', 'file_batch']);
+const CAT_SUBAGENT_EXTRAS = new Set(['request_secondary_assist', 'delegate_to_specialist']);
+
+export function filterToolsByIntent(toolDefs: any[], messageText: string, tier: ModelTier = 'small'): any[] {
+  // Large models (≥10B / unknown cloud) have ample context — give them the
+  // full tool set; dynamic trimming would only risk mis-cuts.
+  if (tier === 'large') {
+    console.log(`[tools] intent filter skipped (large tier): ${toolDefs.length} tools`);
+    return toolDefs;
+  }
+  const cats = detectToolCategories(messageText);
+  const lower = String(messageText || '').toLowerCase();
+  const wantOffice = cats.has('files')
+    || /(doc|文档|office|word|pdf|表格|excel|report|报告)/i.test(lower);
+  const wantKnowledge = cats.has('memory')
+    || /(知识库|knowledge|检索|资料|查一下)/i.test(lower);
+  const wantSubagent = cats.size >= 2
+    || /(子任务|subagent|并行|同时|拆分|分工)/i.test(lower);
+  const wantFileWrite = cats.has('files')
+    || /(创建|新建|写入|修改|编辑|删除|替换|追加|写文件|改成|改为|保存|生成|修复|重构|整理|处理|写|编)/i.test(lower);
+  const wantTask = /(任务|待办|定时|提醒|schedule|提醒我|计划任务|创建任务)/i.test(lower);
+  const wantMemory = /(记忆|记住|忘了|以前|上次|memory|长期)/i.test(lower);
+  const wantGui = /(打开|启动|运行|开启|弹出).{0,8}(应用|程序|app|word|excel|ppt|notepad|calc|code|explorer|浏览器|文件)/i.test(lower)
+    || /^(start|open)\s/i.test(lower);
+  const filtered = toolDefs.filter((t: any) => {
+    const n = String(t?.function?.name || '');
+    if (CAT_ALWAYS_TOOLS.has(n)) return true;
+    // Mid tier (5-9B) has enough context to always keep the file-write group
+    // open — its main job is document/material work, not context starvation.
+    if (tier === 'mid' && CAT_FILE_WRITE_TOOLS.has(n)) return true;
+    if (CAT_FILE_WRITE_TOOLS.has(n)) return wantFileWrite;
+    if (CAT_TASK_TOOLS.has(n)) return wantTask;
+    if (CAT_SUBAGENT_TOOLS.has(n)) return wantSubagent;
+    if (CAT_MEMORY_WRITE_TOOLS.has(n)) return wantMemory;
+    if (n === 'run_command') return wantGui;
+    if (n.startsWith(CAT_BROWSER_PREFIX)) return cats.has('browser');
+    if (n.startsWith(CAT_DESKTOP_PREFIX)) return cats.has('desktop');
+    if (n.startsWith(CAT_OFFICE_PREFIX)) return wantOffice;
+    if (n.startsWith(CAT_KNOWLEDGE_PREFIX)) return wantKnowledge;
+    if (CAT_OFFICE_EXTRAS.has(n)) return wantOffice;
+    if (CAT_SUBAGENT_EXTRAS.has(n)) return wantSubagent;
+    if (n.startsWith(CAT_PLAN_PREFIX)) return wantSubagent;
+    return true;
+  });
+  console.log(`[tools] intent filter (${tier}): ${toolDefs.length} -> ${filtered.length} tools | "${String(messageText || '').slice(0, 40)}"`);
+  return filtered;
+}
