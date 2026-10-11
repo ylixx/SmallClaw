@@ -10,8 +10,10 @@ A running log of features, fixes, and improvements added to SmallClaw. Each entr
 
 ### 2026-10-11 — Repository Housekeeping (A)
 
-- Moved 8 stray `.git-msg-*.txt` commit-message drafts, `diag.txt`, and 33 test artifacts from `.tmp-test/` into the gitignored `.backup/clutter_20261011/` (recoverable, not committed). Root directory is now free of scratch/draft files.
-- Note: 2 gateway log files (`gateway.log`, `gateway-err.log`) remain in `.tmp-test/` — locked by the running gateway (PID 16588). Remove after stopping the gateway.
+- Moved 8 stray `.git-msg-*.txt` commit-message drafts and `diag.txt` into the gitignored `.backup/clutter_20261011/` (recoverable, not committed).
+- Removed the leftover `.tmp-test/` directory entirely. It contained 35 scratch/log files: 33 test artifacts (moved to `.backup/clutter_20261011/` earlier) plus the 2 gateway logs `gateway.log` / `gateway-err.log` that were previously locked by the running gateway (PID 16588) — now deleted after the gateway was stopped.
+- Also relocated the stray `docs/memory-flush-optimization-plan.md` planning draft into `.backup/clutter_20261011/`.
+- Root directory and `git status` are now fully clean: no untracked files, no scratch/draft clutter.
 
 ### 2026-10-11 — Workspace Privacy Guard (B)
 
