@@ -40,6 +40,10 @@ import { checkToolDenied, agentShellEnabled, collectMcpToolEntries } from './too
 import { executeAgentBuilderTool } from './agent-builder-integration';
 import type { CronScheduler } from './cron-scheduler';
 
+import { ACTIVE_TASK_STATUSES, getTaskScopeBuckets, summarizeTaskRecord, parseTaskStatusFilter } from './task-integration';
+import { loadTask, saveTask, createTask, updateTaskStatus, appendJournal, updateResumeContext, deleteTask, type TaskRecord, type TaskStatus } from './task-store';
+import { BackgroundTaskRunner } from './background-task-runner';
+
 // Last-filename memory shared by executeToolImpl's file tools (moved with it).
 const lastFilenameUsed: Map<string, string> = new Map();
 
@@ -1408,4 +1412,255 @@ export async function executeToolImpl(name: string, args: any, workspacePath: st
   } catch (err: any) {
     return { name, args, result: `Error: ${err.message}`, error: true };
   }
+}
+
+
+// ── Task-control action dispatcher (moved with 5c-3) ─────────────────────────
+// handleTaskControlAction closes over launchBackgroundTaskRunner (composition
+// root), which itself closes over handleChat / makeBroadcastForTask /
+// telegramChannel. It is injected here to avoid a circular import.
+export interface TaskControlDeps {
+  launchBackgroundTaskRunner: (taskId: string) => void;
+}
+
+export function createTaskControlHandler(deps: TaskControlDeps) {
+  return async function handleTaskControlAction(sessionId: string, args: any): Promise<TaskControlResponse> {
+  const action = String(args?.action || '').trim().toLowerCase();
+  const taskId = String(args?.task_id || args?.id || '').trim();
+  const includeAllSessions = args?.include_all_sessions === true;
+  const note = String(args?.note || '').trim();
+  const limitRaw = Number(args?.limit);
+  const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(100, Math.floor(limitRaw)) : 20;
+  const statusFilter = parseTaskStatusFilter(args?.status);
+
+  if (!action) {
+    return { success: false, action: 'unknown', code: 'invalid_action', message: 'task_control requires action.' };
+  }
+
+  if (action === 'list' || action === 'latest') {
+    const statuses = statusFilter || (action === 'list' ? ACTIVE_TASK_STATUSES : undefined);
+    const scope = getTaskScopeBuckets(sessionId, statuses);
+    const tasks = includeAllSessions
+      ? scope.all
+      : [...scope.sessionTasks, ...scope.channelTasks];
+    if (action === 'latest') {
+      const latest = tasks[0] || null;
+      return {
+        success: true,
+        action,
+        scope: includeAllSessions ? 'all_sessions' : `session+${scope.channel}`,
+        task: latest ? summarizeTaskRecord(latest) : null,
+        message: latest ? `Latest task is "${latest.title}" (${latest.status}).` : 'No tasks found.',
+      };
+    }
+    const summarized = tasks.slice(0, limit).map(summarizeTaskRecord);
+    return {
+      success: true,
+      action,
+      scope: includeAllSessions ? 'all_sessions' : `session+${scope.channel}`,
+      tasks: summarized,
+      message: summarized.length > 0 ? `Found ${summarized.length} task(s).` : 'No tasks found.',
+    };
+  }
+
+  if (action === 'get') {
+    if (!taskId) return { success: false, action, code: 'missing_task_id', message: 'task_control(get) requires task_id.' };
+    const task = loadTask(taskId);
+    if (!task) return { success: false, action, code: 'not_found', message: `Task not found: ${taskId}` };
+    return { success: true, action, task: summarizeTaskRecord(task), message: `Loaded task "${task.title}".` };
+  }
+
+  const resolveCandidateForAction = (candidateAction: 'resume' | 'rerun' | 'pause' | 'cancel' | 'delete') => {
+    if (taskId) {
+      const exact = loadTask(taskId);
+      if (!exact) return { task: null as TaskRecord | null, err: `Task not found: ${taskId}` };
+      return { task: exact, err: '' };
+    }
+
+    const preferredStatuses: TaskStatus[] =
+      candidateAction === 'rerun'
+        ? ['needs_assistance', 'stalled', 'paused', 'failed', 'complete']
+        : candidateAction === 'delete'
+          ? ['needs_assistance', 'stalled', 'paused', 'failed', 'queued', 'complete', 'waiting_subagent']
+          // 'running' included so tasks stuck in running state (dead runner) can be resumed
+          : ['needs_assistance', 'stalled', 'paused', 'failed', 'queued', 'running'];
+    const scope = getTaskScopeBuckets(sessionId, preferredStatuses);
+    let preferred = [...scope.sessionTasks, ...scope.channelTasks];
+    if (preferred.length === 0) {
+      preferred = scope.all;
+    }
+    if (preferred.length === 0) {
+      return { task: null as TaskRecord | null, err: 'No matching task found in current scope.' };
+    }
+    if (preferred.length === 1) {
+      return { task: preferred[0], err: '' };
+    }
+    return { task: null as TaskRecord | null, err: 'AMBIGUOUS', candidates: preferred.slice(0, 3) };
+  };
+
+  if (action === 'resume' || action === 'rerun') {
+    const resolved = resolveCandidateForAction(action);
+    if (!resolved.task) {
+      if (resolved.err === 'AMBIGUOUS') {
+        return {
+          success: false,
+          action,
+          code: 'ambiguous',
+          message: 'Multiple tasks match. Provide task_id.',
+          candidates: (resolved.candidates || []).map(summarizeTaskRecord),
+        };
+      }
+      return { success: false, action, code: 'no_candidate', message: resolved.err };
+    }
+    const task = loadTask(resolved.task.id);
+    if (!task) return { success: false, action, code: 'not_found', message: `Task not found: ${resolved.task.id}` };
+    if (BackgroundTaskRunner.isRunning(task.id)) {
+      return {
+        success: true,
+        action,
+        task: summarizeTaskRecord(task),
+        message: `Task "${task.title}" is already actively running (runner is live).`,
+      };
+    }
+
+    // Status is 'running' but no active runner found — runner died without cleanup.
+    // Auto-correct the stale status so the resume proceeds normally.
+    if (task.status === 'running') {
+      appendJournal(task.id, { type: 'status_push', content: 'Stale running status detected (no active runner). Auto-correcting to paused for resume.' });
+      BackgroundTaskRunner.forceRelease(task.id); // clear any ghost activeRunners entry
+      updateTaskStatus(task.id, 'paused', { pauseReason: 'error' });
+      task.status = 'paused'; // keep local ref in sync
+    }
+
+    if (action === 'resume') {
+      if (task.status === 'complete') {
+        return { success: false, action, code: 'already_complete', message: `Task "${task.title}" is complete. Use rerun to restart.` };
+      }
+      updateTaskStatus(task.id, 'queued');
+      appendJournal(task.id, { type: 'resume', content: `task_control resume${note ? `: ${note.slice(0, 220)}` : ''}` });
+      // Reset self-heal counter so the user's manual intervention gives a fresh start
+      task.selfHealAttempts = 0;
+      task.resynthAttempts = 0;
+      saveTask(task);
+      if (note) {
+        const resumeMessages = Array.isArray(task.resumeContext?.messages) ? task.resumeContext.messages : [];
+        updateResumeContext(task.id, {
+          messages: [
+            ...resumeMessages,
+            { role: 'user', content: `[TASK USER FOLLOW-UP]\n${note}`, timestamp: Date.now() },
+          ].slice(-80),
+        });
+      }
+      deps.launchBackgroundTaskRunner(task.id);
+      const refreshed = loadTask(task.id) || task;
+      return {
+        success: true,
+        action,
+        task: summarizeTaskRecord(refreshed),
+        message: `Resumed task "${refreshed.title}" at step ${refreshed.currentStepIndex + 1}/${Math.max(1, refreshed.plan.length)}.`,
+      };
+    }
+
+    // rerun
+    task.status = 'queued';
+    task.pauseReason = undefined;
+    task.currentStepIndex = 0;
+    task.completedAt = undefined;
+    task.finalSummary = undefined;
+    task.lastToolCall = undefined;
+    task.lastToolCallAt = undefined;
+    task.lastProgressAt = Date.now();
+    task.plan = (task.plan || []).map((step, idx) => ({
+      ...step,
+      index: idx,
+      status: 'pending',
+      completedAt: undefined,
+      notes: undefined,
+    }));
+    task.resumeContext = {
+      ...(task.resumeContext || {
+        messages: [],
+        browserSessionActive: false,
+        round: 0,
+        orchestrationLog: [],
+      }),
+      messages: [],
+      browserSessionActive: false,
+      browserUrl: undefined,
+      round: 0,
+      orchestrationLog: [],
+      fileOpState: undefined,
+    };
+    saveTask(task);
+    appendJournal(task.id, { type: 'status_push', content: `task_control rerun${note ? `: ${note.slice(0, 220)}` : ''}` });
+    deps.launchBackgroundTaskRunner(task.id);
+    const refreshed = loadTask(task.id) || task;
+    return {
+      success: true,
+      action,
+      task: summarizeTaskRecord(refreshed),
+      message: `Rerunning task "${refreshed.title}" from step 1/${Math.max(1, refreshed.plan.length)}.`,
+    };
+  }
+
+  if (action === 'pause' || action === 'cancel') {
+    const resolved = resolveCandidateForAction(action as any);
+    if (!resolved.task) {
+      if (resolved.err === 'AMBIGUOUS') {
+        return {
+          success: false,
+          action,
+          code: 'ambiguous',
+          message: 'Multiple tasks match. Provide task_id.',
+          candidates: (resolved.candidates || []).map(summarizeTaskRecord),
+        };
+      }
+      return { success: false, action, code: 'no_candidate', message: resolved.err };
+    }
+    if (action === 'cancel' && !isConfirmed(args?.confirm)) {
+      return { success: false, action, code: 'needs_confirmation', message: 'cancel requires confirm=true.' };
+    }
+    const task = loadTask(resolved.task.id);
+    if (!task) return { success: false, action, code: 'not_found', message: `Task not found: ${resolved.task.id}` };
+    if (BackgroundTaskRunner.isRunning(task.id)) {
+      BackgroundTaskRunner.requestPause(task.id);
+    }
+    updateTaskStatus(task.id, 'paused', { pauseReason: 'user_pause' });
+    appendJournal(task.id, { type: 'pause', content: `task_control ${action}${note ? `: ${note.slice(0, 220)}` : ''}` });
+    const refreshed = loadTask(task.id) || task;
+    return {
+      success: true,
+      action,
+      task: summarizeTaskRecord(refreshed),
+      message: `${action === 'cancel' ? 'Cancelled' : 'Paused'} task "${refreshed.title}".`,
+    };
+  }
+
+  if (action === 'delete') {
+    if (!isConfirmed(args?.confirm)) {
+      return { success: false, action, code: 'needs_confirmation', message: 'delete requires confirm=true.' };
+    }
+    const resolved = resolveCandidateForAction('delete');
+    if (!resolved.task) {
+      if (resolved.err === 'AMBIGUOUS') {
+        return {
+          success: false,
+          action,
+          code: 'ambiguous',
+          message: 'Multiple tasks match. Provide task_id.',
+          candidates: (resolved.candidates || []).map(summarizeTaskRecord),
+        };
+      }
+      return { success: false, action, code: 'no_candidate', message: resolved.err };
+    }
+    if (BackgroundTaskRunner.isRunning(resolved.task.id)) {
+      return { success: false, action, code: 'running', message: `Task "${resolved.task.title}" is running. Pause it before delete.` };
+    }
+    const ok = deleteTask(resolved.task.id);
+    if (!ok) return { success: false, action, code: 'not_found', message: `Task not found: ${resolved.task.id}` };
+    return { success: true, action, message: `Deleted task "${resolved.task.title}" (${resolved.task.id}).` };
+  }
+
+  return { success: false, action, code: 'invalid_action', message: `Unsupported task_control action: ${action}` };
+}
 }

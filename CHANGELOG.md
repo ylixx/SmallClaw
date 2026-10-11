@@ -176,6 +176,15 @@ A running log of features, fixes, and improvements added to SmallClaw. Each entr
 - server-v2.ts 净减 3,163 行（7,769 → **4,606**，组合根 `export { app, server }` 保留）；chat-handler.ts ≈3,575；累计净减 ~6,208（原 10,814）。
 - 备份点：`git tag backup/pre-phase5c2-20261011`。
 
+### 2026-10-11 — server-v2 Split Phase 5c-3: handleTaskControlAction → chat-execution.ts (U)
+
+- 按拆分路线图 Phase 5 **第 5 子步**：把 **handleTaskControlAction（任务控制动作分发器，243 行）** 字节级下沉到 `chat-execution.ts`，改造为 **`createTaskControlHandler(deps)` 闭包工厂**（ts AST 提取函数体，零手工重抄）。
+- **依赖面极干净**（`phase5c3-dep.js` ts AST 分析）：本地依赖仅 `launchBackgroundTaskRunner` 1 个（组合根装配函数，内部闭包 handleChat/makeBroadcastForTask/telegramChannel）→ deps 注入；其余 16 个符号全部是已拆模块 import（task-integration 5 个 / task-store 9 个 / background-task-runner 1 个 / chat-execution 自带 isConfirmed）→ 直接 import，无循环。
+- server-v2：删函数（1188-1430）+ 组合根装配 `const handleTaskControlAction = createTaskControlHandler({ launchBackgroundTaskRunner })`；`createExecuteTool({ handleTaskControlAction, cronScheduler })` 引用名不变。
+- 验证：`typecheck` 0 错；`npm test` 71 passed/2 skipped；`SMALLCLAW_SMOKE=1 npm run smoke` 2 passed（真网关 + 53 工具名锁）。
+- server-v2.ts 净减 237 行（4,606 → **4,369**）；chat-execution.ts ≈1,670；累计净减 ~6,445（原 10,814）。
+- 备份点：`git tag backup/pre-phase5c3-20261011`。
+
 ---
 
 ### 2026-10-04 — 2026-10-11 — Feature & Hardening Wave (D)
