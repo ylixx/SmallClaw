@@ -25,6 +25,7 @@ import {
 import { getMCPManager, type MCPTool } from './mcp-manager';
 import { extractFlowArtifacts } from './flow-artifacts';
 import { mergeOptimizationTier, tierFromContextWindow } from './server-v2-text';
+import { broadcastWS, createSSESender, setWss, closeWss } from './realtime';
 import { getVault } from '../security/vault';
 import { getOllamaClient } from '../agents/ollama-client';
 import { spawnAgent } from '../agents/spawner';
@@ -464,22 +465,6 @@ function setOrchestrationEnabled(enabled: boolean): void {
 // ─── Model-Busy Guard (state owned by model-busy-guard.ts; see getModelBusy/setModelBusy) ──
 
 let lastMainSessionId = 'default';
-
-// ─── WebSocket Broadcast ───────────────────────────────────────────────────────
-// wss is assigned after server creation below; broadcastWS is only ever called
-// after startup (by cron ticks), so the late assignment is safe.
-
-let wss: WebSocketServer | undefined;
-
-function broadcastWS(data: object): void {
-  if (!wss) return;
-  const msg = JSON.stringify(data);
-  wss.clients.forEach((client: any) => {
-    if (client.readyState === 1) { // OPEN
-      try { client.send(msg); } catch {}
-    }
-  });
-}
 
 type TelegramChannelConfig = {
   enabled: boolean;
@@ -6269,10 +6254,6 @@ RULES:
 
 // ─── SSE + Routes ──────────────────────────────────────────────────────────────
 
-function createSSESender(res: express.Response): (event: string, data: any) => void {
-  return (type: string, data: any) => { try { res.write(`data: ${JSON.stringify({ type, ...data })}\n\n`); } catch {} };
-}
-
 const ACTIVE_TASK_STATUSES: TaskStatus[] = [
   'queued',
   'running',
@@ -9723,8 +9704,9 @@ app.get('*', (_req, res) => { res.sendFile(path.join(webUiPath, 'index.html')); 
 // ─── Server ────────────────────────────────────────────────────────────────────
 
 const server = http.createServer(app);
-wss = new WebSocketServer({ server, path: '/ws' });
-wss.on('error', (err: any) => {
+const wsServer = new WebSocketServer({ server, path: '/ws' });
+setWss(wsServer);
+wsServer.on('error', (err: any) => {
   if (err?.code === 'EADDRINUSE') {
     console.error(`[Gateway] Port ${HOST}:${PORT} is already in use.`);
     console.error('[Gateway] Another gateway instance is likely already running.');
@@ -9735,7 +9717,7 @@ wss.on('error', (err: any) => {
   console.error('[Gateway] WebSocket error:', err?.message || err);
   process.exit(1);
 });
-wss.on('connection', (ws: WebSocket) => {
+wsServer.on('connection', (ws: WebSocket) => {
   console.log('[v2] WS connected');
   ws.on('message', (d) => { try { JSON.parse(d.toString()); } catch {} });
   ws.on('close', () => console.log('[v2] WS disconnected'));
@@ -9867,7 +9849,7 @@ function gracefulShutdown(signal: 'SIGINT' | 'SIGTERM'): void {
   try { cronScheduler.stop(); } catch {}
   try { stopAgentSchedules(); } catch {}
   try { heartbeatRunner.stop(); } catch {}
-  try { if (wss) wss.close(); } catch {}
+  try { closeWss(); } catch {}
   try {
     server.close(() => process.exit(0));
     const forceExitTimer = setTimeout(() => process.exit(0), 1200) as any;

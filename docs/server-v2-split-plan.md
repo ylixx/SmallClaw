@@ -1,6 +1,6 @@
 # server-v2.ts 拆分方案（规划文档）
 
-> 状态：Phase 0（安全网）✅、Phase 1（config-bootstrap + 失败熔断）✅、Phase 2a（工具压缩纯函数 → tool-registry）✅、Phase 2b（buildTools 整簇 → tool-registry）✅、Phase 2c（filterToolsByIntent 簇 → tool-registry）✅、Phase 2d（applyToolPolicy policy 簇 → tool-registry）✅、Phase 1.5（Model-Busy 守卫 → model-busy-guard）✅ 已完成并验证；Phase 3–6 待执行。`server-v2.ts` 现为 **9,883 行**（原 10,814，累计净减 931 行），业务行为字节级不变。
+> 状态：Phase 0（安全网）✅、Phase 1（config-bootstrap + 失败熔断）✅、Phase 2a（工具压缩纯函数 → tool-registry）✅、Phase 2b（buildTools 整簇 → tool-registry）✅、Phase 2c（filterToolsByIntent 簇 → tool-registry）✅、Phase 2d（applyToolPolicy policy 簇 → tool-registry）✅、Phase 1.5（Model-Busy 守卫 → model-busy-guard）✅、Phase 3（realtime SSE/WS → realtime.ts）✅ 已完成并验证；Phase 4–6 待执行。`server-v2.ts` 现为 **9,865 行**（原 10,814，累计净减 949 行），业务行为字节级不变。
 > 目标：把 `src/gateway/server-v2.ts`（**10,814 行 / 100+ 导出符号**）从巨型单体拆成按域组织的模块，保留 `server-v2.ts` 作为"组合根（composition root）"——只做模块装配、Express 路由、SSE 接线，业务细节下沉到子模块。
 
 ---
@@ -96,9 +96,12 @@
 
 - 验收：**搬移前后 `/api/tools` 输出逐字节一致**（快照比对通过）；`tsc` 0 错。
 
-### Phase 3 — 实时通道
-- 搬 `realtime.ts`（SSE/WS 广播）。
-- 验收：用 `curl -N` 或测试客户端连 SSE，确认事件格式不变。
+### Phase 3 — 实时通道（✅ 已完成并验证）
+- 新建 `src/gateway/realtime.ts`（40 行）：模块级 `wss` 单例 + `broadcastWS(data)`（字节级原样搬移，向所有 OPEN WS 客户端推 JSON 帧）+ `createSSESender(res)`（字节级原样搬移，SSE 写入器）+ `setWss(server)`/`closeWss()`（单例赋值/关闭 accessor）。
+- `server-v2.ts` 仅保留组合根职责：`new WebSocketServer` 构造 + `/ws` 错误/连接接线（局部 `wsServer` + `setWss(wsServer)`）、shutdown `closeWss()`；所有 `broadcastWS`/`createSSESender` 调用点改走 import，签名字节级不变（4 个外部模块装配闭包 CronScheduler/TelegramChannel/HeartbeatRunner/buildWebhookRouter 的 `broadcast: broadcastWS` 无需改动）。
+- realtime.ts 仅 `import type`（ws `WebSocketServer`、express `Response`），运行时零依赖 server-v2，无循环依赖。
+- server-v2.ts 净减 18 行（9,883 → 9,865，累计净减 949 行）；realtime.ts 40 行。
+- 验收（已通过）：`typecheck` 0 错；默认 `npm test` 71 passed/2 skipped；`SMALLCLAW_SMOKE=1 npm run smoke` 2 passed（真网关启动 + `/api/status` 200 + `/api/tools` 仍锁 53 工具名快照 + 进程树/端口强杀，无残留、18789 释放）。备份点：`git tag backup/pre-phase3-20261011`。
 
 ### Phase 4 — 流程/验证接线
 - 搬 `flow-integration.ts`。

@@ -108,6 +108,19 @@ A running log of features, fixes, and improvements added to SmallClaw. Each entr
 - 验证：`typecheck` 0 错；默认 `npm test` 71 passed/2 skipped；`SMALLCLAW_SMOKE=1 npm run smoke` 2 passed（网关启动 + `/api/tools` 仍锁定 53 工具名 + 清理无残留），busy guard 行为字节级不变。
 - 备份点：`git tag backup/pre-phase15-20261011`。
 
+### 2026-10-11 — server-v2 Split Phase 3: Realtime SSE/WS → realtime.ts (O)
+
+- 按拆分路线图 Phase 3（实时通道，中等风险）：新建 `src/gateway/realtime.ts`（40 行），下沉 SSE/WS 广播职责。
+- `src/gateway/realtime.ts`（新）：模块级 `wss` 单例 + 三个 accessor/广播函数——
+  - `broadcastWS(data)`（字节级原样搬移）：向所有 OPEN 的 WebSocket 客户端推送 JSON 帧（cron 滴答、任务心跳、子智能体派生、boot 问候等）；
+  - `createSSESender(res)`（字节级原样搬移）：SSE 写入器，供 chat/flow 端点构造 `sendSSE`；
+  - `setWss(server)` / `closeWss()`：wss 单例的赋值与关闭访问器（**单一事实来源**——server-v2 不再持有本地 `let wss`，杜绝"两个 WebSocketServer 实例"致广播失效）。
+- `server-v2.ts` 只保留组合根职责：`new WebSocketServer` 构造 + `/ws` 连接/错误接线（局部 `wsServer` + `setWss(wsServer)`）、shutdown `closeWss()`；所有 `broadcastWS`/`createSSESender` 调用点改走 import，**签名字节级不变**（4 个外部模块装配闭包 CronScheduler/TelegramChannel/HeartbeatRunner/buildWebhookRouter 的 `broadcast: broadcastWS` 无需改动）。
+- 循环依赖：realtime.ts 仅 `import type`（ws 的 `WebSocketServer`、express 的 `Response`），运行时零依赖 server-v2，无环。
+- server-v2.ts 净减 18 行（9,883 → 9,865，累计净减 949 行）；realtime.ts 40 行（新建）。
+- 验证：`typecheck` 0 错；默认 `npm test` 71 passed/2 skipped；`SMALLCLAW_SMOKE=1 npm run smoke` 2 passed（真网关启动 + `/api/status` 200 + `/api/tools` 仍锁定 53 工具名快照 + 按进程树/端口强杀，无进程残留、18789 释放）。
+- 备份点：`git tag backup/pre-phase3-20261011`。
+
 ---
 
 ### 2026-10-04 — 2026-10-11 — Feature & Hardening Wave (D)
