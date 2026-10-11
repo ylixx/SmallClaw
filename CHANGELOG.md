@@ -152,6 +152,15 @@ A running log of features, fixes, and improvements added to SmallClaw. Each entr
 - 验证：`typecheck` 0 错；默认 `npm test` 71 passed/2 skipped（7 files，与基线一致）；`SMALLCLAW_SMOKE=1 npm run smoke` 2 passed（真网关 + `/api/tools` 仍锁 53 工具名快照）；e2e 补测：真网关 `/api/status` 200、`/api/flows` → 4、`/api/tasks` → 200，端口 18789 释放。
 - 备份点：沿用 `git tag backup/pre-phase5-20261011`（5b 变更前已打）。
 
+### 2026-10-11 — server-v2 Split Phase 5c-1: Chat-Loop Helpers → chat-handler.ts (S)
+
+- 按拆分路线图 Phase 5 **第 3 子步**：把 handleChat 依赖的**专属辅助函数簇**（36 个符号，546 行）字节级下沉到 `src/gateway/chat-handler.ts`（新，~535 行），server-v2 改 import 使用，handleChat 本体仍在 server-v2（5c-2 再搬）。
+- **簇闭包探查**（`.backup/phase5c-probe*.py`）：handleChat 实测 3168 行（1724-4891），引用 35 个本地符号；用"种子 + 簇外零引用收敛"确定随搬簇——辅助函数 + 常量 + 类型 + 模块级状态（`recordOrchestrationEvent`/`getPreemptSessionCount`/`incrementPreemptSessionCount`/`logToDaily`/`KB_AUTO_INJECT_RE`/`resolveWorkspaceFilePath`/`collectFileSnapshots`/`buildBrowserAck`/`buildDesktopAck`/`isBrowserHeavyResearchPage`/`BrowserSnapshotQuality`/`SnapshotDiagnostics`/`goalLikelyNeedsTextInput`/`parseSnapshotDiagnostics`/`evaluateBrowserSnapshotQuality`/`HandleChatResult`/`modelSwitchHintedSessions`/`maybeSuggestModelSwitch`/`buildMultimodalUserContent`/`MAX_TOOL_ARG_PARSE_RETRIES`/`TOOL_ARG_PARSE_RETRY_HINT`/`nctxProbe`/`NCTX_PROBE_TTL_MS`/`probeLlamaNctx`/`resolveHistoryBudgetTokens`/`computeSessionMetaAnswer`/`buildChatLogReport`/`MAX_TOOL_ROUNDS`/`ExecutionMode`/`SubagentProfile`/`OrchestrationEvent`/`OrchestrationSessionStats`/`orchestrationSessionStats`/`preemptSessionCounts`/`getOrchestrationSessionStats`）。
+- **关键决策**：`inRound*` 4 个可变校准状态（`inRoundCtxCharPerToken`/`inRoundLastSentChars`/`inRoundAdaptiveBudget`/`inRoundBudgetModelKey`）与 `INROUND_*` 3 常量**留在 server-v2**——handleChat 每轮直接读写它们，而 **TS 禁止给 import 的 let 绑定赋值（TS2632）**；ESM live binding 运行时可共享，但类型层不允许，故状态留在组合根（handleChat 本体同文件），chat-handler 只搬纯函数。
+- 验证：`typecheck` 0 错；默认 `npm test` 71 passed/2 skipped（7 files，与基线一致）；`SMALLCLAW_SMOKE=1 npm run smoke` 2 passed（真网关 + `/api/tools` 仍锁 53 工具名快照）。
+- server-v2.ts 净减 532 行（8,301 → 7,769，组合根 `export { app, server }` 保留）；累计净减 ~3,045。
+- 备份点：`git tag backup/pre-phase5c1-20261011`。
+
 ---
 
 ### 2026-10-04 — 2026-10-11 — Feature & Hardening Wave (D)
