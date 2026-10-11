@@ -131,8 +131,22 @@ function normalizeActionId(input: string): string {
     .slice(0, 48) || 'run';
 }
 
+// English doc-sentence starters that are documentation, not commands
+// ("exactly what to do", "specific search queries", "patterns to avoid"...)
+const CMD_STOPWORDS = new Set([
+  'the', 'you', 'call', 'exactly', 'specific', 'patterns', 'warnings', 'what', 'to', 'do', 'use', 'mode',
+  'when', 'how', 'for', 'with', 'this', 'that', 'your', 'please', 'help', 'can', 'will', 'would',
+  'should', 'need', 'make', 'get', 'see', 'check', 'click', 'open', 'using', 'there', 'it', 'if',
+  'after', 'before', 'also', 'then', 'now', 'only', 'just', 'not', 'no', 'yes', 'run', 'ensure',
+]);
+
 function extractTemplates(content: string): SkillTemplate[] {
-  const lines = String(content || '').split(/\r?\n/);
+  // Strip the YAML frontmatter (name/description/keywords are documentation,
+  // not commands — "name: Deep Analysis Report" must not yield binary "deep").
+  let body = String(content || '');
+  const fm = body.match(/^---\s*\n[\s\S]*?\n---\s*\n?/);
+  if (fm) body = body.slice(fm[0].length);
+  const lines = body.split(/\r?\n/);
   const templates: SkillTemplate[] = [];
   const seen = new Set<string>();
   let inCode = false;
@@ -140,7 +154,15 @@ function extractTemplates(content: string): SkillTemplate[] {
   const maybePush = (label: string, command: string) => {
     const cmd = String(command || '').trim().replace(/^`|`$/g, '');
     if (!cmd) return;
+    // Flow/prompt skills document tool names in prose (e.g. "用 doc_inspect 查看…").
+    // CJK text, numbered list items and English doc sentences are documentation,
+    // not commands — skip them so prompt-type skills don't report phantom
+    // missing binaries.
+    if (/[\u4e00-\u9fff]/i.test(cmd)) return;
+    if (/^\d+[.):]/.test(cmd)) return;
     if (!/^[a-z0-9._-]+\s+.+/i.test(cmd)) return;
+    const firstWord = cmd.split(/\s+/)[0].toLowerCase();
+    if (CMD_STOPWORDS.has(firstWord)) return;
     const key = cmd.toLowerCase();
     if (seen.has(key)) return;
     seen.add(key);
@@ -206,6 +228,10 @@ function extractRequiredFiles(content: string): string[] {
   const out = new Set<string>();
   for (const mm of String(content || '').matchAll(/\b([a-zA-Z0-9_./\\-]+\.(?:json|ya?ml|pem|p12|key|txt|env))\b/g)) {
     const p = String(mm[1] || '').trim();
+    if (!p) continue;
+    // Placeholder/doc-example names (e.g. "xxx.extracted.txt") are not
+    // required files.
+    if (/xxx|<[^>]+>|example/i.test(p)) continue;
     if (p) out.add(p);
   }
   return Array.from(out);

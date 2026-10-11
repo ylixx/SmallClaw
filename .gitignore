@@ -44,8 +44,15 @@
 .smallclaw/cron/runs/
 .smallclaw/cron/jobs.json
 .smallclaw/skills/*
-!.smallclaw/skills/analysis-report/
-!.smallclaw/skills/analysis-report/**
+# Ship SKILL.md + templates for every flow skill ({{skill:...}} renders from
+# them on other machines); keep generated skill.json/PROMPT.md/RISK.json local.
+!.smallclaw/skills/*/
+!.smallclaw/skills/*/SKILL.md
+!.smallclaw/skills/*/templates/
+!.smallclaw/skills/*/templates/**
+.smallclaw/skills/*/skill.json
+.smallclaw/skills/*/PROMPT.md
+.smallclaw/skills/*/RISK.json
 .smallclaw/skills_state.json
 .smallclaw/workspace_state.json
 .smallclaw/.migrated-from-localclaw

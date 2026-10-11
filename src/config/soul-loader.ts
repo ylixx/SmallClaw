@@ -101,6 +101,30 @@ export interface SkillInfo {
   name?: string;
   description?: string;
   templates?: Array<{ action?: string; label?: string; command?: string }>;
+  keywords?: string[];
+}
+
+// Read the YAML frontmatter of a SKILL.md for name/description/keywords so
+// Chinese task messages can match skills even without a skill.json manifest.
+function readSkillFrontmatter(filePath: string): { name?: string; description?: string; keywords?: string[] } {
+  try {
+    const raw = fs.readFileSync(filePath, 'utf-8');
+    const m = raw.match(/^---\s*\n([\s\S]*?)\n---/m);
+    if (!m) return {};
+    const block = m[1];
+    const get = (key: string): string | undefined => {
+      const re = new RegExp(`^${key}:\\s*(.+)$`, 'm');
+      const mm = block.match(re);
+      return mm ? mm[1].trim().replace(/^["']|["']$/g, '') : undefined;
+    };
+    const kwMatch = block.match(/^keywords:\s*\[(.*?)\]/ms);
+    const keywords = kwMatch
+      ? kwMatch[1].split(',').map((s) => s.trim().replace(/^["']|["']$/g, '')).filter(Boolean)
+      : [];
+    return { name: get('name'), description: get('description'), keywords };
+  } catch {
+    return {};
+  }
 }
 
 export function loadSkills(): SkillInfo[] {
@@ -130,6 +154,7 @@ export function loadSkills(): SkillInfo[] {
       if (!executionEnabled || status === 'blocked' || status === 'needs_setup') continue;
       const contentPath = fs.existsSync(promptMd) ? promptMd : skillMd;
       if (fs.existsSync(contentPath)) {
+        const front = readSkillFrontmatter(skillMd);
         skills.push({
           slug: entry.name,
           content: fs.readFileSync(contentPath, 'utf-8').trim(),
@@ -138,9 +163,10 @@ export function loadSkills(): SkillInfo[] {
           status: status || 'ready',
           executionEnabled,
           riskLevel: String(manifest?.risk?.level || '').trim() || undefined,
-          name: String(manifest?.name || '').trim() || entry.name,
-          description: String(manifest?.description || '').trim(),
+          name: String(manifest?.name || front.name || '').trim() || entry.name,
+          description: String(manifest?.description || front.description || '').trim(),
           templates: Array.isArray(manifest?.templates) ? manifest.templates : [],
+          keywords: Array.isArray(manifest?.keywords) ? manifest.keywords.map(String) : (front.keywords || []),
         });
       }
     }
@@ -180,6 +206,14 @@ export function selectSkillSlugsForMessage(message: string, max = 2): string[] {
 
     if (slug && query.includes(slug)) score += 8;
     if (name && query.includes(name)) score += 6;
+
+    // Chinese keyword match: query.includes('数据') hits a skill whose
+    // frontmatter declares keywords: ['数据','统计',...] — the main path for
+    // Chinese task messages (tokenizer drops CJK).
+    for (const kw of s.keywords || []) {
+      const k = String(kw).trim().toLowerCase();
+      if (k && query.includes(k)) score += 5;
+    }
 
     for (const t of tokens) {
       if (slug.includes(t)) score += 4;

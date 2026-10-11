@@ -1,0 +1,9 @@
+{
+  "id": "data-report",
+  "name": "数据整理报告",
+  "triggers": ["整理", "统计", "汇总", "透视", "数据报告", "分析表格", "清洗数据", "CSV", "Excel", "统计表"],
+  "description": "把表格/CSV/含数据材料整理成统计报表或结构化数据报告（合计/均值/占比/趋势）。",
+  "skill": "data-report",
+  "instruction": "执行「数据整理报告」流程，严格遵循下方技能规范：{{skill:data-report}}",
+  "output_note": "工作区中的 <主题>数据统计.xlsx 或结构化数据报告"
+}
