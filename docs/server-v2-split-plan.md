@@ -1,6 +1,6 @@
 # server-v2.ts 拆分方案（规划文档）
 
-> 状态：Phase 0（安全网）已完成并验证；Phase 1–6 待执行。未改动 `server-v2.ts` 业务代码。
+> 状态：Phase 0（安全网）✅、Phase 1（config-bootstrap + 失败熔断）✅ 已完成并验证；Phase 2 准备（/api/tools 快照锁）✅ 已就位；Phase 2 实际抽取、Phase 1.5（Model-Busy 守卫）、Phase 3–6 待执行。`server-v2.ts` 目前仅净减行数，业务行为字节级不变。
 > 目标：把 `src/gateway/server-v2.ts`（**10,814 行 / 100+ 导出符号**）从巨型单体拆成按域组织的模块，保留 `server-v2.ts` 作为"组合根（composition root）"——只做模块装配、Express 路由、SSE 接线，业务细节下沉到子模块。
 
 ---
@@ -33,7 +33,7 @@
 | 目标文件 | 承接的职责（来自 server-v2.ts） | 风险 |
 |---|---|---|
 | `gateway/config-bootstrap.ts` | cwd 推导、workspace.path 合法性检查、配置装配（部分已在 `boot.ts`，合并至此） | 低 |
-| `gateway/request-guards.ts` | Model-Busy 守卫、重复失败熔断、safe-command 路由判定 | 低 |
+| `gateway/request-guards.ts` | 重复失败熔断（`noteToolFailure`/`resetToolFailure`/`toolFailureTracker`）、safe-command 路由判定 | 低 |
 | `gateway/tool-registry.ts` | 全部工具 schema/定义装配（`TOOL_PROFILES`、delegate/subagent、browser/desktop/system 工具定义、`/api/tools` 输出） | 中（需保证定义字节一致） |
 | `gateway/realtime.ts` | WebSocket `wss`、SSE 流辅助、`broadcastWS` | 中 |
 | `gateway/flow-integration.ts` | 流程产物抽取与 verification-flow 接线（逻辑已在 `flow-artifacts.ts`，此处只搬编排） | 中 |
@@ -58,8 +58,14 @@
 - 验收（已通过）：`typecheck` 0 错；默认 `npm test` 71 passed / 1 skipped（冒烟跳过）；`SMALLCLAW_SMOKE=1 npm test` 真起网关→200→无残留。
 
 ### Phase 2 — 工具定义装配（最大行数收益）
-- 搬 `tool-registry.ts`，把 `/api/tools` 的返回 JSON 用快照测试锁住。
-- 验收：**搬移前后 `/api/tools` 输出逐字节一致**（diff 为空）；`tsc` 0 错。
+
+**前置（已完成 ✅）**：`/api/tools` 快照锁已写入 `tests/smoke-gateway.test.ts`（受 `SMALLCLAW_SMOKE=1` 门控），当前锁定 **53 个工具名**字节级基线；抽取时任何误删/改名都会让快照比对失败。
+
+**渐进式子步骤（一点一点来）**：
+- **Phase 2a（风险最低，先抽）**：只搬 `applyToolCompactness`(1214) + `buildTools`(1241, ~470 行, 56 个纯数据工具定义, 0 个 `fn:` 实现指针）。探查显示其区间(1241–1945)耦合极低：仅 2 处 `config.`、0 处 `sendSSE`、3 处 `getConfig()`，仅依赖 `getConfig`/`getModelTier`/`applyToolCompactness`/`compactToolDescription`。搬完跑快照锁 + typecheck 验证。
+- **Phase 2b（稍后）**：再搬 `filterToolsByIntent`(3778) + `applyToolPolicy`(1942) 到同一 `tool-registry.ts`。
+
+- 验收：**搬移前后 `/api/tools` 输出逐字节一致**（快照比对通过）；`tsc` 0 错。
 
 ### Phase 3 — 实时通道
 - 搬 `realtime.ts`（SSE/WS 广播）。

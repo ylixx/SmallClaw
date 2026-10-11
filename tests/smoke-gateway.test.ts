@@ -14,6 +14,9 @@
  *   or
  *     npm run smoke
  *
+ * It ALSO locks the /api/tools tool list (see the second `it` below) so that the
+ * Phase 2 extraction of the tool-registry cannot silently drop/rename tools.
+ *
  * PORT DETECTION: server-v2.ts resolves its listen port as
  * `config.gateway.port || process.env.GATEWAY_PORT`, and the shipped config pins
  * `gateway.port` — so an env override is ignored. We therefore DO NOT pick a port;
@@ -127,6 +130,23 @@ describe.skipIf(!SMOKE)('gateway boot smoke (opt-in: SMALLCLAW_SMOKE=1)', () => 
     expect(r.status).toBe(200);
     const body = await r.text();
     expect(body.length).toBeGreaterThan(0);
+  });
+
+  it('exposes the expected tool list via GET /api/tools (Phase 2 lock)', async () => {
+    const r = await fetch(`http://127.0.0.1:${port}/api/tools`);
+    expect(r.status).toBe(200);
+    const body = await r.json();
+    expect(body.success).toBe(true);
+    expect(Array.isArray(body.tools)).toBe(true);
+    expect(body.tools.length).toBeGreaterThan(0);
+    // Core unconditional file tools must ALWAYS be present — an extraction bug that
+    // drops them would break every downstream file operation.
+    for (const name of ['read_file', 'list_files', 'grep_content', 'create_file']) {
+      expect(body.tools, `missing core tool: ${name}`).toContain(name);
+    }
+    // Byte-level lock: snapshot the tool-name list so any accidental drop/rename
+    // during the tool-registry extraction fails the comparison.
+    expect(body.tools).toMatchSnapshot();
   });
 
   afterAll(() => {

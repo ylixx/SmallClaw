@@ -53,6 +53,13 @@ A running log of features, fixes, and improvements added to SmallClaw. Each entr
 - 验证：typecheck 0 错；默认 `npm test` 71 passed / 1 skipped（冒烟跳过）；`SMALLCLAW_SMOKE=1` 真实网关启动 → /api/status 200 → 无残留。
 - 对应文档：`docs/server-v2-split-plan.md` Phase 1 标记完成，并注明 Model-Busy 守卫延后。
 
+### 2026-10-11 — server-v2 Split Phase 2 Prep: /api/tools Snapshot Lock (I)
+
+- Phase 2 抽取前的**准备动作**：在既有 `tests/smoke-gateway.test.ts`（已验证、受 `SMALLCLAW_SMOKE=1` 门控）内新增 `GET /api/tools` 锁断言，**复用同一网关进程，零新增端口、零端口冲突**。
+- 锁内容：① `success===true`；② `tools` 为非空字符串数组；③ 核心无依赖文件工具 `read_file/list_files/grep_content/create_file` 必在；④ `expect(tools).toMatchSnapshot()` 字节级锁定当前 **53 个工具名**列表，抽取时任何误删/改名都会让快照比对失败。
+- 代码边界探查（只读，为下一步抽取定位）：工具注册表簇 = `applyToolCompactness`(1214) + `buildTools`(1241, ~470 行, 56 个纯数据定义, 0 个 `fn:` 实现指针) + `filterToolsByIntent`(3778) + `applyToolPolicy`(1942)。其中 `buildTools` 区间(1241–1945)耦合极低：仅 2 处 `config.`、0 处 `sendSSE`、3 处 `getConfig()`，是**风险最低的首抽目标**。
+- 验证：`SMALLCLAW_SMOKE=1` → 2 tests passed + 1 snapshot written；teardown 后 18789 释放、无 node/tsx 残留；默认 `npm test` 71 passed / 2 skipped（冒烟跳过，无服务）。
+
 ---
 
 ### 2026-10-04 — 2026-10-11 — Feature & Hardening Wave (D)
