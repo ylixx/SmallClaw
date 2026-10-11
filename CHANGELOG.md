@@ -8,6 +8,11 @@ A running log of features, fixes, and improvements added to SmallClaw. Each entr
 
 > Features built but not yet tagged in a release.
 
+### 2026-10-11 — Repository Housekeeping (A)
+
+- Moved 8 stray `.git-msg-*.txt` commit-message drafts, `diag.txt`, and 33 test artifacts from `.tmp-test/` into the gitignored `.backup/clutter_20261011/` (recoverable, not committed). Root directory is now free of scratch/draft files.
+- Note: 2 gateway log files (`gateway.log`, `gateway-err.log`) remain in `.tmp-test/` — locked by the running gateway (PID 16588). Remove after stopping the gateway.
+
 ---
 
 ## 2026-02-27 — Sub-Agent Spawn Architecture
