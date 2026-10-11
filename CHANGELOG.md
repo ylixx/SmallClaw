@@ -68,6 +68,16 @@ A running log of features, fixes, and improvements added to SmallClaw. Each entr
 - 验证：`typecheck` 0 错；默认 `npm test` 71 passed / 2 skipped；`SMALLCLAW_SMOKE=1 npm run smoke` 2 passed，`/api/tools` 仍锁定 53 个工具名（字节级不变），网关启动/清理无残留。
 - 备份点：`git tag backup/pre-phase2a-20261011`。
 
+### 2026-10-11 — server-v2 Split Phase 2b: buildTools Cluster → tool-registry.ts (K)
+
+- 采用 **路径 A**：把 `buildTools` 整簇搬入 `tool-registry.ts`；server-v2.ts 仅 `import { buildTools, agentShellEnabled, MCP_TOOL_PREFIX, collectMcpToolEntries }`（外加 2a 的 `getModelTier`/`applyToolCompactness`）。
+- 搬入内容：`buildTools()`（~430 行、56 个工具定义 + 容器内装配逻辑）、`agentShellEnabled`、`shellExecToolDefinition`、MCP 簇（`MCP_TOOL_PREFIX`/`sanitizeMcpNamePart`/`normalizeMcpInputSchema`/`McpToolEntry`/`collectMcpToolEntries`/`buildMcpToolDefinitions`）。
+- buildTools 依赖的 ~10 个工具定义提供方（browser/desktop/office/image/file-batch/knowledge/plan/mcp/agent-builder/multi-agent）均为叶子模块；全 src 扫描确认只有 `tool-registry.ts` 的 `import type { ModelTier }` 引用 server-v2（编译期擦除、运行时无环）。
+- **唯一真障碍**：`isOrchestrationSkillEnabled`（依赖 server-v2 的 `skillsManager` 单例，无法平移）→ 通过 `buildTools(tier?, deps?)` 的 `deps.isOrchestrationSkillEnabled` 参数注入，server-v2 在 3 个调用点（含 `/api/tools` 端点）传入真实实现；`isOrchestrationSkillEnabled` 仍留在 server-v2（3945/9938 行亦用）。
+- server-v2.ts 净减 ~581 行（10,814 → 10,115，累计净减 699 行）；tool-registry.ts 现 ~664 行。
+- 验证：`typecheck` 0 错；默认 `npm test` 71 passed/2 skipped；`SMALLCLAW_SMOKE=1 npm run smoke` 2 passed，`/api/tools` 仍锁定 53 个工具名（含 `request_secondary_assist`，证明注入正确、行为字节级不变），网关启动/清理无残留。
+- 备份点：`git tag backup/pre-phase2b-20261011`。
+
 ---
 
 ### 2026-10-04 — 2026-10-11 — Feature & Hardening Wave (D)
