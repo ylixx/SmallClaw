@@ -185,6 +185,17 @@ A running log of features, fixes, and improvements added to SmallClaw. Each entr
 - server-v2.ts 净减 237 行（4,606 → **4,369**）；chat-execution.ts ≈1,670；累计净减 ~6,445（原 10,814）。
 - 备份点：`git tag backup/pre-phase5c3-20261011`。
 
+### 2026-10-11 — server-v2 Split Phase 6a+6b: 清 legacy + 补 lint/format 基建 (V)
+
+- **Phase 6a — 物理删除死代码**：`server-legacy.ts`（10,476 行）、`reactor-legacy.ts`、`orchestrator.ts`（仅为 legacy 可加载的空 shim）、`golden-routing.test.ts`（894 行，测被 file-op-v2/multi-agent 取代的旧路由逻辑）。引用链完全闭环在 legacy 内部（生产代码零真实 import，仅注释提及），typecheck 0 错确认无残留。合计删除 ~21k 行死重量。
+- **Phase 6b — eslint/prettier 基建**：
+  - 新增 devDeps：eslint、prettier、typescript-eslint、eslint-config-prettier（102 包）。
+  - `eslint.config.js`（flat config）：typescript-eslint recommended + 项目定制（no-explicit-any/ban-ts-comment/no-require-imports 关闭——小模型友好宽松；no-unused-vars 降 warn）→ **`npm run lint` 0 errors / 222 warnings**（存量 unused-vars 提示清单，不阻断；max-warnings 300 兜底）。
+  - `.prettierrc` + scripts：`lint` / `lint:fix` / `format` / `format:check`（prettier 独立于 eslint，不把格式当 error，存量代码不被空白阻塞）。
+  - `--fix` 自动修复 5 个 error：prefer-const ×4 + no-unused-expressions ×1（server-v2 1743 三元语句改 if/else，语义不变）。
+- 验证：typecheck 0 错；npm test 70 passed/2 skipped；SMALLCLAW_SMOKE=1 smoke 2 passed（53 工具名锁）。
+- 备份点：`git tag backup/pre-phase6a-20261011`。
+
 ---
 
 ### 2026-10-04 — 2026-10-11 — Feature & Hardening Wave (D)

@@ -41,7 +41,7 @@ export function setupErrorResponseEndpoint(app: Express): void {
     const history = getErrorHistory();
 
     // Try learned patterns first
-    let result = analyzer.analyze(errorMessage || '');
+    const result = analyzer.analyze(errorMessage || '');
 
     // Try text categorizer
     const categorization = errorCategorizer.categorizeError(errorMessage || '', { taskId });

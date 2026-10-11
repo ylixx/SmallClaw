@@ -14,7 +14,11 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "smoke": "vitest run tests/smoke-gateway.test.ts",
-    "test:desktop": "tsx tests/desktop-tools.ts"
+    "test:desktop": "tsx tests/desktop-tools.ts",
+    "lint": "eslint src tests --max-warnings 300",
+    "lint:fix": "eslint src tests --fix",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\""
   },
   "keywords": [
     "ai",
@@ -46,8 +50,12 @@
     "@types/express": "^4.17.0",
     "@types/node": "^20.11.0",
     "@types/ws": "^8.5.0",
+    "eslint": "^10.12.0",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.9.10",
     "tsx": "^4.7.0",
     "typescript": "^5.3.0",
+    "typescript-eslint": "^8.71.1",
     "vitest": "^4.1.11"
   },
   "allowScripts": {

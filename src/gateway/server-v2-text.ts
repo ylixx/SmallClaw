@@ -24,7 +24,7 @@ function logToolCall(workspacePath: string, toolName: string, args: any, result:
 function separateThinkingFromContent(text: string): { reply: string; thinking: string } {
   if (!text) return { reply: '', thinking: '' };
 
-  let cleaned = text
+  const cleaned = text
     .replace(/<think>[\s\S]*?<\/think>/gi, '')
     .replace(/<think>[\s\S]*/gi, '')
     .replace(/<\/think>/gi, '')

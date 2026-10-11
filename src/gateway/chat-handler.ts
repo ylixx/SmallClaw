@@ -2948,7 +2948,7 @@ RULES:
             });
           };
 
-          let verifier = await runVerifier();
+          const verifier = await runVerifier();
           if (verifier?.verdict === 'PASS') {
             maybeSaveFileOpCheckpoint({
               phase: 'done',

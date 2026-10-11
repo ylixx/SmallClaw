@@ -36,7 +36,7 @@ import { getAgentById, getDefaultAgent } from '../config/config';
 
 export function getModelTier(): ModelTier {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+     
     const { getConfig } = require('../config/config.js');
     const cfg = getConfig().getConfig()?.models || {};
     const explicit = String(cfg.tier || '').trim().toLowerCase();

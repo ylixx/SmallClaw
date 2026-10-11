@@ -246,7 +246,7 @@ export async function runNodeCallSandbox(
   const output: string[] = [];
 
   // Build a safe require that blocks dangerous modules
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
+   
   const realRequire = require;
   const safeRequire = (mod: string): any => {
     if (BLOCKED_MODULES.has(mod)) {
@@ -607,7 +607,7 @@ export class Reactor {
     let workspacePath: string;
     try {
       // Dynamic import to avoid circular dep issues at module load time
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
+       
       const { getConfig } = require('../config/config.js');
       workspacePath = String(options.workspacePath || getConfig().getConfig()?.workspace?.path || process.cwd());
     } catch {

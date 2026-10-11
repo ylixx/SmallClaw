@@ -1740,7 +1740,10 @@ app.get('/api/open-path', async (req, res) => {
   try {
     const { exec } = await import('child_process');
     const cmd = process.platform === 'win32' ? `start "" "${fp}"` : process.platform === 'darwin' ? `open "${fp}"` : `xdg-open "${fp}"`;
-    exec(cmd, (err) => { err ? res.status(500).json({ error: err.message }) : res.json({ success: true }); });
+    exec(cmd, (err) => {
+      if (err) res.status(500).json({ error: err.message });
+      else res.json({ success: true });
+    });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
@@ -3539,7 +3542,7 @@ app.get('/api/system-stats', async (_req, res) => {
 
   // Check if Ollama is reachable
   let ollamaRunning = false;
-  let ollamaMemMb = 0;
+  const ollamaMemMb = 0;
   let ollamaCount = 0;
   try {
     const ollamaEndpoint = (getConfig().getConfig() as any).ollama?.endpoint || 'http://localhost:11434';
