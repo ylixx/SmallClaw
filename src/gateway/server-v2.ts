@@ -24,6 +24,7 @@ import {
 } from '../config/config';
 import { getMCPManager, type MCPTool } from './mcp-manager';
 import { extractFlowArtifacts } from './flow-artifacts';
+import { mergeOptimizationTier, tierFromContextWindow } from './server-v2-text';
 import { getVault } from '../security/vault';
 import { getOllamaClient } from '../agents/ollama-client';
 import { spawnAgent } from '../agents/spawner';
@@ -1211,20 +1212,26 @@ function logToDaily(workspacePath: string, role: string, content: string) {
 
 // ── Tool description two-stage (short/full) ────────────────────────────────
 // Tool descriptions are the single biggest prompt cost. Tiers decide how much
-// to compress: small (≤4B) swaps to short descriptions (manual shortDescription
-// when the definition provides one, else first sentence ≤180 chars) and trims
-// parameter descriptions to ≤60 chars; mid (5-9B) keeps a richer short form
-// (≤300 chars, params ≤120); large (≥10B / unknown cloud) keeps everything.
+// to compress: small (aggressive) swaps to short descriptions (manual
+// shortDescription when the definition provides one, else first sentence ≤180
+// chars) and trims parameter descriptions to ≤60 chars; mid keeps a richer
+// short form (≤300 chars, params ≤120); large keeps everything.
 // Parameters/schema stay intact so native function-call wiring never breaks.
+//
+// IMPORTANT: the tier is NOT a pure "parameter size" classification. Local
+// deployments run BIGGER models with SHORTER contexts (KV cache memory), so a
+// 9B model often fits far less prompt than a 2B at -c 128000. resolveModelTier
+// therefore merges two dimensions and takes the more aggressive one:
+//   - byCtx    : live n_ctx / configured window  → hard constraint (fits?)
+//   - byParams : parameter size                   → soft constraint (follows?)
 type ModelTier = 'small' | 'mid' | 'large';
 
+// Synchronous parameter-size inference (fallback only; see resolveModelTier).
 function getModelTier(): ModelTier {
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { getConfig } = require('../config/config.js');
     const cfg = getConfig().getConfig()?.models || {};
-    // Explicit tier wins: set models.tier for cloud APIs whose model names
-    // carry no size marker (e.g. "gpt-4o", "claude-3-5-sonnet").
     const explicit = String(cfg.tier || '').trim().toLowerCase();
     if (explicit === 'small' || explicit === 'mid' || explicit === 'large') return explicit;
     const modelId = String(cfg.primary || '').toLowerCase();
@@ -1234,6 +1241,48 @@ function getModelTier(): ModelTier {
   } catch {
     return 'large';
   }
+}
+
+// Effective context window from the same sources as resolveHistoryBudgetTokens:
+// live llama-server probe (follows the RUNNING server, e.g. -c 128000) first,
+// then the preset's context_window / server.ctx_size, else null.
+async function probeEffectiveNctx(): Promise<number | null> {
+  try {
+    const raw = getConfig().getConfig() as any;
+    const llm = raw?.llm || {};
+    const preset = llm.presets?.[String(llm.active_preset || '')];
+    if (preset) {
+      if (preset.provider === 'llama_cpp') {
+        const endpoint = String(preset.providers?.llama_cpp?.endpoint || 'http://localhost:8080');
+        const modelPath = String(preset.server?.model_path || preset.providers?.llama_cpp?.model || '');
+        const live = await probeLlamaNctx(endpoint, modelPath);
+        if (live) return live;
+      }
+      const ctxWindow = Number(preset.context_window ?? preset.server?.ctx_size);
+      if (Number.isFinite(ctxWindow) && ctxWindow > 0) return ctxWindow;
+    }
+  } catch {
+    // fall through
+  }
+  return null;
+}
+
+// Merged optimization tier: explicit config > min(byCtx, byParams) > byParams.
+async function resolveModelTier(): Promise<ModelTier> {
+  try {
+    const raw = getConfig().getConfig() as any;
+    const explicit = String(raw?.models?.tier || '').trim().toLowerCase();
+    if (explicit === 'small' || explicit === 'mid' || explicit === 'large') return explicit;
+  } catch {
+    // fall through to probe
+  }
+  const byParams = getModelTier();
+  const nctx = await probeEffectiveNctx();
+  if (nctx == null) return byParams;
+  // Take the more aggressive dimension: short contexts are a hard constraint
+  // (9B with 8-16K must compress to fit); weak small models need short prompts
+  // even with a big window (2B at 128K still follows short descriptions better).
+  return mergeOptimizationTier(tierFromContextWindow(nctx), byParams);
 }
 
 function compactToolDescription(desc: string, limit = 180): string {
@@ -1274,7 +1323,8 @@ function isCompactModel(): boolean {
   return getModelTier() !== 'large';
 }
 
-function buildTools() {
+function buildTools(tier?: ModelTier) {
+  const effectiveTier = tier ?? getModelTier();
   const toolDefs = [
     {
       type: 'function',
@@ -1742,12 +1792,11 @@ function buildTools() {
   if (agentShellEnabled()) toolDefs.push(shellExecToolDefinition());
   toolDefs.push(...planToolDefinitions());
   toolDefs.push(...buildMcpToolDefinitions(new Set(toolDefs.map((t: any) => String(t?.function?.name || '')))));
-  if (isCompactModel()) {
-    const tier = getModelTier();
+  if (effectiveTier !== 'large') {
     const fullChars = toolDefs.reduce((n: number, t: any) => n + String(t?.function?.description || '').length, 0);
-    const compacted = applyToolCompactness(toolDefs, tier);
+    const compacted = applyToolCompactness(toolDefs, effectiveTier);
     const shortChars = compacted.reduce((n: number, t: any) => n + String(t?.function?.description || '').length, 0);
-    console.log(`[tools] compact descriptions (${tier}): ${fullChars} -> ${shortChars} chars (${Math.round((1 - shortChars / Math.max(fullChars, 1)) * 100)}% saved)`);
+    console.log(`[tools] compact descriptions (${effectiveTier}): ${fullChars} -> ${shortChars} chars (${Math.round((1 - shortChars / Math.max(fullChars, 1)) * 100)}% saved)`);
     return compacted;
   }
   return toolDefs;
@@ -4004,12 +4053,15 @@ async function handleChat(
   if (workspacePath && sessionWorkspace !== workspacePath) {
     setWorkspace(sessionId, workspacePath);
   }
+  // Merged optimization tier: live n_ctx (hard constraint) × parameter size
+  // (soft constraint). Computed once per turn so buildTools/filter use one value.
+  const tier = await resolveModelTier();
   console.log(`[v2] SESSION: ${sessionId} | Workspace: ${workspacePath}`);
   const history = getHistoryForApiCall(sessionId, 5);
   const tools = applyToolPolicy(
     isBootStartupTurn
-      ? buildTools().filter((t: any) => bootAllowedTools.has(String(t?.function?.name || '')))
-      : filterToolsByIntent(buildTools(), message, getModelTier()),
+      ? buildTools(tier).filter((t: any) => bootAllowedTools.has(String(t?.function?.name || '')))
+      : filterToolsByIntent(buildTools(tier), message, tier),
     sessionId,
   );
   console.log(`[v2] TOOLS: n=${tools.length} chars=${JSON.stringify(tools).length} estTokens=${Math.ceil(JSON.stringify(tools).length / 3.6)}`);

@@ -26,6 +26,8 @@ import {
   requestedFullTemplate,
   logToolCall,
   isToolArgParseFailure,
+  mergeOptimizationTier,
+  tierFromContextWindow,
 } from '../src/gateway/server-v2-text';
 
 describe('separateThinkingFromContent', () => {
@@ -163,3 +165,40 @@ describe('isToolArgParseFailure', () => {
     expect(isToolArgParseFailure(null)).toBe(false);
   });
 });
+
+describe('optimization tier merge (ctx × params)', () => {
+  // Local reality: bigger models run SHORTER contexts (KV-cache memory), so a
+  // 9B often fits far less prompt than a 2B at -c 128000. The merged tier must
+  // take the more aggressive dimension.
+  it('short ctx wins over big params (9B with 8-16K window → aggressive)', () => {
+    expect(mergeOptimizationTier('small', 'mid')).toBe('small'); // 9B short ctx
+    expect(mergeOptimizationTier('small', 'large')).toBe('small'); // 13B short ctx
+  });
+  it('small params win over big ctx (2B with 128K window → still compressed)', () => {
+    expect(mergeOptimizationTier('large', 'small')).toBe('small'); // 2B 128K
+    expect(mergeOptimizationTier('mid', 'small')).toBe('small'); // 4B 64K
+  });
+  it('mid stays mid only when both dimensions are mid', () => {
+    expect(mergeOptimizationTier('mid', 'mid')).toBe('mid'); // 7B 32K
+    expect(mergeOptimizationTier('large', 'mid')).toBe('mid'); // 7B 128K
+  });
+  it('large only when both are large (big model + big window / cloud)', () => {
+    expect(mergeOptimizationTier('large', 'large')).toBe('large');
+  });
+});
+
+describe('tierFromContextWindow thresholds', () => {
+  it('maps windows to tiers at 16K/64K boundaries', () => {
+    expect(tierFromContextWindow(8_192)).toBe('small');
+    expect(tierFromContextWindow(16_384)).toBe('small');
+    expect(tierFromContextWindow(16_385)).toBe('mid');
+    expect(tierFromContextWindow(65_536)).toBe('mid');
+    expect(tierFromContextWindow(65_537)).toBe('large');
+    expect(tierFromContextWindow(131_072)).toBe('large');
+  });
+  it('invalid windows fall back to large (no optimization needed)', () => {
+    expect(tierFromContextWindow(0)).toBe('large');
+    expect(tierFromContextWindow(NaN)).toBe('large');
+  });
+});
+

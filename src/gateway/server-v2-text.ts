@@ -261,6 +261,34 @@ function isToolArgParseFailure(err: any): boolean {
     || (/(tool|arguments)/i.test(msg) && /(json|parse)/i.test(msg) && /invalid/i.test(msg));
 }
 
+// Optimization tiers for tool-description compression / runtime tool filtering.
+// Order small < mid < large; "small" means the most aggressive optimization.
+export type OptimizationTier = 'small' | 'mid' | 'large';
+
+const OPT_TIER_ORDER: OptimizationTier[] = ['small', 'mid', 'large'];
+
+// Merge the two dimensions that decide how aggressively to optimize:
+//   - byCtx: live context window (hard constraint — a 9B model often runs a
+//     much SHORTER window than a 2B because of KV-cache memory, so small ctx
+//     must compress to fit at all);
+//   - byParams: parameter size (soft constraint — small models follow short
+//     prompts better even when their window is large).
+// The merged tier is the more aggressive of the two (smaller index).
+export function mergeOptimizationTier(byCtx: OptimizationTier, byParams: OptimizationTier): OptimizationTier {
+  const idx = (t: OptimizationTier): number => {
+    const i = OPT_TIER_ORDER.indexOf(t);
+    return i < 0 ? OPT_TIER_ORDER.length - 1 : i;
+  };
+  return idx(byCtx) <= idx(byParams) ? byCtx : byParams;
+}
+
+// Map a live context window to a tier: ≤16K = small (aggressive), 16K-64K = mid,
+// >64K = large (little optimization needed).
+export function tierFromContextWindow(nctx: number): OptimizationTier {
+  if (!Number.isFinite(nctx) || nctx <= 0) return 'large';
+  return nctx <= 16_384 ? 'small' : nctx <= 65_536 ? 'mid' : 'large';
+}
+
 export {
   logToolCall,
   separateThinkingFromContent,
