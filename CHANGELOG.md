@@ -24,6 +24,17 @@ A running log of features, fixes, and improvements added to SmallClaw. Each entr
 
 - `.gitignore`: header comment `LocalClaw` → `SmallClaw`; removed the dead `.localclaw/` ignore block (project already migrated to `.smallclaw/`); dropped the `.tmp_openclaw_*/` OpenClaw-era temp pattern. `.smallclaw/` rules unchanged.
 
+### 2026-10-11 — README Overhaul + Bilingual Switch (F)
+
+- Rewrote `README.md` to match the actual codebase. The old README claimed a "single-pass, no planning/execution/verification agents" design that contradicted the real `orchestration` system.
+- **Architecture corrected**: core is a single-pass `handleChat()` loop; an **optional, config-gated** multi-agent orchestration layer (planner/executor/verifier + plan mode + verification-flow + self-healer) is also built in (controlled by `orchestration` in `.smallclaw/config.json`).
+- Added the missing capabilities to the feature list and docs: Knowledge Base (RAG), Flows, Office/PPT/Image tools, `run_code`, Memory system, Cron scheduler, model tiers (≤4B / 5–9B / ≥10B), MCP, Telegram/Discord/WhatsApp channels.
+- Replaced the 4-group config snippet with a realistic example derived from `src/types.ts` (`SmallClawConfig`, ≈20 top-level keys); removed the misleading `reactor.ts` reference.
+- Updated the Roadmap to mark shipped items (KB, Flows, Office, PPT, Image, Memory, Cron, Orchestration, channels).
+- Added a 🇨🇳 中文 / 🇺🇸 English **tab switcher** (HTML radio + `<style>`). Works as tabs in VS Code / WorkBuddy / Typora previews; degrades gracefully to full bilingual display on GitHub (which strips `<style>`/`<input>`).
+- Fixed repo URLs in badges/clones from `XposeMarket/SmallClaw` to the actual remote `ylixx/SmallClaw`.
+- Note: bilingual duplication roughly doubles README length; on GitHub both languages render (no tab switching) by design.
+
 ---
 
 ### 2026-10-04 — 2026-10-11 — Feature & Hardening Wave (D)
