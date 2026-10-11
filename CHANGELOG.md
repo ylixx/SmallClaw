@@ -8,6 +8,25 @@ A running log of features, fixes, and improvements added to SmallClaw. Each entr
 
 > Features built but not yet tagged in a release.
 
+### 2026-10-11 — server-v2 Split Phase 5d: REST 路由按域下沉（1~12）——已完成并推送
+
+> 方法论：变更前 `git tag backup/pre-phase5dN` → 提取脚本（ts AST/行范围）→ `api-*.ts`（`registerXxxRoutes(app, deps)` 模式）→ server-v2 原位替换 → 三层验证（typecheck 0 错 / `npm test` 70 passed+2 skipped / `SMALLCLAW_SMOKE=1 npm run smoke` 2 passed）→ commit+push。`server-v2.ts` 由 **4,369 行降至 1,920 行**（累计 -2,449），业务行为字节级不变。
+
+- **5d-1**（`825b183`）：`/api/system-stats` + `getCpuPercent` + `prevCpuTimes` → `api-system.ts`（`registerSystemRoutes(app)`，零 deps）。
+- **5d-2a+2b**：`requireGatewayAuth`（64 行、11 处跨域使用）→ `api-auth.ts`；Agent Session Context + Approvals（`pendingApprovals` Map）+ Memory stub + open-path → `api-misc.ts`（deps 仅 `isOrchestrationSkillEnabled`）。
+- **5d-3**（`88e0a11`）：MCP API 6 路由 + `/api/tools` → `api-mcp.ts`（deps={ resolveModelTier, isOrchestrationSkillEnabled }）。
+- **5d-4**（`8fc3a29`）：Provider/Model Settings（~270 行）+ Webhook Settings（3 路由）→ `api-settings.ts`（零 deps；`CONFIG_DIR_PATH` → 局部常量）。
+- **5d-5**：Skills API 6 路由 + Orchestration Settings 4 路由 + `clampInt`/`getOrchestrationConfigForApi` → `api-skills.ts`（deps={ skillsManager, recoverSkillsIfEmpty, setOrchestrationEnabled, activeTasks }）。
+- **5d-6**（`6a6138e`）：Tasks/Cron API 10 路由 + Background Task Kanban 8 路由（含 SSE stream）→ `api-tasks.ts`（deps={ cronScheduler, heartbeatRunner, loadTaskHeartbeatConfig, handleChat, makeBroadcastForTask, telegramChannel }）。
+- **5d-7**：Flow templates 5 路由 + `/api/flows/:id/run`（SSE 执行流程）→ `api-flows.ts`（deps={ handleChat, addMessage }）。
+- **5d-8**（`cdfcf88`）：Channels API 8 路由 + 4 类型 + 5 helper（resolveToken/normalize*/resolveChannelsConfig）→ `api-channels.ts`（deps={ telegramChannel }；`resolveChannelsConfig` 保持 export 供组合根 telegram init 使用）。
+- **5d-9**（`09e851a`）：Scheduler API 7 路由（CRUD/run/parse）→ `api-schedules.ts`（deps={ cronScheduler }；`isConfirmed` import 自 chat-execution）。
+- **5d-10**（`d140050`）：通用 Settings（search/credentials/paths/agent）+ Model/Ollama Settings（settings/model、settings/think）并入 `api-settings.ts`（补 fs/getVault import）。
+- **5d-11**（`d7d2863`）：Agents API 8 路由 + 4 本地 helper（sanitizeAgentId/normalizeAgentDefinition/normalizeAgentsForSave/findLastCronRunAt）→ `api-agents.ts`（零 deps 注入；import 自 config/config + scheduler + agents/spawner）。
+- **5d-12**（`52d2db8`）：Task Heartbeat 域（状态 + scheduleTaskFollowup/makeBroadcastForTask/scheduleTaskHeartbeat/runTaskHeartbeat + heartbeat-config 路由）→ `task-heartbeat.ts` **createHeartbeatDomain(deps) 工厂**。**循环依赖破法**：createChatHandler 闭包 makeBroadcastForTask、而 makeBroadcastForTask→scheduleTaskFollowup→handleChat，工厂接受惰性 `getHandleChat()` getter，组合根先建 heartbeatDomain 再建 handleChat。
+- 拆分产物（行数）：api-system 102 / api-auth ≈56 / api-misc 127 / api-mcp ≈120 / api-settings ≈540 / api-skills ≈270 / api-tasks ≈380 / api-flows ≈90 / api-channels ≈410 / api-schedules ≈160 / api-agents ≈250 / task-heartbeat ≈218；此前已拆 chat-handler ≈3,575 / chat-execution ≈1,670 / tool-registry 915 / 等。
+- 验证链：每步 `git tag backup/pre-phase5dN-20261011` 备份；typecheck 0 错、`npm test` 70 passed/2 skipped、`SMALLCLAW_SMOKE=1 npm run smoke` 2 passed；每步 commit+push（local==origin/main）。
+
 ### 2026-10-11 — Repository Housekeeping (A)
 
 - Moved 8 stray `.git-msg-*.txt` commit-message drafts and `diag.txt` into the gitignored `.backup/clutter_20261011/` (recoverable, not committed).
