@@ -208,6 +208,7 @@ import { detectGpu, logGpuStatus } from './gpu-detector';
 import { registerSystemRoutes } from './api-system';
 import { requireGatewayAuth } from './api-auth';
 import { registerMiscRoutes } from './api-misc';
+import { registerMcpRoutes } from './api-mcp';
 import { internalAgentTaskRouter } from './internal-agent-task';
 import {
   registerAgentBuilderTools,
@@ -3831,92 +3832,7 @@ app.post('/api/settings/hooks/test', async (req, res) => {
   }
 });
 
-// ─── MCP API ──────────────────────────────────────────────────────────────────
-
-app.get('/api/mcp/servers', (_req, res) => {
-  try {
-    const mgr = getMCPManager();
-    const configs = mgr.getConfigs();
-    const status = mgr.getStatus();
-    const merged = configs.map(cfg => {
-      const s = status.find(x => x.id === cfg.id);
-      return { ...cfg, status: s?.status || 'disconnected', toolCount: s?.tools || 0, toolNames: s?.toolNames || [], error: s?.error };
-    });
-    res.json({ success: true, servers: merged });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-app.post('/api/mcp/servers', (req, res) => {
-  try {
-    const mgr = getMCPManager();
-    const cfg = req.body;
-    if (!cfg.id || !cfg.name) { res.status(400).json({ success: false, error: 'id and name are required' }); return; }
-    if (!cfg.id.match(/^[a-z0-9_-]+$/i)) { res.status(400).json({ success: false, error: 'id must be alphanumeric/underscore/dash only' }); return; }
-    mgr.upsertConfig(cfg);
-    res.json({ success: true });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-app.delete('/api/mcp/servers/:id', (req, res) => {
-  try {
-    const mgr = getMCPManager();
-    const deleted = mgr.deleteConfig(req.params.id);
-    res.json({ success: deleted, error: deleted ? undefined : 'Server not found' });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-app.post('/api/mcp/servers/:id/connect', async (req, res) => {
-  try {
-    const mgr = getMCPManager();
-    const result = await mgr.connect(req.params.id);
-    res.json(result);
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-app.post('/api/mcp/servers/:id/disconnect', async (req, res) => {
-  try {
-    const mgr = getMCPManager();
-    await mgr.disconnect(req.params.id);
-    res.json({ success: true });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-app.get('/api/mcp/tools', (_req, res) => {
-  try {
-    const mgr = getMCPManager();
-    res.json({ success: true, tools: mgr.getAllTools() });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-app.get('/api/tools', async (req, res) => {
-  try {
-    const sessionId = String(req.query.sessionId || 'default');
-    // Resolve the same merged tier the chat path uses, so the UI tool list
-    // matches what is actually injected into the prompt for this model.
-    const tier = await resolveModelTier();
-    const tools = applyToolPolicy(buildTools(tier, { isOrchestrationSkillEnabled }), sessionId);
-    res.json({
-      success: true,
-      sessionId,
-      count: tools.length,
-      tools: tools.map((t: any) => String(t?.function?.name || '')).filter(Boolean),
-    });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
+registerMcpRoutes(app, { resolveModelTier, isOrchestrationSkillEnabled });
 
 // ─── Webhook Routes ──────────────────────────────────────────────────────────
 // Mounted dynamically so the path is always read fresh from config.
