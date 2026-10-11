@@ -48,7 +48,57 @@ export interface ReactOptions {
   toolProfile?: ToolProfile;
   promptMode?: 'full' | 'minimal' | 'none';
   workspacePath?: string;
+  persona?: AgentPersona; // explicit persona override; auto-inferred from message when absent
 }
+
+// ─── Persona (场景姿态)：同一通用内核 + 按任务切换的短规则段 ────────────────
+
+export type AgentPersona = 'chat' | 'doc-analyst' | 'coding' | 'generative';
+
+const PERSONA_HINTS: Array<[AgentPersona, RegExp]> = [
+  [
+    'generative',
+    /写.{0,8}(报告|方案|总结|周报|日报|简报|材料)|生成.{0,8}(报告|文档|方案|ppt|演示文稿|周报|日报|简报)|做.{0,8}(ppt|课件|汇报|演示文稿|幻灯片)/i,
+  ],
+  ['coding', /代码|脚本|修复|bug|运行|部署|node|python|shell|命令行|报错|改成|实现/i],
+  [
+    'doc-analyst',
+    /分析|总结|提炼|整理|解读|检查|审查|汇总|概括|看看|读一下|读了|这份|材料|数据|表格|pdf|docx|xlsx|csv|报告里|要点|内容是什么|找一下|有没有/i,
+  ],
+];
+
+export function inferPersona(userMessage: string, requested?: AgentPersona): AgentPersona {
+  if (requested) return requested;
+  const text = String(userMessage || '');
+  for (const [persona, re] of PERSONA_HINTS) {
+    if (re.test(text)) return persona;
+  }
+  return 'chat';
+}
+
+// 姿态段：只含该任务域的关键规则，doc-analyst 必须 <300 字符
+export const PERSONA_BLOCKS: Record<AgentPersona, string> = {
+  chat: `━━━ CHAT ━━━
+Answer directly in FINAL:. Use node_call only when you need files, web, or memory. Keep answers short (3-5 sentences).`,
+  'doc-analyst': `━━━ DOC ANALYST ━━━
+Analyze material (files/data):
+1. Inspect (doc_inspect) then read (doc_read). Never guess.
+2. Facts only from what you read; numbers trace to source. Missing: say so.
+3. Output: findings + data table + source + questions. Chinese.
+4. Long docs: chunk via doc_read.`,
+  coding: `━━━ CODING ━━━
+Use node_call with real code for file/system work.
+  list: node_call<const fs=require('fs'); return fs.readdirSync(WORKSPACE);>
+  read: node_call<const fs=require('fs'),path=require('path'); return fs.readFileSync(path.join(WORKSPACE,'f'),'utf8');>
+  write: node_call<const fs=require('fs'),path=require('path'); fs.writeFileSync(path.join(WORKSPACE,'out.txt'),'x');>
+  edit: node_call<const fs=require('fs'),path=require('path'); const p=path.join(WORKSPACE,'f'); const u=fs.readFileSync(p,'utf8').replace('a','b'); fs.writeFileSync(p,u);>
+Delete/rename: unlinkSync/renameSync + // DESTRUCTIVE. Verify result, then FINAL:.`,
+  generative: `━━━ GENERATE ━━━
+Produce artifacts (PPT/docs/reports) via tools, never hand-written code:
+1. doc_write mode:"preview" first (returns preview_id, writes nothing), user approves, then mode:"apply".
+2. Follow the matched skill/flow template (outline format, theme, filename rules).
+3. Data from user material or marked 示例数据. FINAL: with file path + counts.`,
+};
 
 // Detect FINAL: in model response
 const FINAL_RE = /FINAL:\s*([\s\S]*?)(?:---END---|$)/i;
@@ -366,7 +416,8 @@ function buildNodeCallSystemPrompt(
   options: ReactOptions,
   userMessage: string,
   toolProfile: ToolProfile,
-  toolSchemas: string
+  toolSchemas: string,
+  persona: AgentPersona
 ): string {
   const today = new Date().toISOString().slice(0, 10);
   const selectedSkillSlugs = Array.isArray(options.skillSlugs) && options.skillSlugs.length
@@ -383,7 +434,7 @@ function buildNodeCallSystemPrompt(
     ? `TOOL PROFILE: ${toolProfile}\nAVAILABLE TOOLS:\n${toolSchemas}\n`
     : '';
 
-  const executeInstructions = `
+  const coreAct = `
 You are in EXECUTE mode. Today is ${today}.
 Workspace: ${workspacePath}
 ${toolProfileBlock}
@@ -413,57 +464,20 @@ After all node_call blocks complete, always write:
 If you need to ask the user a question instead of acting:
   FINAL: <your question here>
   open_confirm
+`.trim();
 
-━━━ REFERENCE PATTERNS ━━━
-
-List all files in workspace:
-  node_call<const fs = require('fs'); return fs.readdirSync(WORKSPACE);>
-
-Read a file:
-  node_call<const fs = require('fs'), path = require('path'); return fs.readFileSync(path.join(WORKSPACE, 'index.html'), 'utf8');>
-
-Write/overwrite a file:
-  node_call<const fs = require('fs'), path = require('path'); fs.writeFileSync(path.join(WORKSPACE, 'out.txt'), 'content here');>
-
-Delete one file:
-  node_call<const fs = require('fs'), path = require('path'); fs.unlinkSync(path.join(WORKSPACE, 'old.txt')); // DESTRUCTIVE>
-
-Delete files matching a prefix:
-  node_call<
-  const fs = require('fs'), path = require('path');
-  const matches = fs.readdirSync(WORKSPACE).filter(f => f.startsWith('golden'));
-  matches.forEach(f => fs.unlinkSync(path.join(WORKSPACE, f)));
-  // DESTRUCTIVE
-  >
-
-Edit text in a file (find + replace):
-  node_call<
-  const fs = require('fs'), path = require('path');
-  const p = path.join(WORKSPACE, 'index.html');
-  const updated = fs.readFileSync(p, 'utf8').replace('old text', 'new text');
-  fs.writeFileSync(p, updated);
-  >
-
-Rename a file:
-  node_call<const fs = require('fs'), path = require('path'); fs.renameSync(path.join(WORKSPACE, 'old.txt'), path.join(WORKSPACE, 'new.txt')); // DESTRUCTIVE>
-
-List files matching a pattern:
-  node_call<const fs = require('fs'); return fs.readdirSync(WORKSPACE).filter(f => f.startsWith('golden'));>
-
-Web search (built-in):
-  node_call<return web_search({query: 'your search here', max_results: 5});>
-
+  const coreRules = `
 ━━━ RULES ━━━
 - Never assume filenames or paths. If unknown, list workspace first.
 - Never claim task is done without a tool result confirming it.
 - For destructive ops: if the user clearly said to do it ("remove them", "delete it", "go ahead"), just do it with // DESTRUCTIVE. Only use open_confirm if intent is ambiguous.
-- Do not narrate or explain before node_call blocks. Act directly.
-- Write node_call blocks IMMEDIATELY. Do not write prose, thinking, or explanation before or between them.
-- You may use multiple node_call blocks in one response if needed.
+- Do not narrate or explain before node_call blocks. Act directly. You may use multiple node_call blocks.
 - For multi-line code, write it all in one node_call block. Keep code compact (no extra variables).
 `.trim();
 
-  return [soul, executeInstructions].filter(Boolean).join('\n\n---\n\n');
+  const personaRules = PERSONA_BLOCKS[persona] || PERSONA_BLOCKS.chat;
+
+  return [soul, coreAct, personaRules, coreRules].filter(Boolean).join('\n\n---\n\n');
 }
 
 function buildNativeToolSystemPrompt(
@@ -601,14 +615,15 @@ export class Reactor {
     }
 
     const primaryUserMessage = extractPrimaryUserMessage(userMessage);
+    const persona = inferPersona(primaryUserMessage, options.persona);
     const inferredToolProfile = inferToolProfile(primaryUserMessage, options.toolProfile);
     const toolProfile = this.registry.resolveToolProfile(inferredToolProfile);
     const toolSchemas = this.registry.getToolSchemas(toolProfile);
-    const systemPrompt = buildNodeCallSystemPrompt(workspacePath, options, primaryUserMessage, toolProfile, toolSchemas);
+    const systemPrompt = buildNodeCallSystemPrompt(workspacePath, options, primaryUserMessage, toolProfile, toolSchemas, persona);
     const nativeSystemPrompt = buildNativeToolSystemPrompt(toolSchemas, options, primaryUserMessage);
 
     console.log(`\n${label} USER   ${primaryUserMessage.slice(0, 120)}`);
-    console.log(`${label} TOOLS  profile=${toolProfile}`);
+    console.log(`${label} TOOLS  profile=${toolProfile} persona=${persona} sys_chars=${systemPrompt.length}`);
 
     const startTime = Date.now();
     const historyLines: string[] = [];
