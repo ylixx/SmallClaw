@@ -1,6 +1,6 @@
 # server-v2.ts 拆分方案（规划文档）
 
-> 状态：Phase 0（安全网）✅、Phase 1（config-bootstrap + 失败熔断）✅、Phase 2a（工具压缩纯函数 → tool-registry）✅、Phase 2b（buildTools 整簇 → tool-registry）✅、Phase 2c（filterToolsByIntent 簇 → tool-registry）✅、Phase 2d（applyToolPolicy policy 簇 → tool-registry）✅、Phase 1.5（Model-Busy 守卫 → model-busy-guard）✅、Phase 3（realtime SSE/WS → realtime.ts）✅ 已完成并验证；Phase 4–6 待执行。`server-v2.ts` 现为 **9,865 行**（原 10,814，累计净减 949 行），业务行为字节级不变。
+> 状态：Phase 0（安全网）✅、Phase 1（config-bootstrap + 失败熔断）✅、Phase 2a（工具压缩纯函数 → tool-registry）✅、Phase 2b（buildTools 整簇 → tool-registry）✅、Phase 2c（filterToolsByIntent 簇 → tool-registry）✅、Phase 2d（applyToolPolicy policy 簇 → tool-registry）✅、Phase 1.5（Model-Busy 守卫 → model-busy-guard）✅、Phase 3（realtime SSE/WS → realtime.ts）✅、Phase 4（flow-integration → flow-integration.ts）✅ 已完成并验证；Phase 5–6 待执行。`server-v2.ts` 现为 **~9,810 行**（原 10,814，累计净减 ~1,004），业务行为字节级不变。
 > 目标：把 `src/gateway/server-v2.ts`（**10,814 行 / 100+ 导出符号**）从巨型单体拆成按域组织的模块，保留 `server-v2.ts` 作为"组合根（composition root）"——只做模块装配、Express 路由、SSE 接线，业务细节下沉到子模块。
 
 ---
@@ -103,9 +103,12 @@
 - server-v2.ts 净减 18 行（9,883 → 9,865，累计净减 949 行）；realtime.ts 40 行。
 - 验收（已通过）：`typecheck` 0 错；默认 `npm test` 71 passed/2 skipped；`SMALLCLAW_SMOKE=1 npm run smoke` 2 passed（真网关启动 + `/api/status` 200 + `/api/tools` 仍锁 53 工具名快照 + 进程树/端口强杀，无残留、18789 释放）。备份点：`git tag backup/pre-phase3-20261011`。
 
-### Phase 4 — 流程/验证接线
-- 搬 `flow-integration.ts`。
-- 验收：跑一个最小流程（如数据整理报告），产物可见性与之前一致。
+### Phase 4 — 流程/验证接线（✅ 已完成并验证）
+- 新建 `src/gateway/flow-integration.ts`（79 行）：`flowsManager` 单例（`export const`，live 单例模式，server-v2 不再本地构造）+ `buildFlowDonePayload(result, workspacePath?)`（run/chat 两端点原本字节级重复的 done 事件构造抽为一处）+ 5 个 flow CRUD handler（`listFlows`/`getFlowById`/`createFlow`/`updateFlow`/`deleteFlow`）。
+- server-v2 保留 Express 路由注册（组合根职责），仅改为引用 handler；`flowsManager.matchTrigger()`（handleChat 内，Phase 5 前仍在 server-v2）共享同一实例。
+- 循环依赖：flow-integration 仅依赖叶子模块（flows-manager/config-bootstrap/flow-artifacts/config），运行时零依赖 server-v2。
+- server-v2.ts 净减 ~55 行（9,865 → ~9,810，累计净减 ~1,004）；flow-integration.ts 79 行。
+- 验收（已通过）：`typecheck` 0 错；默认 `npm test` 71 passed/2 skipped；`SMALLCLAW_SMOKE=1 npm run smoke` 2 passed（真网关 + `/api/tools` 仍锁 53 工具名快照）；flow e2e 补测（`GET /api/flows` success=true/count=4、missing → 404，结构不变），清理无残留。备份点：`git tag backup/pre-phase4-20261011`。
 
 ### Phase 5 — 聊天主循环（最高风险，放最后）
 - 搬 `handleChat()` 到 `chat-handler.ts`，`server-v2.ts` 仅 `import { handleChat } from './chat-handler'`。

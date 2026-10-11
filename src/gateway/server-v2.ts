@@ -23,9 +23,9 @@ import {
   resolveAgentWorkspace,
 } from '../config/config';
 import { getMCPManager, type MCPTool } from './mcp-manager';
-import { extractFlowArtifacts } from './flow-artifacts';
 import { mergeOptimizationTier, tierFromContextWindow } from './server-v2-text';
 import { broadcastWS, createSSESender, setWss, closeWss } from './realtime';
+import { flowsManager, buildFlowDonePayload, listFlows, getFlowById, createFlow, updateFlow, deleteFlow } from './flow-integration';
 import { getVault } from '../security/vault';
 import { getOllamaClient } from '../agents/ollama-client';
 import { spawnAgent } from '../agents/spawner';
@@ -209,7 +209,6 @@ import {
   AGENT_BUILDER_TOOL_NAMES,
   getWorkflowContextBlock,
 } from './agent-builder-integration';
-import { FlowsManager } from './flows-manager';
 import { normalizeCwd, validateWorkspacePath, getConfigDirPath, derivePort, deriveHost, repairLegacyTaskChannelMetadata } from './config-bootstrap';
 import { noteToolFailure, resetToolFailure } from './request-guards';
 import { getModelTier, applyToolCompactness, buildTools, agentShellEnabled, MCP_TOOL_PREFIX, collectMcpToolEntries, filterToolsByIntent, detectToolCategories, applyToolPolicy, checkToolDenied, sessionAgentBindings } from './tool-registry';
@@ -222,7 +221,6 @@ normalizeCwd();
 const config = getConfig().getConfig();
 validateWorkspacePath(config);
 const CONFIG_DIR_PATH = getConfigDirPath();
-const flowsManager = new FlowsManager(CONFIG_DIR_PATH);
 const PORT = derivePort(config);
 const HOST = deriveHost(config);
 const MAX_TOOL_ROUNDS = 20;
@@ -7006,56 +7004,19 @@ app.post('/api/knowledge/remove', async (req, res) => {
 
 // ─── Flow templates (one-click process fix) ───────────────────────────────────
 // GET /api/flows — list all flow templates
-app.get('/api/flows', (_req, res) => {
-  const flows = flowsManager.list();
-  res.json({
-    success: true,
-    count: flows.length,
-    flows: flows.map((f) => ({
-      id: f.id,
-      name: f.name,
-      triggers: f.triggers,
-      description: f.description,
-      skill: f.skill || null,
-      output_note: f.output_note,
-    })),
-  });
-});
+app.get('/api/flows', listFlows);
 
 // GET /api/flows/:id — single flow template
-app.get('/api/flows/:id', (req, res) => {
-  const flow = flowsManager.get(String(req.params.id));
-  if (!flow) { res.status(404).json({ success: false, error: 'Flow not found' }); return; }
-  res.json({ success: true, flow });
-});
+app.get('/api/flows/:id', getFlowById);
 
 // POST /api/flows — create a flow template (persisted to .smallclaw/flows/)
-app.post('/api/flows', (req, res) => {
-  try {
-    const flow = flowsManager.create(req.body || {});
-    res.json({ success: true, flow });
-  } catch (err: any) {
-    res.status(400).json({ success: false, error: err.message });
-  }
-});
+app.post('/api/flows', createFlow);
 
 // PUT /api/flows/:id — update a flow template in place
-app.put('/api/flows/:id', (req, res) => {
-  try {
-    const flow = flowsManager.update(String(req.params.id), req.body || {});
-    if (!flow) { res.status(404).json({ success: false, error: 'Flow not found' }); return; }
-    res.json({ success: true, flow });
-  } catch (err: any) {
-    res.status(400).json({ success: false, error: err.message });
-  }
-});
+app.put('/api/flows/:id', updateFlow);
 
 // DELETE /api/flows/:id — remove a flow template
-app.delete('/api/flows/:id', (req, res) => {
-  const removed = flowsManager.remove(String(req.params.id));
-  if (!removed) { res.status(404).json({ success: false, error: 'Flow not found' }); return; }
-  res.json({ success: true });
-});
+app.delete('/api/flows/:id', deleteFlow);
 
 // POST /api/flows/:id/run — execute a flow explicitly (SSE stream, same
 // pipeline as /api/chat: agent loop + tools + skills + retries)
@@ -7106,14 +7067,7 @@ app.post('/api/flows/:id/run', async (req, res) => {
     if (!abortSignal.aborted) {
       addMessage(sessionId, { role: 'assistant', content: result.text, timestamp: Date.now() });
       sendSSE('final', { text: result.text });
-      sendSSE('done', {
-        reply: result.text,
-        mode: result.type,
-        sections: [{ type: result.type === 'execute' ? 'tool_results' : 'text', content: result.text }],
-        thinking: result.thinking,
-        results: result.toolResults,
-        artifacts: extractFlowArtifacts(result.toolResults, getConfig().getWorkspacePath()),
-      });
+      sendSSE('done', buildFlowDonePayload(result));
     }
   } catch (err: any) {
     requestCompleted = true;
@@ -7227,12 +7181,7 @@ app.post('/api/chat', async (req, res) => {
     if (!abortSignal.aborted) {
       addMessage(sessionId, { role: 'assistant', content: result.text, timestamp: Date.now() });
       sendSSE('final', { text: result.text });
-      sendSSE('done', {
-        reply: result.text, mode: result.type,
-        sections: [{ type: result.type === 'execute' ? 'tool_results' : 'text', content: result.text }],
-        thinking: result.thinking, results: result.toolResults,
-        artifacts: extractFlowArtifacts(result.toolResults, getConfig().getWorkspacePath()),
-      });
+      sendSSE('done', buildFlowDonePayload(result));
     }
   } catch (err: any) {
     if (!abortSignal.aborted) {

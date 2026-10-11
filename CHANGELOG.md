@@ -121,6 +121,18 @@ A running log of features, fixes, and improvements added to SmallClaw. Each entr
 - 验证：`typecheck` 0 错；默认 `npm test` 71 passed/2 skipped；`SMALLCLAW_SMOKE=1 npm run smoke` 2 passed（真网关启动 + `/api/status` 200 + `/api/tools` 仍锁定 53 工具名快照 + 按进程树/端口强杀，无进程残留、18789 释放）。
 - 备份点：`git tag backup/pre-phase3-20261011`。
 
+### 2026-10-11 — server-v2 Split Phase 4: Flow Integration → flow-integration.ts (P)
+
+- 按拆分路线图 Phase 4（流程/验证接线，中等风险）：新建 `src/gateway/flow-integration.ts`（79 行），下沉 flow 模板管理与产物打包编排。
+- `src/gateway/flow-integration.ts`（新）：
+  - `flowsManager` 单例（`export const`，live 单例模式同 Phase 2d）——server-v2 不再本地构造 `new FlowsManager(...)`，`handleChat` 内 `flowsManager.matchTrigger()`（3520）与 `/api/flows/:id/run`（7025）共享同一实例；
+  - `buildFlowDonePayload(result, workspacePath?)`——run/chat 两个端点原本**字节级重复**的 done 事件构造（reply/mode/sections/thinking/results/artifacts + `extractFlowArtifacts`）抽为一处，两处调用点替换；
+  - 5 个 flow CRUD handler（`listFlows`/`getFlowById`/`createFlow`/`updateFlow`/`deleteFlow`）——薄透传下沉；server-v2 保留 Express 路由注册（组合根职责），仅改为引用 handler。
+- server-v2.ts 净减 ~55 行（9,865 → ~9,810，累计净减 ~1,004）；flow-integration.ts 79 行（新建）。
+- 循环依赖：flow-integration 仅依赖叶子模块（flows-manager/config-bootstrap/flow-artifacts/config），运行时零依赖 server-v2，无环。
+- 验证：`typecheck` 0 错；默认 `npm test` 71 passed/2 skipped；`SMALLCLAW_SMOKE=1 npm run smoke` 2 passed（真网关 + `/api/tools` 仍锁 53 工具名快照）；**flow e2e 补测**：真网关 `GET /api/flows` → success=true、count=4（data-report/doc-analysis-report 等）、`GET /api/flows/nonexistent` → 404，结构不变；清理无残留、18789 释放。
+- 备份点：`git tag backup/pre-phase4-20261011`。
+
 ---
 
 ### 2026-10-04 — 2026-10-11 — Feature & Hardening Wave (D)
