@@ -161,6 +161,9 @@ export const DEFAULT_CONFIG: SmallClawConfig = {
   } as any,
   models: {
     primary: 'qwen3:4b',
+    // Optional explicit optimization tier; when set it overrides ID-based
+    // inference. Useful for cloud APIs whose model names carry no size marker.
+    // tier: 'small' | 'mid' | 'large'  (small ≤4B · mid 5-9B · large ≥10B/unknown)
     roles: {
       manager: 'qwen3:4b',
       executor: 'qwen3:4b',

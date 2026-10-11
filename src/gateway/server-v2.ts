@@ -1210,24 +1210,47 @@ function logToDaily(workspacePath: string, role: string, content: string) {
 // ─── Tool Definitions ──────────────────────────────────────────────────────────
 
 // ── Tool description two-stage (short/full) ────────────────────────────────
-// Tool descriptions are the single biggest prompt cost. For small models (≤4B)
-// each tool is swapped to a short description (manual shortDescription when the
-// definition provides one, else the first sentence ≤180 chars) and parameter
-// descriptions are trimmed to ≤60 chars. Parameters/schema stay intact so
-// native function-call wiring never breaks; ≥7B keeps the full descriptions.
-function compactToolDescription(desc: string): string {
+// Tool descriptions are the single biggest prompt cost. Tiers decide how much
+// to compress: small (≤4B) swaps to short descriptions (manual shortDescription
+// when the definition provides one, else first sentence ≤180 chars) and trims
+// parameter descriptions to ≤60 chars; mid (5-9B) keeps a richer short form
+// (≤300 chars, params ≤120); large (≥10B / unknown cloud) keeps everything.
+// Parameters/schema stay intact so native function-call wiring never breaks.
+type ModelTier = 'small' | 'mid' | 'large';
+
+function getModelTier(): ModelTier {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { getConfig } = require('../config/config.js');
+    const cfg = getConfig().getConfig()?.models || {};
+    // Explicit tier wins: set models.tier for cloud APIs whose model names
+    // carry no size marker (e.g. "gpt-4o", "claude-3-5-sonnet").
+    const explicit = String(cfg.tier || '').trim().toLowerCase();
+    if (explicit === 'small' || explicit === 'mid' || explicit === 'large') return explicit;
+    const modelId = String(cfg.primary || '').toLowerCase();
+    if (/[:\-_](0\.5|1|1\.5|2|3|4)b/.test(modelId)) return 'small';
+    if (/[:\-_](5|6|7|8|9)b/.test(modelId)) return 'mid';
+    return 'large';
+  } catch {
+    return 'large';
+  }
+}
+
+function compactToolDescription(desc: string, limit = 180): string {
   const trimmed = String(desc || '').trim();
   if (!trimmed) return '';
   const firstSentence = trimmed.split(/(?<=[。.!?])\s+|\n/)[0] || trimmed;
-  return firstSentence.slice(0, 180);
+  return firstSentence.slice(0, limit);
 }
 
-function applyToolCompactness(defs: any[]): any[] {
+function applyToolCompactness(defs: any[], tier: ModelTier): any[] {
+  const descLimit = tier === 'small' ? 180 : 300;
+  const paramLimit = tier === 'small' ? 60 : 120;
   return defs.map((d: any) => {
     if (!d?.function) return d;
     const f = d.function;
     const clone = { ...d, function: { ...f } };
-    clone.function.description = f.shortDescription || compactToolDescription(f.description || '');
+    clone.function.description = f.shortDescription || compactToolDescription(f.description || '', descLimit);
     delete clone.function.shortDescription;
     const props = clone.function.parameters?.properties;
     if (props && typeof props === 'object') {
@@ -1237,7 +1260,7 @@ function applyToolCompactness(defs: any[]): any[] {
           Object.entries(props).map(([k, v]: [string, any]) => {
             if (!v || typeof v !== 'object') return [k, v];
             const { description, ...rest } = v;
-            if (typeof description === 'string') rest.description = description.slice(0, 60);
+            if (typeof description === 'string') rest.description = description.slice(0, paramLimit);
             return [k, { ...rest }];
           })
         ),
@@ -1248,14 +1271,7 @@ function applyToolCompactness(defs: any[]): any[] {
 }
 
 function isCompactModel(): boolean {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { getConfig } = require('../config/config.js');
-    const modelId = String(getConfig().getConfig()?.models?.primary || '').toLowerCase();
-    return /[:\-_](0\.5|1|1\.5|2|3|4)b/.test(modelId);
-  } catch {
-    return false;
-  }
+  return getModelTier() !== 'large';
 }
 
 function buildTools() {
@@ -1727,10 +1743,11 @@ function buildTools() {
   toolDefs.push(...planToolDefinitions());
   toolDefs.push(...buildMcpToolDefinitions(new Set(toolDefs.map((t: any) => String(t?.function?.name || '')))));
   if (isCompactModel()) {
+    const tier = getModelTier();
     const fullChars = toolDefs.reduce((n: number, t: any) => n + String(t?.function?.description || '').length, 0);
-    const compacted = applyToolCompactness(toolDefs);
+    const compacted = applyToolCompactness(toolDefs, tier);
     const shortChars = compacted.reduce((n: number, t: any) => n + String(t?.function?.description || '').length, 0);
-    console.log(`[tools] compact descriptions for small model: ${fullChars} -> ${shortChars} chars (${Math.round((1 - shortChars / Math.max(fullChars, 1)) * 100)}% saved)`);
+    console.log(`[tools] compact descriptions (${tier}): ${fullChars} -> ${shortChars} chars (${Math.round((1 - shortChars / Math.max(fullChars, 1)) * 100)}% saved)`);
     return compacted;
   }
   return toolDefs;
@@ -3794,7 +3811,13 @@ const CAT_PLAN_PREFIX = 'plan_';
 const CAT_OFFICE_EXTRAS = new Set(['image_render', 'file_batch']);
 const CAT_SUBAGENT_EXTRAS = new Set(['request_secondary_assist', 'delegate_to_specialist']);
 
-function filterToolsByIntent(toolDefs: any[], messageText: string): any[] {
+function filterToolsByIntent(toolDefs: any[], messageText: string, tier: ModelTier = 'small'): any[] {
+  // Large models (≥10B / unknown cloud) have ample context — give them the
+  // full tool set; dynamic trimming would only risk mis-cuts.
+  if (tier === 'large') {
+    console.log(`[tools] intent filter skipped (large tier): ${toolDefs.length} tools`);
+    return toolDefs;
+  }
   const cats = detectToolCategories(messageText);
   const lower = String(messageText || '').toLowerCase();
   const wantOffice = cats.has('files')
@@ -3812,6 +3835,9 @@ function filterToolsByIntent(toolDefs: any[], messageText: string): any[] {
   const filtered = toolDefs.filter((t: any) => {
     const n = String(t?.function?.name || '');
     if (CAT_ALWAYS_TOOLS.has(n)) return true;
+    // Mid tier (5-9B) has enough context to always keep the file-write group
+    // open — its main job is document/material work, not context starvation.
+    if (tier === 'mid' && CAT_FILE_WRITE_TOOLS.has(n)) return true;
     if (CAT_FILE_WRITE_TOOLS.has(n)) return wantFileWrite;
     if (CAT_TASK_TOOLS.has(n)) return wantTask;
     if (CAT_SUBAGENT_TOOLS.has(n)) return wantSubagent;
@@ -3826,7 +3852,7 @@ function filterToolsByIntent(toolDefs: any[], messageText: string): any[] {
     if (n.startsWith(CAT_PLAN_PREFIX)) return wantSubagent;
     return true;
   });
-  console.log(`[tools] intent filter: ${toolDefs.length} -> ${filtered.length} tools | "${String(messageText || '').slice(0, 40)}"`);
+  console.log(`[tools] intent filter (${tier}): ${toolDefs.length} -> ${filtered.length} tools | "${String(messageText || '').slice(0, 40)}"`);
   return filtered;
 }
 
@@ -3983,7 +4009,7 @@ async function handleChat(
   const tools = applyToolPolicy(
     isBootStartupTurn
       ? buildTools().filter((t: any) => bootAllowedTools.has(String(t?.function?.name || '')))
-      : filterToolsByIntent(buildTools(), message),
+      : filterToolsByIntent(buildTools(), message, getModelTier()),
     sessionId,
   );
   console.log(`[v2] TOOLS: n=${tools.length} chars=${JSON.stringify(tools).length} estTokens=${Math.ceil(JSON.stringify(tools).length / 3.6)}`);
