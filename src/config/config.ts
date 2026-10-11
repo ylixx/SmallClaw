@@ -161,9 +161,14 @@ export const DEFAULT_CONFIG: SmallClawConfig = {
   } as any,
   models: {
     primary: 'qwen3:4b',
-    // Optional explicit optimization tier; when set it overrides ID-based
-    // inference. Useful for cloud APIs whose model names carry no size marker.
-    // tier: 'small' | 'mid' | 'large'  (small ≤4B · mid 5-9B · large ≥10B/unknown)
+    // Optional explicit optimization tier; when set it overrides inference.
+    // Tiers follow the ACTIVE CONTEXT WINDOW more than parameter size (local
+    // big models run SHORT windows due to KV-cache memory), merged with
+    // parameter size: small = aggressive compression (≤16K window OR ≤4B),
+    // mid = moderate (16-64K window), large = no compression (>64K window
+    // AND ≥10B / cloud). Set it only to force a specific tier, e.g. cloud
+    // APIs whose model names carry no size marker.
+    // tier: 'small' | 'mid' | 'large'
     roles: {
       manager: 'qwen3:4b',
       executor: 'qwen3:4b',

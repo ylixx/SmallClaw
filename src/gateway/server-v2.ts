@@ -1319,10 +1319,6 @@ function applyToolCompactness(defs: any[], tier: ModelTier): any[] {
   });
 }
 
-function isCompactModel(): boolean {
-  return getModelTier() !== 'large';
-}
-
 function buildTools(tier?: ModelTier) {
   const effectiveTier = tier ?? getModelTier();
   const toolDefs = [
@@ -10605,10 +10601,13 @@ app.get('/api/mcp/tools', (_req, res) => {
   }
 });
 
-app.get('/api/tools', (req, res) => {
+app.get('/api/tools', async (req, res) => {
   try {
     const sessionId = String(req.query.sessionId || 'default');
-    const tools = applyToolPolicy(buildTools(), sessionId);
+    // Resolve the same merged tier the chat path uses, so the UI tool list
+    // matches what is actually injected into the prompt for this model.
+    const tier = await resolveModelTier();
+    const tools = applyToolPolicy(buildTools(tier), sessionId);
     res.json({
       success: true,
       sessionId,
