@@ -142,6 +142,16 @@ A running log of features, fixes, and improvements added to SmallClaw. Each entr
 - 验证：`typecheck` 0 错；默认 `npm test` 71 passed/2 skipped；`SMALLCLAW_SMOKE=1 npm run smoke` 2 passed（真网关 + `/api/tools` 仍锁 53 工具名快照）；task e2e 补测：真网关 `GET /api/tasks` → 200（jobs 结构不变），无残留、18789 释放。
 - 备份点：`git tag backup/pre-phase5-20261011`。
 
+### 2026-10-11 — server-v2 Split Phase 5b: Tool Execution Cluster → chat-execution.ts (R)
+
+- 按拆分路线图 Phase 5 **第 2 子步**：把 **executeToolImpl（1078 行工具执行主分发器）及其全部本地依赖** 字节级下沉到 `src/gateway/chat-execution.ts`（新，~1,310 行）。
+- 搬移内容：`ArtifactEntry`/`ARTIFACT_LOG_LIMIT`/`artifactLog` + `recordArtifact`/`listArtifacts`（模块级 artifact 状态随搬）、路径守卫 `isPathInsideDirectory`/`realpathForGuard`、`resolveToolFilePath`、`rejectOfficeTextEdit`、`ToolResult`/`TaskControlResponse`/`ScheduleJobAction` 类型、`normalizeScheduleJobAction`/`isConfirmed`/`summarizeCronJob`/`normalizeDeliveryChannel`/`normalizeToolArgs`、`TEXT_SNAPSHOT_MAX_BYTES`/`ANALYSIS_INJECT_MAX_CHARS`/`resolveAnalysisTarget`/`readTextSnapshot`/`textTargetOf`、`executeTool`（plan-gate 薄包装）、`executeToolImpl`、`lastFilenameUsed` 本地状态——共 12 段 1359 行，用 `.backup/move-chat-execution.py` 字节级搬移，未手工重抄。
+- **循环依赖处理**：`executeToolImpl` 内 `handleTaskControlAction`（闭包 handleChat/telegramChannel）与 `cronScheduler`（server-v2 本地单例）改为 **deps 注入**——`createExecuteTool(deps)` 闭包返回 `executeTool`，server-v2 组合根 `const executeTool = createExecuteTool({ handleTaskControlAction, cronScheduler })`；executeToolImpl 内部 10 处 cronScheduler 引用改 `deps.cronScheduler`。
+- 修正第一阶段 typecheck 的 76 errors：header import 路径纠偏（ollama-client/office/image/file-batch/knowledge 在 `../tools` 系、plan-mode 非 plan-gate）+ 补齐 browser-tools(8)/desktop-tools(10)/request-guards/tool-registry/agent-builder-integration import + `lastFilenameUsed` 状态随搬 + 6 个待导出符号加 export + server-v2 import 回 `ToolResult`/`resolveToolFilePath`（/api/files 路由 6 处）。
+- server-v2.ts 净减 1,356 行（9,657 → 8,301，组合根仍保留 `export { app, server }`）。
+- 验证：`typecheck` 0 错；默认 `npm test` 71 passed/2 skipped（7 files，与基线一致）；`SMALLCLAW_SMOKE=1 npm run smoke` 2 passed（真网关 + `/api/tools` 仍锁 53 工具名快照）；e2e 补测：真网关 `/api/status` 200、`/api/flows` → 4、`/api/tasks` → 200，端口 18789 释放。
+- 备份点：沿用 `git tag backup/pre-phase5-20261011`（5b 变更前已打）。
+
 ---
 
 ### 2026-10-04 — 2026-10-11 — Feature & Hardening Wave (D)
