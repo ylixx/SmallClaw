@@ -206,6 +206,8 @@ import { OllamaProcessManager } from './ollama-process-manager';
 import { raceWithWatchdog, PreemptState } from './preempt-watchdog';
 import { detectGpu, logGpuStatus } from './gpu-detector';
 import { registerSystemRoutes } from './api-system';
+import { requireGatewayAuth } from './api-auth';
+import { registerMiscRoutes } from './api-misc';
 import { internalAgentTaskRouter } from './internal-agent-task';
 import {
   registerAgentBuilderTools,
@@ -3491,166 +3493,19 @@ app.post('/api/settings/think', (req, res) => {
 registerSystemRoutes(app);
 
 
-// ─── Agent Session Context API ────────────────────────────────────────────────
 
-app.get('/api/agent/session/:id', (req, res) => {
-  const sessionId = req.params.id;
-  const history = getHistory(sessionId, 50);
-  const userMessages = history.filter(h => h.role === 'user');
-  const aiMessages = history.filter(h => h.role === 'assistant');
-  const recent = history.slice(-8).map(h => ({
-    kind: h.role,
-    status: 'completed',
-    text: String(h.content || '').slice(0, 120),
-  }));
-  res.json({
-    mode_lock: null,
-    mode: ((getOrchestrationConfig()?.enabled ?? false) && isOrchestrationSkillEnabled()) ? 'agent' : 'chat',
-    tasks: [],
-    task_counts: { total: 0, done: 0 },
-    turn_counts: { completed: history.length, open: 0 },
-    execution_counts: { total: 0, done: 0, running: 0, failed: 0 },
-    recent_turns: recent,
-    recent_turn_executions: [],
-    current_turn_execution: null,
-    overview_objective: userMessages.length > 0 ? String(userMessages[0]?.content || '').slice(0, 80) : null,
-    active_objective: userMessages.length > 0 ? String(userMessages[userMessages.length - 1]?.content || '').slice(0, 80) : null,
-  });
-});
 
-// ─── Approvals API ───────────────────────────────────────────────────────────
-// SECURITY: All approval endpoints require gateway auth. Approvals are the
-// confirmation gate before the agent executes irreversible actions — an
-// unauthenticated bypass here is a critical vulnerability.
 
-// ─── Gateway Auth Middleware ──────────────────────────────────────────────────
-// CRIT-03 / CRIT-01 fix: protects approval, memory-confirm, and open-path
-// endpoints from unauthenticated access.
-//
-// Auth strategy (in priority order):
-//   1. Bearer token in Authorization header  →  Authorization: Bearer <token>
-//   2. X-Gateway-Token header                →  X-Gateway-Token: <token>
-//   3. Localhost bypass (127.0.0.1 / ::1)    →  always trusted when no token configured
-//
-// Token is read from config at request time so it takes effect immediately
-// after a config save without requiring a gateway restart.
 
-function requireGatewayAuth(
-  req: express.Request,
-  res: express.Response,
-  next: express.NextFunction,
-): void {
-  const cfg = getConfig().getConfig() as any;
-  const configuredToken = String(cfg?.gateway?.auth_token || '').trim();
 
-  // If no token is configured, fall back to localhost-only access.
-  if (!configuredToken) {
-    const remoteIp = String(
-      req.ip ||
-      req.socket?.remoteAddress ||
-      (req.connection as any)?.remoteAddress ||
-      ''
-    );
-    const isLocalhost =
-      remoteIp === '127.0.0.1' ||
-      remoteIp === '::1' ||
-      remoteIp === '::ffff:127.0.0.1';
-    if (isLocalhost) {
-      next();
-      return;
-    }
-    res.status(401).json({ error: 'Unauthorized: configure gateway.auth_token to enable remote access to this endpoint.' });
-    return;
-  }
 
-  // Extract token from Authorization header or X-Gateway-Token header.
-  const authHeader = String(req.headers['authorization'] || '');
-  const xGatewayToken = String(req.headers['x-gateway-token'] || '');
-  let providedToken = '';
-  if (authHeader.toLowerCase().startsWith('bearer ')) {
-    providedToken = authHeader.slice('bearer '.length).trim();
-  } else if (xGatewayToken) {
-    providedToken = xGatewayToken.trim();
-  }
 
-  if (!providedToken || providedToken !== configuredToken) {
-    res.status(401).json({ error: 'Unauthorized' });
-    return;
-  }
 
-  next();
-}
 
-const pendingApprovals: Map<string, { id: string; action: string; reason: string }> = new Map();
 
-app.get('/api/approvals', requireGatewayAuth, (_req, res) => {
-  res.json(Array.from(pendingApprovals.values()));
-});
 
-app.post('/api/approvals/:id', requireGatewayAuth, (req, res) => {
-  const { decision } = req.body;
-  const VALID_DECISIONS = ['approved', 'rejected'];
-  if (!decision || !VALID_DECISIONS.includes(decision)) {
-    res.status(400).json({ success: false, error: `decision must be one of: ${VALID_DECISIONS.join(', ')}` });
-    return;
-  }
-  const approval = pendingApprovals.get(req.params.id);
-  if (!approval) {
-    res.status(404).json({ success: false, error: 'Approval not found' });
-    return;
-  }
-  pendingApprovals.delete(req.params.id);
-  // Security audit: log every approval action (action name only, no payload)
-  import('../security/log-scrubber').then(({ log }) => {
-    log.security('[approvals]', decision.toUpperCase(), 'approval-id:', req.params.id, 'action:', approval.action);
-  }).catch(() => {});
-  res.json({ success: true, decision });
-});
 
-// ─── Memory API (stub) ───────────────────────────────────────────────────────────
-
-app.post('/api/memory/confirm', requireGatewayAuth, (req, res) => {
-  // Memory persistence stub — can be wired to ChromaDB/vector store
-  // SECURITY: req.body is user/agent-supplied content — never log it raw.
-  // scrubSecrets runs inside sanitizeToolLog before any write.
-  import('../security/log-scrubber').then(({ log, sanitizeToolLog }) => {
-    log.info('[Memory]', sanitizeToolLog('confirm', req.body));
-  }).catch(() => {});
-  res.json({ ok: true });
-});
-
-// Open a file path in the OS file explorer
-// SECURITY: This endpoint uses execFile() (not exec()) so the path is passed
-// as an argument, not interpolated into a shell string. The path is also
-// validated to be inside the workspace before execution.
-app.post('/api/open-path', requireGatewayAuth, async (req, res) => {
-  const fp = (req.body?.path || '') as string;
-  if (!fp) { res.status(400).json({ ok: false, error: 'Path required' }); return; }
-
-  // Resolve and validate — must be inside workspace or config dir
-  const resolvedFp = path.resolve(fp);
-  const workspacePath = getConfig().getWorkspacePath();
-  const configDirPath = getConfig().getConfigDir();
-  const isInWorkspace = resolvedFp.startsWith(path.resolve(workspacePath));
-  const isInConfigDir = resolvedFp.startsWith(path.resolve(configDirPath));
-  if (!isInWorkspace && !isInConfigDir) {
-    res.status(403).json({ ok: false, error: 'Path is outside allowed directories' });
-    return;
-  }
-
-  try {
-    const { execFile } = await import('child_process');
-    // execFile passes args as a list — no shell interpolation possible
-    if (process.platform === 'win32') {
-      execFile('explorer.exe', [resolvedFp]);
-    } else if (process.platform === 'darwin') {
-      execFile('open', [resolvedFp]);
-    } else {
-      execFile('xdg-open', [resolvedFp]);
-    }
-    res.json({ ok: true });
-  } catch (err: any) { res.status(500).json({ ok: false, error: err.message }); }
-});
+registerMiscRoutes(app, { isOrchestrationSkillEnabled });
 
 // ─── Provider / Model Settings API ───────────────────────────────────────────
 // Used by the Settings → Models tab to read/write provider config and
