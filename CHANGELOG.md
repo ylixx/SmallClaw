@@ -13,6 +13,11 @@ A running log of features, fixes, and improvements added to SmallClaw. Each entr
 - Moved 8 stray `.git-msg-*.txt` commit-message drafts, `diag.txt`, and 33 test artifacts from `.tmp-test/` into the gitignored `.backup/clutter_20261011/` (recoverable, not committed). Root directory is now free of scratch/draft files.
 - Note: 2 gateway log files (`gateway.log`, `gateway-err.log`) remain in `.tmp-test/` — locked by the running gateway (PID 16588). Remove after stopping the gateway.
 
+### 2026-10-11 — Workspace Privacy Guard (B)
+
+- `.gitignore`: replaced the per-extension `workspace/...` rules with a whole-directory ignore (`workspace/*` + `!workspace/.gitkeep`). Previously `workspace/*.md` was NOT ignored, so user documents (`sales_report.md`, `简历.md`, `会议纪要_*.md`, ...) could be committed by accident.
+- Added `workspace/.gitkeep` so the directory still exists in a fresh clone.
+
 ---
 
 ## 2026-02-27 — Sub-Agent Spawn Architecture

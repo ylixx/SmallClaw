@@ -1,0 +1,3 @@
+# This file keeps the workspace/ directory in the repository.
+# The directory itself is git-ignored at runtime (see .gitignore); only this
+# placeholder is tracked so a fresh clone still creates the folder.
