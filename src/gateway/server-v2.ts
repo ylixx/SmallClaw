@@ -212,6 +212,7 @@ import { FlowsManager } from './flows-manager';
 import { normalizeCwd, validateWorkspacePath, getConfigDirPath, derivePort, deriveHost, repairLegacyTaskChannelMetadata } from './config-bootstrap';
 import { noteToolFailure, resetToolFailure } from './request-guards';
 import { getModelTier, applyToolCompactness, buildTools, agentShellEnabled, MCP_TOOL_PREFIX, collectMcpToolEntries, filterToolsByIntent, detectToolCategories, applyToolPolicy, checkToolDenied, sessionAgentBindings } from './tool-registry';
+import { getModelBusy, setModelBusy } from './model-busy-guard';
 
 // ─── Config ────────────────────────────────────────────────────────────────────
 // cwd 规范化 / 配置加载 / workspace 路径校验 / 端口推导 已下沉到 config-bootstrap.ts
@@ -460,11 +461,8 @@ function setOrchestrationEnabled(enabled: boolean): void {
   }
 })();
 
-// ─── Model-Busy Guard ──────────────────────────────────────────────────────────
-// Prevents cron scheduler from firing while user chat is in-flight.
-// Critical for 4B models — can't handle parallel inference.
+// ─── Model-Busy Guard (state owned by model-busy-guard.ts; see getModelBusy/setModelBusy) ──
 
-let isModelBusy = false;
 let lastMainSessionId = 'default';
 
 // ─── WebSocket Broadcast ───────────────────────────────────────────────────────
@@ -574,7 +572,7 @@ const cronScheduler = new CronScheduler({
   handleChat: (message, sessionId, sendSSE, pinnedMessages, abortSignal, callerContext, modelOverride, executionMode) =>
     handleChat(message, sessionId, sendSSE, pinnedMessages, abortSignal, callerContext, modelOverride, executionMode),
   broadcast: broadcastWS,
-  getIsModelBusy: () => isModelBusy,
+  getIsModelBusy: getModelBusy,
   deliverTelegram: (text: string) => telegramChannel.sendToAllowed(text),
   getMainSessionId: () => lastMainSessionId || 'default',
   injectSystemEvent: (sessionId, text, job) => {
@@ -676,7 +674,7 @@ const telegramChannel = new TelegramChannel(
     handleChat: (message, sessionId, sendSSE, pinnedMessages, abortSignal, callerContext, modelOverride, executionMode) =>
       handleChat(message, sessionId, sendSSE, pinnedMessages, abortSignal, callerContext, modelOverride, executionMode),
     addMessage,
-    getIsModelBusy: () => isModelBusy,
+    getIsModelBusy: getModelBusy,
     broadcast: broadcastWS,
   }
 );
@@ -687,7 +685,7 @@ const heartbeatRunner = new HeartbeatRunner({
   handleChat: (message, sessionId, sendSSE, pinnedMessages, abortSignal, callerContext, modelOverride, executionMode) =>
     handleChat(message, sessionId, sendSSE, pinnedMessages, abortSignal, callerContext, modelOverride, executionMode),
   getMainSessionId: () => lastMainSessionId || 'default',
-  getIsModelBusy: () => isModelBusy,
+  getIsModelBusy: getModelBusy,
   broadcast: broadcastWS,
   deliverTelegram: (text: string) => telegramChannel.sendToAllowed(text),
 });
@@ -7086,7 +7084,7 @@ app.post('/api/flows/:id/run', async (req, res) => {
   const sessionId = String(req.body?.sessionId || 'default');
   const extra = String(req.body?.message || '').trim();
 
-  if (isModelBusy) {
+  if (getModelBusy()) {
     res.status(429).json({ success: false, error: 'Model is busy, try again in a moment' });
     return;
   }
@@ -7098,7 +7096,7 @@ app.post('/api/flows/:id/run', async (req, res) => {
 
   const sendSSE = createSSESender(res);
   const heartbeat = setInterval(() => sendSSE('heartbeat', { state: 'processing' }), 5000);
-  isModelBusy = true;
+  setModelBusy(true);
   const abortSignal = { aborted: false };
   let requestCompleted = false;
   res.on('close', () => {
@@ -7142,7 +7140,7 @@ app.post('/api/flows/:id/run', async (req, res) => {
     if (!abortSignal.aborted) sendSSE('error', { message: String(err?.message || err) });
   } finally {
     clearInterval(heartbeat);
-    isModelBusy = false;
+    setModelBusy(false);
   }
 });
 
@@ -7165,7 +7163,7 @@ app.post('/api/chat', async (req, res) => {
   const heartbeat = setInterval(() => sendSSE('heartbeat', { state: 'processing' }), 5000);
 
   // ── Model busy guard — block cron scheduler while user chat is running ──
-  isModelBusy = true;
+  setModelBusy(true);
 
   const abortSignal = { aborted: false };
   let requestCompleted = false;
@@ -7263,7 +7261,7 @@ app.post('/api/chat', async (req, res) => {
   } finally {
     requestCompleted = true;
     clearInterval(heartbeat);
-    isModelBusy = false; // release busy guard — cron scheduler may now run
+    setModelBusy(false); // release busy guard — cron scheduler may now run
     res.end();
   }
 });
@@ -7931,7 +7929,7 @@ function scheduleTaskFollowup(taskId: string, delayMs: number): void {
   console.log(`[TaskFollowup] Scheduling quick resume for task ${taskId} in ${Math.round(delayMs / 1000)}s`);
   const t = setTimeout(async () => {
     taskFollowupTimers.delete(taskId);
-    if (isModelBusy) {
+    if (getModelBusy()) {
       // Retry in 30s if model is busy
       scheduleTaskFollowup(taskId, 30_000);
       return;
@@ -7976,7 +7974,7 @@ function scheduleTaskHeartbeat(): void {
 }
 
 async function runTaskHeartbeat(): Promise<void> {
-  if (isModelBusy) {
+  if (getModelBusy()) {
     scheduleTaskHeartbeat();
     return;
   }
@@ -9707,7 +9705,7 @@ app.get('/api/tools', async (req, res) => {
     handleChat: (message, sessionId, sendSSE, pinnedMessages, abortSignal, callerContext, modelOverride, executionMode) =>
       handleChat(message, sessionId, sendSSE, pinnedMessages, abortSignal, callerContext, modelOverride, executionMode),
     addMessage,
-    getIsModelBusy: () => isModelBusy,
+    getIsModelBusy: getModelBusy,
     broadcast: broadcastWS,
     deliverTelegram: (text: string) => telegramChannel.sendToAllowed(text),
   });

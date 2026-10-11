@@ -98,6 +98,16 @@ A running log of features, fixes, and improvements added to SmallClaw. Each entr
 - 验证：`typecheck` 0 错；默认 `npm test` 71 passed/2 skipped；`SMALLCLAW_SMOKE=1 npm run smoke` 2 passed，`/api/tools` 仍锁定 53 个工具名（字节级不变），网关启动/清理无残留。
 - 备份点：`git tag backup/pre-phase2d-20261011`。
 
+### 2026-10-11 — server-v2 Split Phase 1.5: Model-Busy Guard → model-busy-guard.ts (N)
+
+- 高风险项谨慎小步：把 Model-Busy 并发锁单例 `let isModelBusy` 抽出到独立模块 `src/gateway/model-busy-guard.ts`（模块级单例 + 纯 accessor `getModelBusy()`/`setModelBusy(bool)`）。
+- **单一事实来源**：server-v2 不再持有本地 `let`，杜绝"两个布尔实例"导致 busy guard 失效（拆错 = 4B 模型并发推理真 bug）。
+- server-v2.ts 13 处引用全替换：4 个外部模块装配闭包 `getIsModelBusy: getModelBusy`（CronScheduler/TelegramChannel/HeartbeatRunner/buildWebhookRouter）+ 函数体 6 处读判定 + 4 处写（flow/chat 端点 try/finally）→ `setModelBusy(...)`；删除 `let isModelBusy` 声明（保留相邻 `lastMainSessionId`）。
+- 4 个消费方均为叶子模块、不反向依赖 server-v2（仅注释提及），下沉安全、无循环依赖。
+- server-v2.ts 净减 2 行（9,885 → 9,883，累计净减 931 行）；model-busy-guard.ts 28 行（新建）。
+- 验证：`typecheck` 0 错；默认 `npm test` 71 passed/2 skipped；`SMALLCLAW_SMOKE=1 npm run smoke` 2 passed（网关启动 + `/api/tools` 仍锁定 53 工具名 + 清理无残留），busy guard 行为字节级不变。
+- 备份点：`git tag backup/pre-phase15-20261011`。
+
 ---
 
 ### 2026-10-04 — 2026-10-11 — Feature & Hardening Wave (D)
