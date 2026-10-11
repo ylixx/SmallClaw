@@ -1202,12 +1202,62 @@ function logToDaily(workspacePath: string, role: string, content: string) {
 
 // ─── Tool Definitions ──────────────────────────────────────────────────────────
 
+// ── Tool description two-stage (short/full) ────────────────────────────────
+// Tool descriptions are the single biggest prompt cost. For small models (≤4B)
+// each tool is swapped to a short description (manual shortDescription when the
+// definition provides one, else the first sentence ≤180 chars) and parameter
+// descriptions are trimmed to ≤60 chars. Parameters/schema stay intact so
+// native function-call wiring never breaks; ≥7B keeps the full descriptions.
+function compactToolDescription(desc: string): string {
+  const trimmed = String(desc || '').trim();
+  if (!trimmed) return '';
+  const firstSentence = trimmed.split(/(?<=[。.!?])\s+|\n/)[0] || trimmed;
+  return firstSentence.slice(0, 180);
+}
+
+function applyToolCompactness(defs: any[]): any[] {
+  return defs.map((d: any) => {
+    if (!d?.function) return d;
+    const f = d.function;
+    const clone = { ...d, function: { ...f } };
+    clone.function.description = f.shortDescription || compactToolDescription(f.description || '');
+    delete clone.function.shortDescription;
+    const props = clone.function.parameters?.properties;
+    if (props && typeof props === 'object') {
+      clone.function.parameters = {
+        ...clone.function.parameters,
+        properties: Object.fromEntries(
+          Object.entries(props).map(([k, v]: [string, any]) => {
+            if (!v || typeof v !== 'object') return [k, v];
+            const { description, ...rest } = v;
+            if (typeof description === 'string') rest.description = description.slice(0, 60);
+            return [k, { ...rest }];
+          })
+        ),
+      };
+    }
+    return clone;
+  });
+}
+
+function isCompactModel(): boolean {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { getConfig } = require('../config/config.js');
+    const modelId = String(getConfig().getConfig()?.models?.primary || '').toLowerCase();
+    return /[:\-_](0\.5|1|1\.5|2|3|4)b/.test(modelId);
+  } catch {
+    return false;
+  }
+}
+
 function buildTools() {
   const toolDefs = [
     {
       type: 'function',
       function: {
         name: 'list_files',
+        shortDescription: 'List workspace files with sizes, largest first. Optional pattern/sort_by/max_entries.',
         description: 'List workspace files with sizes, sorted by size DESCENDING (largest first) by default. The first line is a summary "[N files, total SIZE, updated DATE]" — use it to answer "how many files / total size / newest file". Optional: pattern (filter by name, e.g. ".pdf" or "report"), sort_by ("size"|"name"|"mtime"; mtime shows modified time and sorts newest first), max_entries (limit output for large folders). Directories are marked with trailing "/".',
         parameters: {
           type: 'object',
@@ -1224,6 +1274,7 @@ function buildTools() {
       type: 'function',
       function: {
         name: 'grep_content',
+        shortDescription: 'Find where something is written: regex-search file contents, returns "file:line: text" matches.',
         description: 'Search file contents inside the workspace with a regex and return "file:line: text" matches. Use when you need to FIND where something is written (a config key, function name, string) — do NOT guess file by file. Patterns are JavaScript RegExp (e.g. "compactionThreshold", "memoryFlush.*threshold"). Large dirs (node_modules/.git/dist) are skipped; invalid regex returns an error. If the first pattern returns NO matches, do NOT conclude the file lacks the content: re-search with shorter or synonymous keywords (e.g. "产物" → "交付物"/"产出"/"验收"/"deliverable"), and if the document may be English also try English keywords (e.g. deliverable/output/acceptance/criteria). When searching a specific file use path="FULLPLAN.md" style exact filenames (note: project docs like FULLPLAN.md live in the workspace directory).',
         parameters: {
           type: 'object', required: ['pattern'],
@@ -1240,6 +1291,7 @@ function buildTools() {
       type: 'function',
       function: {
         name: 'read_file',
+        shortDescription: 'Read a file with line numbers. Use before editing.',
         description: 'Read a file with line numbers. Use before editing.',
         parameters: {
           type: 'object', required: ['filename'],
@@ -1251,6 +1303,7 @@ function buildTools() {
       type: 'function',
       function: {
         name: 'create_file',
+        shortDescription: 'Create a NEW file (fails if exists). Needs filename + content; large files: skeleton first, then insert_after.',
         description: 'Create a NEW file (fails if filename already exists). Requires BOTH "filename" and "content". For LARGE files (HTML reports, long docs > 80 lines or > 3000 chars): do NOT write the entire file in one call — it will get truncated. Instead: (1) create_file with just the skeleton (doctype + head + empty body + closing tags), then (2) use insert_after to append each section one at a time. Always end HTML files with </html>. If the file already exists and you want to create a DIFFERENT new file, choose a new filename — do not reuse the source filename.',
         parameters: {
           type: 'object', required: ['filename', 'content'],
@@ -1353,6 +1406,7 @@ function buildTools() {
       type: 'function',
       function: {
         name: 'web_search',
+        shortDescription: 'Search the web for current info; returns titles + snippets + URLs. Follow up with web_fetch.',
         description: 'Search the web for current information. Use web_fetch on result URLs for full content.',
         parameters: {
           type: 'object', required: ['query'],
@@ -1375,6 +1429,7 @@ function buildTools() {
       type: 'function',
       function: {
         name: 'run_command',
+        shortDescription: 'Launch GUI apps or open files for the user (notepad, calc, word, "start file.docx"). Not a shell.',
         description: 'Launch GUI apps or open files for the USER (visible on their screen). NOT a shell: no pipelines, globs, redirects, switches; returns no output; do NOT pass file-size/stat commands like du, ls, dir, stat. Do NOT open Chrome/Edge here (no debug port; use browser_* tools for web). Use for: GUI apps (notepad, calc, word, excel, powerpoint), opening a file with the system default program ("start report.docx"; if no default app the OS picker appears - do not retry), opening a path in VS Code / Explorer.',
         parameters: {
           type: 'object', required: ['command'],
@@ -1664,6 +1719,13 @@ function buildTools() {
   if (agentShellEnabled()) toolDefs.push(shellExecToolDefinition());
   toolDefs.push(...planToolDefinitions());
   toolDefs.push(...buildMcpToolDefinitions(new Set(toolDefs.map((t: any) => String(t?.function?.name || '')))));
+  if (isCompactModel()) {
+    const fullChars = toolDefs.reduce((n: number, t: any) => n + String(t?.function?.description || '').length, 0);
+    const compacted = applyToolCompactness(toolDefs);
+    const shortChars = compacted.reduce((n: number, t: any) => n + String(t?.function?.description || '').length, 0);
+    console.log(`[tools] compact descriptions for small model: ${fullChars} -> ${shortChars} chars (${Math.round((1 - shortChars / Math.max(fullChars, 1)) * 100)}% saved)`);
+    return compacted;
+  }
   return toolDefs;
 }
 
