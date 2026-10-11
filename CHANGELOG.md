@@ -161,6 +161,21 @@ A running log of features, fixes, and improvements added to SmallClaw. Each entr
 - server-v2.ts 净减 532 行（8,301 → 7,769，组合根 `export { app, server }` 保留）；累计净减 ~3,045。
 - 备份点：`git tag backup/pre-phase5c1-20261011`。
 
+### 2026-10-11 — server-v2 Split Phase 5c-2: handleChat 本体下沉 → chat-handler.ts (T)
+
+- 按拆分路线图 Phase 5 **第 4 子步（最高风险）**：把 **handleChat 本体 3,168 行（含 inRound* 轮内预算状态 12 行）** 字节级下沉到 `chat-handler.ts`，改造为 **`createChatHandler(deps)` 闭包工厂**——handleChat 从"函数声明"转为"工厂返回的函数表达式"，`return async function handleChat(...)` 直接复用原函数体（零手工重抄）。
+- **精确区间用 ts AST 定位**（`tsbounds.js`）：handleChat = 1-indexed 1192-4359（词法配平曾因正则字面量中的花括号提前归零、错报 3334——踩坑后改用 TypeScript 编译器 API 拿函数节点 start/end，最可靠）。
+- **依赖面分级处理**（`phase5c2-symmap.py` 反查 import→模块）：
+  - 随搬：`inRound*` 7 状态 + `INROUND_*` 3 常量（与 handleChat 同文件，避开 TS2632 跨模块赋值限制）。
+  - 注入（ChatHandlerDeps，10 项）：`executeTool`（createExecuteTool 闭包）、`telegramChannel`（live 单例）、`makeBroadcastForTask`（任务广播拦截）、`isOrchestrationSkillEnabled`、`resolveModelTier`、`KNOWLEDGE_DIR`、`skillsManager`、`buildPersonalityContext`、`renderFlowInstruction`、`activeTasks`。
+  - 直接 import（handleChat 引用面 38→~55 符号）：multi-agent（OrchestrationTriggerState/callSecondary*/shouldRunPreflight/format*Hint/clampPreemptConfig）、file-op-v2（FileOp*/classifyFileOpType/buildFailureSignature/checkpoint 簇）、server-v2-text（sanitizeFinalReply/isBrowserAutomationRequest/separateThinkingFromContent 等 16 个）、browser/desktop-tools、flow-integration（flowsManager）、realtime（broadcastWS）、tools/knowledge（executeKnowledgeTool）、tools/office（parseDocPreview）、task-store（createTask/loadTask/saveTask/appendJournal）、task-runner（runTask/TaskState）、ollama-process-manager、agent-builder-integration（getWorkflowContextBlock）、skills-manager。
+- **循环依赖处理**：chat-handler 不 import server-v2——10 个组合根单例全部 deps 注入；4 个调用方（cron/telegram/heartbeat/boot）均运行时延迟解析，装配顺序无关。
+- **漏替换修复**：词法替换后 6 处未命中（对象简写 `{ isOrchestrationSkillEnabled }` 两处、`executeTool` 1 处、`telegramChannel` 2 处、`skillsManager`/`buildPersonalityContext`/`renderFlowInstruction`/`activeTasks` 各 1 处）→ 逐处锚定补齐；对象简写改为 `{ isOrchestrationSkillEnabled: deps.isOrchestrationSkillEnabled }`。
+- **守卫测试随重构演进**：`server-v2-integrity.test.ts` 原断言"server-v2 仍定义 handleChat"已过时 → 改为断言组合根装配 `const handleChat = createChatHandler({`。
+- 验证：`typecheck` 0 错；`npm test` 71 passed/2 skipped；`SMALLCLAW_SMOKE=1 npm run smoke` 2 passed（真网关 + 53 工具名锁）。
+- server-v2.ts 净减 3,163 行（7,769 → **4,606**，组合根 `export { app, server }` 保留）；chat-handler.ts ≈3,575；累计净减 ~6,208（原 10,814）。
+- 备份点：`git tag backup/pre-phase5c2-20261011`。
+
 ---
 
 ### 2026-10-04 — 2026-10-11 — Feature & Hardening Wave (D)

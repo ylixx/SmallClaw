@@ -34,10 +34,10 @@ import {
 const SRC = fs.readFileSync(path.resolve('src/gateway/server-v2.ts'), 'utf-8');
 
 describe('server-v2.ts public surface (static guard, no execution)', () => {
-  it('still defines the core chat loop handleChat', () => {
-    // The single most load-bearing function. If an extraction accidentally
-    // deletes/renames it, the whole gateway breaks.
-    expect(/async function handleChat\s*\(/.test(SRC)).toBe(true);
+  it('wires the chat loop via createChatHandler (composition root)', () => {
+    // Phase 5c-2: handleChat moved out of server-v2.ts into chat-handler.ts.
+    // The gateway now composes it here, closing over the six singletons.
+    expect(/const handleChat = createChatHandler\(\{/.test(SRC)).toBe(true);
   });
 
   it('still exports the app/server module surface', () => {
