@@ -212,6 +212,7 @@ import { registerMcpRoutes } from './api-mcp';
 import { registerSettingsRoutes } from './api-settings';
 import { registerSkillsRoutes } from './api-skills';
 import { registerTasksRoutes } from './api-tasks';
+import { registerFlowRoutes } from './api-flows';
 import { buildWebhookRouter, resolveHookConfig } from './webhook-handler';
 import { internalAgentTaskRouter } from './internal-agent-task';
 import {
@@ -1548,83 +1549,6 @@ app.post('/api/knowledge/remove', async (req, res) => {
   }
 });
 
-// ─── Flow templates (one-click process fix) ───────────────────────────────────
-// GET /api/flows — list all flow templates
-app.get('/api/flows', listFlows);
-
-// GET /api/flows/:id — single flow template
-app.get('/api/flows/:id', getFlowById);
-
-// POST /api/flows — create a flow template (persisted to .smallclaw/flows/)
-app.post('/api/flows', createFlow);
-
-// PUT /api/flows/:id — update a flow template in place
-app.put('/api/flows/:id', updateFlow);
-
-// DELETE /api/flows/:id — remove a flow template
-app.delete('/api/flows/:id', deleteFlow);
-
-// POST /api/flows/:id/run — execute a flow explicitly (SSE stream, same
-// pipeline as /api/chat: agent loop + tools + skills + retries)
-app.post('/api/flows/:id/run', async (req, res) => {
-  const flow = flowsManager.get(String(req.params.id || ''));
-  if (!flow) { res.status(404).json({ success: false, error: 'Flow not found' }); return; }
-  const sessionId = String(req.body?.sessionId || 'default');
-  const extra = String(req.body?.message || '').trim();
-
-  if (getModelBusy()) {
-    res.status(429).json({ success: false, error: 'Model is busy, try again in a moment' });
-    return;
-  }
-
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-  res.setHeader('X-Accel-Buffering', 'no');
-
-  const sendSSE = createSSESender(res);
-  const heartbeat = setInterval(() => sendSSE('heartbeat', { state: 'processing' }), 5000);
-  setModelBusy(true);
-  const abortSignal = { aborted: false };
-  let requestCompleted = false;
-  res.on('close', () => {
-    if (!requestCompleted && !abortSignal.aborted) {
-      abortSignal.aborted = true;
-      console.log(`[v2] Flow run aborted — session ${sessionId}, flow ${flow.id}`);
-    }
-  });
-
-  try {
-    const message =
-      `请执行流程「${flow.name}」并交付产物。${extra ? `\n用户补充要求：${extra}` : ''}\n\n【执行规范】\n${flow.instruction}`;
-    console.log(`[v2] FLOW RUN: ${flow.id} (${flow.name}) session=${sessionId}`);
-    const result = await handleChat(
-      message,
-      sessionId,
-      sendSSE,
-      undefined,
-      abortSignal,
-      undefined,
-      undefined,
-      'interactive',
-      true, // suppressFlowTrigger — instruction already injected
-    );
-    requestCompleted = true;
-    if (!abortSignal.aborted) {
-      addMessage(sessionId, { role: 'assistant', content: result.text, timestamp: Date.now() });
-      sendSSE('final', { text: result.text });
-      sendSSE('done', buildFlowDonePayload(result));
-    }
-  } catch (err: any) {
-    requestCompleted = true;
-    console.error('[v2] Flow run error:', err?.message || err);
-    if (!abortSignal.aborted) sendSSE('error', { message: String(err?.message || err) });
-  } finally {
-    clearInterval(heartbeat);
-    setModelBusy(false);
-  }
-});
-
 app.post('/api/chat', async (req, res) => {
   const { message, sessionId = 'default', pinnedMessages, agentId } = req.body;
   if (!message || typeof message !== 'string') { res.status(400).json({ error: 'Message required' }); return; }
@@ -1914,6 +1838,8 @@ const handleChat = createChatHandler({
   renderFlowInstruction,
   activeTasks,
 });
+
+registerFlowRoutes(app, { handleChat, addMessage });
 
 registerTasksRoutes(app, { cronScheduler, heartbeatRunner, loadTaskHeartbeatConfig, handleChat, makeBroadcastForTask, telegramChannel });
 
