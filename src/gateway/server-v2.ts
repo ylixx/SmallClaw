@@ -211,6 +211,7 @@ import {
 import { FlowsManager } from './flows-manager';
 import { normalizeCwd, validateWorkspacePath, getConfigDirPath, derivePort, deriveHost, repairLegacyTaskChannelMetadata } from './config-bootstrap';
 import { noteToolFailure, resetToolFailure } from './request-guards';
+import { getModelTier, applyToolCompactness } from './tool-registry';
 
 // ─── Config ────────────────────────────────────────────────────────────────────
 // cwd 规范化 / 配置加载 / workspace 路径校验 / 端口推导 已下沉到 config-bootstrap.ts
@@ -1143,24 +1144,10 @@ function logToDaily(workspacePath: string, role: string, content: string) {
 // therefore merges two dimensions and takes the more aggressive one:
 //   - byCtx    : live n_ctx / configured window  → hard constraint (fits?)
 //   - byParams : parameter size                   → soft constraint (follows?)
-type ModelTier = 'small' | 'mid' | 'large';
+export type ModelTier = 'small' | 'mid' | 'large';
 
 // Synchronous parameter-size inference (fallback only; see resolveModelTier).
-function getModelTier(): ModelTier {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { getConfig } = require('../config/config.js');
-    const cfg = getConfig().getConfig()?.models || {};
-    const explicit = String(cfg.tier || '').trim().toLowerCase();
-    if (explicit === 'small' || explicit === 'mid' || explicit === 'large') return explicit;
-    const modelId = String(cfg.primary || '').toLowerCase();
-    if (/[:\-_](0\.5|1|1\.5|2|3|4)b/.test(modelId)) return 'small';
-    if (/[:\-_](5|6|7|8|9)b/.test(modelId)) return 'mid';
-    return 'large';
-  } catch {
-    return 'large';
-  }
-}
+// (moved) getModelTier() → ./tool-registry.ts
 
 // Effective context window from the same sources as resolveHistoryBudgetTokens:
 // live llama-server probe (follows the RUNNING server, e.g. -c 128000) first,
@@ -1204,39 +1191,7 @@ async function resolveModelTier(): Promise<ModelTier> {
   return mergeOptimizationTier(tierFromContextWindow(nctx), byParams);
 }
 
-function compactToolDescription(desc: string, limit = 180): string {
-  const trimmed = String(desc || '').trim();
-  if (!trimmed) return '';
-  const firstSentence = trimmed.split(/(?<=[。.!?])\s+|\n/)[0] || trimmed;
-  return firstSentence.slice(0, limit);
-}
-
-function applyToolCompactness(defs: any[], tier: ModelTier): any[] {
-  const descLimit = tier === 'small' ? 180 : 300;
-  const paramLimit = tier === 'small' ? 60 : 120;
-  return defs.map((d: any) => {
-    if (!d?.function) return d;
-    const f = d.function;
-    const clone = { ...d, function: { ...f } };
-    clone.function.description = f.shortDescription || compactToolDescription(f.description || '', descLimit);
-    delete clone.function.shortDescription;
-    const props = clone.function.parameters?.properties;
-    if (props && typeof props === 'object') {
-      clone.function.parameters = {
-        ...clone.function.parameters,
-        properties: Object.fromEntries(
-          Object.entries(props).map(([k, v]: [string, any]) => {
-            if (!v || typeof v !== 'object') return [k, v];
-            const { description, ...rest } = v;
-            if (typeof description === 'string') rest.description = description.slice(0, paramLimit);
-            return [k, { ...rest }];
-          })
-        ),
-      };
-    }
-    return clone;
-  });
-}
+// (moved) compactToolDescription() + applyToolCompactness() → ./tool-registry.ts
 
 function buildTools(tier?: ModelTier) {
   const effectiveTier = tier ?? getModelTier();

@@ -60,6 +60,14 @@ A running log of features, fixes, and improvements added to SmallClaw. Each entr
 - 代码边界探查（只读，为下一步抽取定位）：工具注册表簇 = `applyToolCompactness`(1214) + `buildTools`(1241, ~470 行, 56 个纯数据定义, 0 个 `fn:` 实现指针) + `filterToolsByIntent`(3778) + `applyToolPolicy`(1942)。其中 `buildTools` 区间(1241–1945)耦合极低：仅 2 处 `config.`、0 处 `sendSSE`、3 处 `getConfig()`，是**风险最低的首抽目标**。
 - 验证：`SMALLCLAW_SMOKE=1` → 2 tests passed + 1 snapshot written；teardown 后 18789 释放、无 node/tsx 残留；默认 `npm test` 71 passed / 2 skipped（冒烟跳过，无服务）。
 
+### 2026-10-11 — server-v2 Split Phase 2a: Tool Compaction Helpers → tool-registry.ts (J)
+
+- 新建 `src/gateway/tool-registry.ts`，承接 3 个**零耦合纯函数**：`getModelTier()`（模型档位推断，经 `require('../config/config.js')` 读取、不依赖 server-v2 顶层单例）、`compactToolDescription()`、`applyToolCompactness()`（按档位压缩 tool 描述/参数）。
+- `server-v2.ts` 改为 `import { getModelTier, applyToolCompactness } from './tool-registry'`；`ModelTier` 类型改为 `export` 以便类型侧依赖（`import type` 编译期擦除，杜绝循环依赖）。
+- **buildTools 实际耦合比原评估更重**：其尾段(1705–1709)调用 5 个工具构建器（`getKnowledgeToolDefinitions` 来自 `../tools/knowledge`、`planToolDefinitions` 来自 `./plan-mode`，以及 server-v2 内部 3 个 `agentShellEnabled`/`shellExecToolDefinition`/`buildMcpToolDefinitions`）。原"56 个纯数据定义、0 个 fn 指针"只覆盖中段数据，buildTools 不可整体原样搬移，故**本轮不碰**，留作下一步单独提案。
+- 验证：`typecheck` 0 错；默认 `npm test` 71 passed / 2 skipped；`SMALLCLAW_SMOKE=1 npm run smoke` 2 passed，`/api/tools` 仍锁定 53 个工具名（字节级不变），网关启动/清理无残留。
+- 备份点：`git tag backup/pre-phase2a-20261011`。
+
 ---
 
 ### 2026-10-04 — 2026-10-11 — Feature & Hardening Wave (D)

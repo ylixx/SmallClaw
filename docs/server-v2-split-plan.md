@@ -1,6 +1,6 @@
 # server-v2.ts 拆分方案（规划文档）
 
-> 状态：Phase 0（安全网）✅、Phase 1（config-bootstrap + 失败熔断）✅ 已完成并验证；Phase 2 准备（/api/tools 快照锁）✅ 已就位；Phase 2 实际抽取、Phase 1.5（Model-Busy 守卫）、Phase 3–6 待执行。`server-v2.ts` 目前仅净减行数，业务行为字节级不变。
+> 状态：Phase 0（安全网）✅、Phase 1（config-bootstrap + 失败熔断）✅、Phase 2a（工具压缩纯函数 → tool-registry）✅ 已完成并验证；Phase 2 准备（/api/tools 快照锁）✅ 已就位；Phase 2b（buildTools 整簇）、Phase 1.5（Model-Busy 守卫）、Phase 3–6 待执行。`server-v2.ts` 目前仅净减行数，业务行为字节级不变。
 > 目标：把 `src/gateway/server-v2.ts`（**10,814 行 / 100+ 导出符号**）从巨型单体拆成按域组织的模块，保留 `server-v2.ts` 作为"组合根（composition root）"——只做模块装配、Express 路由、SSE 接线，业务细节下沉到子模块。
 
 ---
@@ -62,8 +62,18 @@
 **前置（已完成 ✅）**：`/api/tools` 快照锁已写入 `tests/smoke-gateway.test.ts`（受 `SMALLCLAW_SMOKE=1` 门控），当前锁定 **53 个工具名**字节级基线；抽取时任何误删/改名都会让快照比对失败。
 
 **渐进式子步骤（一点一点来）**：
-- **Phase 2a（风险最低，先抽）**：只搬 `applyToolCompactness`(1214) + `buildTools`(1241, ~470 行, 56 个纯数据工具定义, 0 个 `fn:` 实现指针）。探查显示其区间(1241–1945)耦合极低：仅 2 处 `config.`、0 处 `sendSSE`、3 处 `getConfig()`，仅依赖 `getConfig`/`getModelTier`/`applyToolCompactness`/`compactToolDescription`。搬完跑快照锁 + typecheck 验证。
-- **Phase 2b（稍后）**：再搬 `filterToolsByIntent`(3778) + `applyToolPolicy`(1942) 到同一 `tool-registry.ts`。
+- **Phase 2a（✅ 已完成并验证）**：新建 `src/gateway/tool-registry.ts`，搬入 3 个**零耦合纯函数**：
+  - `getModelTier()`(原 1149) — 模型档位推断，经 `require('../config/config.js')` 读取配置，**不依赖 server-v2 顶层单例**；
+  - `compactToolDescription()`(原 1207) — 纯首句截断；
+  - `applyToolCompactness()`(原 1214) — 按档位压缩 tool 描述/参数。
+  - `server-v2.ts` 改为 `import { getModelTier, applyToolCompactness } from './tool-registry'`；`ModelTier` 类型改为 `export`（类型侧依赖，`import type` 编译期擦除，杜绝循环依赖）。
+  - ⚠️ **buildTools 实际耦合比原评估更重**：其尾段(1705–1709)调用了 5 个工具构建器——`getKnowledgeToolDefinitions`(来自 `../tools/knowledge`)、`planToolDefinitions`(来自 `./plan-mode`)、以及 server-v2 内部 3 个 `agentShellEnabled`/`shellExecToolDefinition`/`buildMcpToolDefinitions`。原"56 个纯数据定义、0 个 fn 指针"只覆盖了中段(1241–~1700)的数据，`buildTools` 并非可整体原样搬移。因此 **buildTools 本轮未搬**，留作下一步单独提案（见 Phase 2b）。
+  - 验收（已通过）：`typecheck` 0 错；默认 `npm test` 71 passed / 2 skipped；`SMALLCLAW_SMOKE=1 npm run smoke` 2 passed，`/api/tools` 仍锁定 53 个工具名（字节级不变），网关启动/清理无残留。
+- **Phase 2b（调整方案，待用户确认）**：搬运 `buildTools` 整簇。两种去循环依赖路径，需用户拍板：
+  - **路径 A（整簇搬，推荐）**：把 `buildTools` + 其内部依赖的 3 个 server-v2 工具构建器（`agentShellEnabled`/`shellExecToolDefinition`/`buildMcpToolDefinitions`）一起搬入 `tool-registry.ts`，`getKnowledgeToolDefinitions`/`planToolDefinitions` 直接 `import` 自现有叶子模块（已验证不与 server-v2 形成循环）。一次清掉 ~520 行，最彻底。
+  - **路径 B（依赖注入）**：`buildTools(tier?, deps?)` 改为接收 5 个工具构建器为参数，由 `server-v2` 在调用点注入。改动签名 + 3 处调用点，行为不变但侵入性更强、易引入隐性 bug。
+  - 无论哪条路径，均沿用：`getModelTier`/`applyToolCompactness` 已就位 → 搬完跑快照锁 + typecheck + 冒烟。
+- **Phase 2c（稍后）**：再搬 `filterToolsByIntent`(3778) + `applyToolPolicy`(1942) 到同一 `tool-registry.ts`。
 
 - 验收：**搬移前后 `/api/tools` 输出逐字节一致**（快照比对通过）；`tsc` 0 错。
 
