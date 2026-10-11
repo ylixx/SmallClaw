@@ -51,9 +51,11 @@
 - ⚠️ 关键教训：不能 `import server-v2.ts` 做金丝雀——它在模块顶层 `server.listen()` 且加载即读配置，import 会真起服务绑端口。端口探测也不能靠 `GATEWAY_PORT` env（被 `config.gateway.port` 覆盖），须解析启动日志里的实际绑定端口。
 - 验收（已通过）：`typecheck` 0 错；默认 `npm test` 71 passed / 1 skipped（冒烟跳过、无服务）；`SMALLCLAW_SMOKE=1 npm test` 真起网关→200→无残留。
 
-### Phase 1 — 配置引导 + 守卫（低风险）
-- 搬 `config-bootstrap.ts` 与 `request-guards.ts`。
-- 验收：`tsc` 0 错；`npm test` 通过；手动 `npm start` 启动无回归日志。
+### Phase 1 — 配置引导 + 守卫（低风险）✅ 已完成并验证
+- ✅ 新增 `src/gateway/config-bootstrap.ts`：cwd 规范化、config 加载、workspace.path 校验、配置目录推导、端口/主机推导、`repairLegacyTaskChannelMetadata` 全部下沉；仅依赖叶子模块，无循环依赖。
+- ✅ 新增 `src/gateway/request-guards.ts`：**仅搬失败熔断**（`noteToolFailure` + `toolFailureTracker` + `TOOL_FAILURE_LIMIT`）+ 新增 `resetToolFailure(sessionId)` 封装（承接 `executeTool` 成功分支原先直接 `toolFailureTracker.delete` 的逻辑，行为一致）。
+- ⚠️ **Model-Busy 守卫（`let isModelBusy` 模块级可变单例，跨 11 处读写 + 4 个闭包访问器）耦合度高，属高风险抽取项，已刻意从 Phase 1 拆出，留作后续独立谨慎小步（建议 Phase 1.5），本次未碰。**
+- 验收（已通过）：`typecheck` 0 错；默认 `npm test` 71 passed / 1 skipped（冒烟跳过）；`SMALLCLAW_SMOKE=1 npm test` 真起网关→200→无残留。
 
 ### Phase 2 — 工具定义装配（最大行数收益）
 - 搬 `tool-registry.ts`，把 `/api/tools` 的返回 JSON 用快照测试锁住。

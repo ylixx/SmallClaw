@@ -44,6 +44,15 @@ A running log of features, fixes, and improvements added to SmallClaw. Each entr
 - **Why not import `server-v2.ts` in vitest**: it calls `server.listen()` at module top-level and reads config on load, so importing it would actually start the server and bind a port.
 - Verified: `typecheck` → 0 errors; default `npm test` → 71 passed / 1 skipped (smoke skipped, no server started); `SMALLCLAW_SMOKE=1 npm test` → real gateway boot, 200, no leftover process.
 
+### 2026-10-11 — server-v2 Split Phase 1: Config Bootstrap + Failure Circuit Breaker (H)
+
+- 执行拆分方案 Phase 1：新增 `config-bootstrap.ts` 与 `request-guards.ts`（失败熔断部分）；`server-v2.ts` 仅替换 import 与调用点，业务行为字节级不变。
+- `src/gateway/config-bootstrap.ts`（新）：cwd 规范化、config 加载、workspace.path 合法性校验、配置目录推导、端口/主机推导、`repairLegacyTaskChannelMetadata` 全部下沉。仅依赖叶子模块（config/task-store），无反向引用 → 无循环依赖。
+- `src/gateway/request-guards.ts`（新）：重复失败熔断（`noteToolFailure` + `toolFailureTracker` + `TOOL_FAILURE_LIMIT`）下沉；新增 `resetToolFailure(sessionId)` 封装，承接 `executeTool` 成功分支原先直接 `toolFailureTracker.delete` 的逻辑，行为一致。
+- **已排除的隐性风险**：`noteToolFailure` 之外，`executeTool` 成功分支也直接访问 `toolFailureTracker`，已用 `resetToolFailure` 封装，无悬挂引用。Model-Busy 守卫（`let isModelBusy` 模块级可变单例，跨 11 处读写 + 4 个闭包访问器）耦合度高，属高风险抽取项，已刻意留待后续独立小步，本次不碰。
+- 验证：typecheck 0 错；默认 `npm test` 71 passed / 1 skipped（冒烟跳过）；`SMALLCLAW_SMOKE=1` 真实网关启动 → /api/status 200 → 无残留。
+- 对应文档：`docs/server-v2-split-plan.md` Phase 1 标记完成，并注明 Model-Busy 守卫延后。
+
 ---
 
 ### 2026-10-04 — 2026-10-11 — Feature & Hardening Wave (D)

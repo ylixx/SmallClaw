@@ -209,68 +209,21 @@ import {
   getWorkflowContextBlock,
 } from './agent-builder-integration';
 import { FlowsManager } from './flows-manager';
+import { normalizeCwd, validateWorkspacePath, getConfigDirPath, derivePort, deriveHost, repairLegacyTaskChannelMetadata } from './config-bootstrap';
+import { noteToolFailure, resetToolFailure } from './request-guards';
 
 // ─── Config ────────────────────────────────────────────────────────────────────
-
-// Deployment hardening: the gateway may be launched from any directory
-// (service manager, launcher script, another machine). Derive the project root
-// from __dirname and normalize process.cwd() to it, so the ~20 call sites that
-// assume cwd == project root (soul-loader, session, task-store, skills, vault,
-// scheduler, ...) keep resolving correctly regardless of where it was launched.
-const PROJECT_ROOT = path.join(__dirname, '..', '..');
-try {
-  if (path.resolve(process.cwd()) !== path.resolve(PROJECT_ROOT)) {
-    const before = process.cwd();
-    process.chdir(PROJECT_ROOT);
-    console.log(`[v2] normalized cwd: ${before} -> ${PROJECT_ROOT}`);
-  }
-} catch (err: any) {
-  console.warn(`[v2] failed to normalize cwd: ${err?.message || err}`);
-}
+// cwd 规范化 / 配置加载 / workspace 路径校验 / 端口推导 已下沉到 config-bootstrap.ts
+normalizeCwd();
 
 const config = getConfig().getConfig();
-// Deployment check: if workspace.path points at a location whose parent dir
-// does not exist, the config.json was most likely copied from another machine
-// (absolute path baked in). Warn loudly so it can be fixed on first boot.
-{
-  const ws = String((config as any)?.workspace?.path || '').trim();
-  if (ws) {
-    const parent = path.dirname(ws);
-    if (!fs.existsSync(parent)) {
-      console.warn(`[v2] WARNING: workspace.path 的父目录不存在: "${parent}"`);
-      console.warn(`[v2] WARNING: 产物将写入无效位置。请检查 .smallclaw/config.json 的 workspace.path（可能来自其他机器），或设置环境变量 SMALLCLAW_WORKSPACE_DIR 指向本机工作区。当前 workspace.path=${ws}`);
-    }
-  }
-}
-const CONFIG_DIR_PATH = getConfig().getConfigDir();
+validateWorkspacePath(config);
+const CONFIG_DIR_PATH = getConfigDirPath();
 const flowsManager = new FlowsManager(CONFIG_DIR_PATH);
-const PORT = config.gateway.port || (process.env.GATEWAY_PORT ? parseInt(process.env.GATEWAY_PORT, 10) : 18789);
-const HOST = config.gateway.host || process.env.GATEWAY_HOST || (process.env.DOCKER_CONTAINER ? '0.0.0.0' : '127.0.0.1');
+const PORT = derivePort(config);
+const HOST = deriveHost(config);
 const MAX_TOOL_ROUNDS = 20;
 type ExecutionMode = 'interactive' | 'background_task' | 'heartbeat' | 'cron';
-
-function repairLegacyTaskChannelMetadata(): void {
-  try {
-    const tasks = listTasks();
-    let repaired = 0;
-    for (const task of tasks) {
-      if (!String(task.sessionId || '').startsWith('telegram_')) continue;
-      if (task.channel === 'telegram' && task.telegramChatId) continue;
-      task.channel = 'telegram';
-      if (!task.telegramChatId) {
-        const parsed = Number(String(task.sessionId || '').replace(/^telegram_/, ''));
-        if (Number.isFinite(parsed) && parsed > 0) task.telegramChatId = parsed;
-      }
-      saveTask(task);
-      repaired++;
-    }
-    if (repaired > 0) {
-      console.log(`[TaskStore] Repaired ${repaired} legacy task(s) with telegram metadata.`);
-    }
-  } catch (err: any) {
-    console.warn('[TaskStore] Legacy task metadata repair skipped:', err?.message || err);
-  }
-}
 
 {
   const cleaned = cleanupSessions();
@@ -377,40 +330,6 @@ function shellExecToolDefinition(): any {
       },
     },
   };
-}
-
-// ── Repeated-failure circuit breaker ─────────────────────────────────────────
-// A small model that gets a vague error tends to retry the same call verbatim.
-// After N identical failures, stop the loop and say so explicitly instead of
-// letting it burn the remaining steps on the same rejected call.
-const TOOL_FAILURE_LIMIT = 3;
-const toolFailureTracker = new Map<string, { key: string; count: number }>();
-
-function toolFailureKey(name: string, args: any): string {
-  let serialized = '?';
-  try {
-    serialized = JSON.stringify(args ?? {});
-  } catch {
-    /* unserializable args - fall back to name-only matching */
-  }
-  return `${name}:${serialized}`;
-}
-
-function noteToolFailure(sessionId: string, name: string, args: any): string | null {
-  const key = toolFailureKey(name, args);
-  if (toolFailureTracker.size > 500) toolFailureTracker.clear();
-  const prev = toolFailureTracker.get(sessionId);
-  const count = prev && prev.key === key ? prev.count + 1 : 1;
-  toolFailureTracker.set(sessionId, { key, count });
-  if (count < TOOL_FAILURE_LIMIT) return null;
-  toolFailureTracker.delete(sessionId);
-  return [
-    `Stop - "${name}" has now failed ${TOOL_FAILURE_LIMIT} times with identical arguments.`,
-    'Calling it again the same way will fail again. Instead:',
-    '  - re-read the error message and change the arguments,',
-    '  - switch to a different tool that can do this,',
-    '  - or report what is blocked to the user and ask how to proceed.',
-  ].join('\n');
 }
 
 // ── Sub-Agent Tool Profiles ────────────────────────────────────────────────────────────
@@ -2302,7 +2221,7 @@ async function executeTool(name: string, args: any, workspacePath: string, sessi
       return { name, args, result: `${result.result}\n\n${breaker}`, error: true };
     }
   } else {
-    toolFailureTracker.delete(sessionId);
+    resetToolFailure(sessionId);
   }
 
   if (!result.error && targetPath) {
