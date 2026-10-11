@@ -18,6 +18,10 @@ A running log of features, fixes, and improvements added to SmallClaw. Each entr
 - `.gitignore`: replaced the per-extension `workspace/...` rules with a whole-directory ignore (`workspace/*` + `!workspace/.gitkeep`). Previously `workspace/*.md` was NOT ignored, so user documents (`sales_report.md`, `简历.md`, `会议纪要_*.md`, ...) could be committed by accident.
 - Added `workspace/.gitkeep` so the directory still exists in a fresh clone.
 
+### 2026-10-11 — Rename Residue Cleanup (C)
+
+- `.gitignore`: header comment `LocalClaw` → `SmallClaw`; removed the dead `.localclaw/` ignore block (project already migrated to `.smallclaw/`); dropped the `.tmp_openclaw_*/` OpenClaw-era temp pattern. `.smallclaw/` rules unchanged.
+
 ---
 
 ## 2026-02-27 — Sub-Agent Spawn Architecture

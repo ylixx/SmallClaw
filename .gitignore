@@ -1,34 +1,31 @@
 # ============================================================
-# LocalClaw - .gitignore
+# SmallClaw - .gitignore
 # ============================================================
 
 # --- DOCKER / ENV ---
 .env
 
 # --- SECRETS & CONFIG (NEVER COMMIT) ---
-.localclaw/config.json
-.localclaw/credentials/
-.localclaw/vault/
 .smallclaw/config.json
 .smallclaw/credentials/
 .smallclaw/vault/
 
 # --- RUNTIME DATA ---
-.localclaw/sessions/
-.localclaw/logs/
-.localclaw/memory/
-.localclaw/facts.json
-.localclaw/self_learning.json
-.localclaw/jobs.db
-.localclaw/update_state.json
-.localclaw/tasks/
-.localclaw/jobs/
-.localclaw/ocr-cache/
-.localclaw/heartbeat/
-.localclaw/task-heartbeat.json
-.localclaw/cron/runs/
-.localclaw/agents/
-.localclaw/settings.json
+.smallclaw/sessions/
+.smallclaw/logs/
+.smallclaw/memory/
+.smallclaw/facts.json
+.smallclaw/self_learning.json
+.smallclaw/jobs.db
+.smallclaw/update_state.json
+.smallclaw/tasks/
+.smallclaw/jobs/
+.smallclaw/ocr-cache/
+.smallclaw/heartbeat/
+.smallclaw/task-heartbeat.json
+.smallclaw/cron/runs/
+.smallclaw/agents/
+.smallclaw/settings.json
 .smallclaw/sessions/
 .smallclaw/logs/
 .smallclaw/memory/
@@ -82,7 +79,6 @@ tmp_payload.json
 mnt/
 .tmp_*
 .tmp_*/
-.tmp_openclaw_*/
 .tmp_codex_*
 
 # --- NODE ---
