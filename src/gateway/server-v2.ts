@@ -3767,12 +3767,18 @@ let inRoundBudgetModelKey = '';    // resets calibration when the model changes
 // groups are added only when the message signals that intent (same detector
 // that drives TOOL_BLOCKS). Unknown tools stay so nothing silently breaks.
 const CAT_ALWAYS_TOOLS = new Set([
-  'list_files', 'read_file', 'create_file', 'replace_lines', 'insert_after',
-  'delete_lines', 'find_replace', 'delete_file', 'write_note',
-  'web_search', 'web_fetch', 'run_command', 'start_task', 'task_control',
-  'schedule_job', 'parse_schedule_pattern', 'memory_browse', 'memory_write',
-  'memory_read', 'spawn_subagent',
+  // 任何消息都注入的最小只读核心
+  'list_files', 'read_file', 'web_search', 'web_fetch', 'memory_read',
 ]);
+const CAT_FILE_WRITE_TOOLS = new Set([
+  'create_file', 'replace_lines', 'insert_after', 'delete_lines',
+  'find_replace', 'delete_file', 'write_note', 'run_code',
+]);
+const CAT_TASK_TOOLS = new Set([
+  'start_task', 'task_control', 'schedule_job', 'parse_schedule_pattern',
+]);
+const CAT_SUBAGENT_TOOLS = new Set(['spawn_subagent']);
+const CAT_MEMORY_WRITE_TOOLS = new Set(['memory_write', 'memory_browse']);
 const CAT_BROWSER_PREFIX = 'browser_';
 const CAT_DESKTOP_PREFIX = 'desktop_';
 const CAT_OFFICE_PREFIX = 'doc_';
@@ -3790,9 +3796,20 @@ function filterToolsByIntent(toolDefs: any[], messageText: string): any[] {
     || /(知识库|knowledge|检索|资料|查一下)/i.test(lower);
   const wantSubagent = cats.size >= 2
     || /(子任务|subagent|并行|同时|拆分|分工)/i.test(lower);
-  return toolDefs.filter((t: any) => {
+  const wantFileWrite = cats.has('files')
+    || /(创建|新建|写入|修改|编辑|删除|替换|追加|写文件|改成|改为|保存|生成|修复|重构|整理|处理|写|编)/i.test(lower);
+  const wantTask = /(任务|待办|定时|提醒|schedule|提醒我|计划任务|创建任务)/i.test(lower);
+  const wantMemory = /(记忆|记住|忘了|以前|上次|memory|长期)/i.test(lower);
+  const wantGui = /(打开|启动|运行|开启|弹出).{0,8}(应用|程序|app|word|excel|ppt|notepad|calc|code|explorer|浏览器|文件)/i.test(lower)
+    || /^(start|open)\s/i.test(lower);
+  const filtered = toolDefs.filter((t: any) => {
     const n = String(t?.function?.name || '');
     if (CAT_ALWAYS_TOOLS.has(n)) return true;
+    if (CAT_FILE_WRITE_TOOLS.has(n)) return wantFileWrite;
+    if (CAT_TASK_TOOLS.has(n)) return wantTask;
+    if (CAT_SUBAGENT_TOOLS.has(n)) return wantSubagent;
+    if (CAT_MEMORY_WRITE_TOOLS.has(n)) return wantMemory;
+    if (n === 'run_command') return wantGui;
     if (n.startsWith(CAT_BROWSER_PREFIX)) return cats.has('browser');
     if (n.startsWith(CAT_DESKTOP_PREFIX)) return cats.has('desktop');
     if (n.startsWith(CAT_OFFICE_PREFIX)) return wantOffice;
@@ -3802,6 +3819,8 @@ function filterToolsByIntent(toolDefs: any[], messageText: string): any[] {
     if (n.startsWith(CAT_PLAN_PREFIX)) return wantSubagent;
     return true;
   });
+  console.log(`[tools] intent filter: ${toolDefs.length} -> ${filtered.length} tools | "${String(messageText || '').slice(0, 40)}"`);
+  return filtered;
 }
 
 /**
