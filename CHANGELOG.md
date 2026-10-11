@@ -88,6 +88,16 @@ A running log of features, fixes, and improvements added to SmallClaw. Each entr
 - 验证：`typecheck` 0 错；默认 `npm test` 71 passed/2 skipped；`SMALLCLAW_SMOKE=1 npm run smoke` 2 passed，`/api/tools` 仍锁定 53 个工具名（字节级不变），网关启动/清理无残留。
 - 备份点：`git tag backup/pre-phase2c-20261011`。
 
+### 2026-10-11 — server-v2 Split Phase 2d: applyToolPolicy Policy Cluster → tool-registry.ts (M)
+
+- 把 `applyToolPolicy`/`checkToolDenied` + 其 policy helper 簇搬入 `tool-registry.ts`：`*_TOOL_NAMES` 集合（FILE/SHELL/WEB/MEMORY/SCHEDULE/TASK/ORCHESTRATION + `KNOWLEDGE_TOOL_NAMES` 展开）、`TOOL_GROUPS`、`matchToolPattern`、`profileAllowsTool`、`resolveSessionAgent`、`resolveAgentToolPolicy`、`resolveGlobalEnabledSet`、`applyToolPolicy`、`checkToolDenied`。
+- **选择性搬移**：`KNOWLEDGE_DIR`/`KB_AUTO_INJECT_RE`/`ArtifactEntry`/`recordArtifact`/`listArtifacts` 与该簇交错在同一区块，但被 server-v2 外部（3829/3834/3866/7079/7129-7156/1591/1871-1910 等）调用，故**留在 server-v2**。
+- **关键耦合处理**：`sessionAgentBindings`（被 server-v2 7290-7291 直接 `set`/`delete` 的 live Map 单例）改为 `export const` 由 server-v2 import 同一实例（同 Phase 2b 的 `MCP_TOOL_PREFIX` 模式），行为不变。
+- 叶子 import 新增：`isPlanTool`(plan-mode)、`AGENT_BUILDER_TOOL_NAMES`(agent-builder-integration)、`KNOWLEDGE_TOOL_NAMES`(tools/knowledge)、`getAgentById`/`getDefaultAgent`(config/config)；已验证无循环依赖。
+- server-v2.ts 净减 135 行（10,020 → 9,885，累计净减 929 行）；tool-registry.ts 915 行。
+- 验证：`typecheck` 0 错；默认 `npm test` 71 passed/2 skipped；`SMALLCLAW_SMOKE=1 npm run smoke` 2 passed，`/api/tools` 仍锁定 53 个工具名（字节级不变），网关启动/清理无残留。
+- 备份点：`git tag backup/pre-phase2d-20261011`。
+
 ---
 
 ### 2026-10-04 — 2026-10-11 — Feature & Hardening Wave (D)

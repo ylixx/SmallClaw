@@ -29,6 +29,10 @@ import { getImageToolDefinitions } from '../tools/image';
 import { getFileBatchToolDefinitions } from '../tools/file-batch';
 import { registerAgentBuilderTools } from './agent-builder-integration';
 import { getOrchestrationConfig } from '../orchestration/multi-agent';
+import { isPlanTool } from './plan-mode';
+import { AGENT_BUILDER_TOOL_NAMES } from './agent-builder-integration';
+import { KNOWLEDGE_TOOL_NAMES } from '../tools/knowledge';
+import { getAgentById, getDefaultAgent } from '../config/config';
 
 export function getModelTier(): ModelTier {
   try {
@@ -760,4 +764,152 @@ export function filterToolsByIntent(toolDefs: any[], messageText: string, tier: 
   });
   console.log(`[tools] intent filter (${tier}): ${toolDefs.length} -> ${filtered.length} tools | "${String(messageText || '').slice(0, 40)}"`);
   return filtered;
+}
+
+// ─── Agent Tool Policy cluster (from server-v2.ts, Phase 2d) ───
+// ─── Agent Tool Policy ────────────────────────────────────────────────────────
+
+export const FILE_TOOL_NAMES = new Set([
+  'list_files', 'read_file', 'create_file', 'replace_lines',
+  'insert_after', 'delete_lines', 'find_replace', 'delete_file',
+  'doc_inspect', 'doc_read', 'doc_write', 'doc_chart', 'doc_convert',
+  'doc_ocr', 'doc_parse_lab',
+  'image_render', 'image_generate', 'file_batch',
+  ...KNOWLEDGE_TOOL_NAMES,
+]);
+export const SHELL_TOOL_NAMES = new Set(['run_command', 'shell_exec']);
+
+export const WEB_TOOL_NAMES = new Set(['web_search', 'web_fetch']);
+export const MEMORY_TOOL_NAMES = new Set(['memory_browse', 'memory_write', 'memory_read', 'write_note']);
+export const SCHEDULE_TOOL_NAMES = new Set(['schedule_job', 'parse_schedule_pattern']);
+export const TASK_TOOL_NAMES = new Set(['start_task', 'task_control']);
+export const ORCHESTRATION_TOOL_NAMES = new Set([
+  'request_secondary_assist', 'subagent_spawn', 'delegate_to_specialist', 'spawn_subagent',
+]);
+
+export const TOOL_GROUPS: Record<string, (name: string) => boolean> = {
+  all: () => true,
+  fs: (n) => FILE_TOOL_NAMES.has(n) || n === 'write_note',
+  shell: (n) => SHELL_TOOL_NAMES.has(n),
+  web: (n) => WEB_TOOL_NAMES.has(n),
+  browser: (n) => n.startsWith('browser_'),
+  desktop: (n) => n.startsWith('desktop_'),
+  memory: (n) => MEMORY_TOOL_NAMES.has(n),
+  schedule: (n) => SCHEDULE_TOOL_NAMES.has(n),
+  task: (n) => TASK_TOOL_NAMES.has(n),
+  orchestration: (n) => ORCHESTRATION_TOOL_NAMES.has(n),
+  mcp: (n) => n.startsWith(MCP_TOOL_PREFIX),
+  agent: (n) => AGENT_BUILDER_TOOL_NAMES.has(n),
+};
+
+export function matchToolPattern(pattern: string, toolName: string): boolean {
+  const p = String(pattern || '').trim();
+  if (!p || !toolName) return false;
+  if (p.startsWith('group:')) {
+    const group = TOOL_GROUPS[p.slice('group:'.length).toLowerCase()];
+    return group ? group(toolName) : false;
+  }
+  if (p.endsWith('*')) return toolName.startsWith(p.slice(0, -1));
+  if (p === toolName) return true;
+  return toolName.startsWith(`${p}_`) || toolName.startsWith(`${p}__`);
+}
+
+export function profileAllowsTool(profile: string | undefined, toolName: string): boolean {
+  if (isPlanTool(toolName)) return true;
+  const p = String(profile || '').trim().toLowerCase();
+  if (!p || p === 'full') return true;
+  if (p === 'minimal') return MEMORY_TOOL_NAMES.has(toolName);
+  if (p === 'coding') {
+    return MEMORY_TOOL_NAMES.has(toolName) || FILE_TOOL_NAMES.has(toolName) || SHELL_TOOL_NAMES.has(toolName);
+  }
+  if (p === 'web') return MEMORY_TOOL_NAMES.has(toolName) || WEB_TOOL_NAMES.has(toolName);
+  return true;
+}
+
+export const sessionAgentBindings = new Map<string, string>();
+export const sessionGlobalAllowlist = new Map<string, Set<string>>();
+let legacyToolsEnabledWarned = false;
+
+export function resolveSessionAgent(sessionId: string): any {
+  const bound = sessionAgentBindings.get(sessionId);
+  if (bound) {
+    const agent = getAgentById(bound);
+    if (agent) return agent;
+  }
+  try {
+    return getDefaultAgent();
+  } catch {
+    return null;
+  }
+}
+
+export function resolveAgentToolPolicy(sessionId: string): { profile?: string; allow?: string[]; deny?: string[] } | null {
+  const tools = resolveSessionAgent(sessionId)?.tools;
+  if (!tools || typeof tools !== 'object') return null;
+  if (!tools.profile && !Array.isArray(tools.allow) && !Array.isArray(tools.deny)) return null;
+  return tools;
+}
+
+export function resolveGlobalEnabledSet(toolNames: Iterable<string>): Set<string> | null {
+  let configured: any = null;
+  try {
+    configured = (getConfig().getConfig() as any)?.tools?.enabled;
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(configured)) return null;
+  const requested = configured.filter((n: any) => typeof n === 'string' && n.trim());
+  if (requested.length === 0) return null;
+  const universe = new Set(Array.from(toolNames).filter(Boolean));
+  const matched = new Set(requested.filter((n: string) => universe.has(n)));
+  if (matched.size === 0) {
+    if (!legacyToolsEnabledWarned) {
+      legacyToolsEnabledWarned = true;
+      console.warn(`[v2] config.tools.enabled has no matching tool names (${requested.join(', ')}) - ignoring it.`);
+    }
+    return null;
+  }
+  return matched;
+}
+
+export function applyToolPolicy(toolDefs: any[], sessionId?: string): any[] {
+  let out = toolDefs;
+  const names = out.map((t: any) => String(t?.function?.name || '')).filter(Boolean);
+  const enabledSet = resolveGlobalEnabledSet(names);
+  if (enabledSet) {
+    out = out.filter((t: any) => enabledSet.has(String(t?.function?.name || '')));
+  }
+  if (!sessionId) return out;
+  if (enabledSet) sessionGlobalAllowlist.set(sessionId, enabledSet);
+  else sessionGlobalAllowlist.delete(sessionId);
+
+  const policy = resolveAgentToolPolicy(sessionId);
+  if (!policy) return out;
+  return out.filter((t: any) => {
+    const name = String(t?.function?.name || '');
+    if (!name) return false;
+    if (policy.profile && !profileAllowsTool(policy.profile, name)) return false;
+    if (Array.isArray(policy.allow) && policy.allow.length && !policy.allow.some(p => matchToolPattern(p, name))) return false;
+    if (Array.isArray(policy.deny) && policy.deny.some(p => matchToolPattern(p, name))) return false;
+    return true;
+  });
+}
+
+export function checkToolDenied(toolName: string, sessionId: string): string | null {
+  const allowedByConfig = sessionGlobalAllowlist.get(sessionId);
+  if (allowedByConfig && !allowedByConfig.has(toolName)) {
+    return `Tool "${toolName}" is not in config.tools.enabled.`;
+  }
+  const policy = resolveAgentToolPolicy(sessionId);
+  if (!policy) return null;
+  if (policy.profile && !profileAllowsTool(policy.profile, toolName)) {
+    return `Tool "${toolName}" is not permitted by the active agent profile "${policy.profile}".`;
+  }
+  if (Array.isArray(policy.allow) && policy.allow.length && !policy.allow.some(p => matchToolPattern(p, toolName))) {
+    return `Tool "${toolName}" is not in the active agent's allow list.`;
+  }
+  if (Array.isArray(policy.deny) && policy.deny.some(p => matchToolPattern(p, toolName))) {
+    return `Tool "${toolName}" is denied by the active agent's tool policy.`;
+  }
+  return null;
 }
