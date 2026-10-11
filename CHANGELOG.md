@@ -24,6 +24,60 @@ A running log of features, fixes, and improvements added to SmallClaw. Each entr
 
 ---
 
+### 2026-10-04 — 2026-10-11 — Feature & Hardening Wave (D)
+
+> 自 2026-02-27 之后的能力跃迁。覆盖知识库、流程固化、办公/PPT/图像、工具系统重构、记忆与上下文预算、UI 中文化、多模型档案、聊天健壮性、安全加固。详细提交见 `git log --since=2026-03-01`。
+
+**Knowledge Base（本地 RAG）**
+- 本地知识库：add/search/list/remove + 聊天自动 RAG 注入（`src/tools/knowledge`）。
+- 聊天内 `@引用` 文件 + UI 选择器；知识库面板（📚 入口、点击自动 @引用、删除、上传）。
+- 修复知识库点击处理器静默失效（属性引号 bug）、列表渲染、加载防抖 300ms。
+
+**Flows（一键流程固化）**
+- 一键流程模板固化 + 侧边栏运行面板。
+- 流程 CRUD：UI 新建/编辑/删除 + API；修复流程运行后产物不可见。
+- 周报流程沉淀为 `weekly-report` 技能；技能规范动态引用、消除双注入；产物模板 flow 固化 + 中文 skill 匹配（数据整理报告）。
+
+**Office / PPT / Image（办公生产力）**
+- Office：`doc_ocr`、`doc_parse_lab`；`doc_batch` 批量处理 + 内置模板库；Excel 数据透视 `doc_pivot` + xlsx 公式写入；md/txt 读取、md→docx 走 python-docx；办公链路小模型友好化。
+- PPT：一键生成 flow（内置美化 + 技能规范）；渲染引擎升级为豆包式版式体系（多主题 + 四类页面）。
+- Image：新增 `image_edit`（抠图/压缩/水印，纯本地 PIL）。
+
+**Tools System Overhaul（小模型工具调用重构）**
+- 按模型档位三套配置（small≤4B / mid 5-9B / large≥10B）；档位判定改为「活体上下文 × 参数量」双维度。
+- 工具描述两段式（short/full），≤4B 自动换短版；运行时动态裁剪——20 个常开工具拆为 5 核心 + 意图组。
+- `list_files` 升级为查询工具（摘要/过滤/排序/截断）；新增 `grep_content`；`read` 带行号。
+- 新增 `run_code` 真实代码执行工具；Markdown 全语法解析 + 代码块语法高亮/复制。
+- 工具定义按需注入、slim tool definitions（injected 64→56，payload 39K→29.7K chars）。
+
+**Memory & Context Budget**
+- 会话历史上下文预算（跟随活跃模型 n_ctx）；轮内上下文预算（跟随窗口 + 速度自适应）。
+- 记忆相关性过滤注入（显式许可头 + 容量上限 + 中文意图识别）。
+- 最近对话回顾注入、对话记录可真正删除、FILE_ANALYSIS 改主模型 + 系统代读。
+
+**UI 全量中文化 & 体验**
+- 主要界面文案、任务面板、定时任务卡片/弹窗、空状态/加载/错误提示全面中文化。
+- 思考模式(think)可视化开关；可拖拽分栏宽度、聊天输入框高度；🦞 favicon。
+- 聊天区常驻模型切换下拉；第三方 OpenAI 兼容端点 Base URL / Key 补全。
+
+**Multi-Model Profiles & Providers**
+- 多套模型配置档案，一键切换当前生效模型。
+- 兼容带版本段的 API 地址（智谱 `/paas/v4` 等），档案密钥独立入 vault；chat 超时 120s→300s + 自动重试。
+- 视觉：用户消息图片附件以 `image_url` content part 注入主模型。
+
+**Chat Robustness**
+- 会话元问答注入（"最后一组/总共几组"毫秒级）、报告改为自包含 HTML；小模型不再强制思考。
+- 问候轮 fallback 根因修复；provider 拒绝畸形工具参数时纠正重试。
+
+**Security & Hardening**
+- `run_command` 加固：阻止可执行扩展名启动、校验目标存在、workspace cwd、office 格式白名单、防 workspace 越界。
+- 多机器部署加固：工作区/配置路径与启动目录解耦。
+- 配置化消除硬编码（模型路径/ctx/reasoning）；移除 num_ctx/num_predict 硬编码。
+
+> 注意：README 的 "Architecture" 一节仍写 "single-pass，无 planning/execution/verification 多 agent"，与代码实际的多智能体编排（`src/orchestration/multi-agent.ts`、`verification-flow.ts`、`subagent-manager.ts`）不符，需后续单独修订 README。
+
+---
+
 ## 2026-02-27 — Sub-Agent Spawn Architecture
 
 ### What Changed
