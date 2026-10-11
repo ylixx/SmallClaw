@@ -11,7 +11,9 @@
     "dev": "tsx src/cli/index.ts",
     "start": "node dist/cli/index.js",
     "gateway": "tsx src/gateway/server-v2.ts",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "smoke": "vitest run tests/smoke-gateway.test.ts",
     "test:desktop": "tsx tests/desktop-tools.ts"
   },
   "keywords": [

@@ -35,6 +35,15 @@ A running log of features, fixes, and improvements added to SmallClaw. Each entr
 - Fixed repo URLs in badges/clones from `XposeMarket/SmallClaw` to the actual remote `ylixx/SmallClaw`.
 - Note: bilingual duplication roughly doubles README length; on GitHub both languages render (no tab switching) by design.
 
+### 2026-10-11 — server-v2 Split Phase 0: Safety Net (G)
+
+- Began executing the `server-v2.ts` split plan (`docs/server-v2-split-plan.md`). **Phase 0 only adds a safety net — `server-v2.ts` itself is untouched.**
+- `package.json`: added `"typecheck": "tsc --noEmit"` and `"smoke": "vitest run tests/smoke-gateway.test.ts"`.
+- `tests/server-v2-integrity.test.ts` (always on, safe — does NOT import the giant module): static symbol guard on `server-v2.ts` source (handleChat still defined, still `export { app, server }`) + real imports of the already-extracted helpers (`server-v2-text`, `run-command-router`) to catch accidental deletions/renames during later extractions.
+- `tests/smoke-gateway.test.ts` (opt-in, gated by `SMALLCLAW_SMOKE=1`): spawns the real gateway as a separate process, probes `/api/status` (HTTP 200), then tears the process tree down (taskkill `/T` + by-port fallback — tsx forks a child, so killing the parent alone leaks the server).
+- **Why not import `server-v2.ts` in vitest**: it calls `server.listen()` at module top-level and reads config on load, so importing it would actually start the server and bind a port.
+- Verified: `typecheck` → 0 errors; default `npm test` → 71 passed / 1 skipped (smoke skipped, no server started); `SMALLCLAW_SMOKE=1 npm test` → real gateway boot, 200, no leftover process.
+
 ---
 
 ### 2026-10-04 — 2026-10-11 — Feature & Hardening Wave (D)

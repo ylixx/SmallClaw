@@ -1,6 +1,6 @@
 # server-v2.ts 拆分方案（规划文档）
 
-> 状态：规划阶段，未执行代码改动。
+> 状态：Phase 0（安全网）已完成并验证；Phase 1–6 待执行。未改动 `server-v2.ts` 业务代码。
 > 目标：把 `src/gateway/server-v2.ts`（**10,814 行 / 100+ 导出符号**）从巨型单体拆成按域组织的模块，保留 `server-v2.ts` 作为"组合根（composition root）"——只做模块装配、Express 路由、SSE 接线，业务细节下沉到子模块。
 
 ---
@@ -44,10 +44,12 @@
 
 ## 4. 分阶段路线
 
-### Phase 0 — 安全网（最先做）
-- 在 `package.json` 增加 `"typecheck": "tsc --noEmit"`。
-- 新增 `tests/gateway-smoke.test.ts`：以内存模式启动网关（或 mock `listen`），断言 `/health`（或等价就绪端点）可达、配置加载成功。
-- 验收：`npm run typecheck` 与 `npm test` 全绿。
+### Phase 0 — 安全网（✅ 已完成并验证）
+- ✅ `package.json` 增加 `"typecheck": "tsc --noEmit"` 与 `"smoke": "vitest run tests/smoke-gateway.test.ts"`。
+- ✅ `tests/server-v2-integrity.test.ts`（常开、安全，**不 import 巨型文件**）：对 `server-v2.ts` 源码做静态符号守护（handleChat 仍在、仍 `export { app, server }`）+ 真实 import 已抽出的 helper（`server-v2-text`/`run-command-router`）校验导出。
+- ✅ `tests/smoke-gateway.test.ts`（默认 `skipIf`，仅 `SMALLCLAW_SMOKE=1` 启用）：**子进程**启动真实网关 → 探 `/api/status` 返回 200 → **按进程树 + 按端口兜底强杀**（tsx 会 fork 子进程，只杀父进程清不干净）。
+- ⚠️ 关键教训：不能 `import server-v2.ts` 做金丝雀——它在模块顶层 `server.listen()` 且加载即读配置，import 会真起服务绑端口。端口探测也不能靠 `GATEWAY_PORT` env（被 `config.gateway.port` 覆盖），须解析启动日志里的实际绑定端口。
+- 验收（已通过）：`typecheck` 0 错；默认 `npm test` 71 passed / 1 skipped（冒烟跳过、无服务）；`SMALLCLAW_SMOKE=1 npm test` 真起网关→200→无残留。
 
 ### Phase 1 — 配置引导 + 守卫（低风险）
 - 搬 `config-bootstrap.ts` 与 `request-guards.ts`。
@@ -103,4 +105,4 @@
 ## 8. 备注
 
 - 该方案只解决"单体文件"这一个问题（审查意见 P0-1）。代码层面的其它项（测试薄弱、console.* 横飞、README 与代码能力脱节）需另立任务跟进。
-- README 的 "Architecture" 一节仍写"single-pass，无多 agent"，与 `src/orchestration/multi-agent.ts` 等真实存在的能力矛盾，建议同步修订（见 CHANGELOG 标注）。
+- README 的架构描述矛盾已在 F 项（README Overhaul）修正：核心是单趟 `handleChat()`，多智能体编排（`src/orchestration/`）为可配置开关，与代码一致。
