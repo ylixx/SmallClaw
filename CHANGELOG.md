@@ -133,6 +133,15 @@ A running log of features, fixes, and improvements added to SmallClaw. Each entr
 - 验证：`typecheck` 0 错；默认 `npm test` 71 passed/2 skipped；`SMALLCLAW_SMOKE=1 npm run smoke` 2 passed（真网关 + `/api/tools` 仍锁 53 工具名快照）；**flow e2e 补测**：真网关 `GET /api/flows` → success=true、count=4（data-report/doc-analysis-report 等）、`GET /api/flows/nonexistent` → 404，结构不变；清理无残留、18789 释放。
 - 备份点：`git tag backup/pre-phase4-20261011`。
 
+### 2026-10-11 — server-v2 Split Phase 5a: Task Helpers → task-integration.ts (Q)
+
+- 按拆分路线图 Phase 5（chat-handler，最高风险）**第 1 子步**：先把 handleChat/executeToolImpl 依赖的**纯任务辅助函数簇**下沉到 `src/gateway/task-integration.ts`（160 行，17 个导出），消除其对 server-v2 本地 task 助手的依赖。
+- 分析：handleChat 2143 行、executeToolImpl 1078 行，直接整块搬会连带任务系统/广播/调度大量符号形成大爆炸；按"从叶子到根"分层，先搬**零 handleChat/telegramChannel 依赖**的纯函数簇。
+- `task-integration.ts`（新，160 行）：`ACTIVE_TASK_STATUSES` 常量 + 16 个纯函数（`inferTaskChannelFromSession`/`latestTaskForSession`/`findBlockedTaskForSession`/`isResumeIntent`/`isRerunIntent`/`isCancelIntent`/`isStatusQuestion`/`isTaskListIntent`/`isAdjustmentIntent`/`getLatestPauseContext`/`summarizeTaskRecord`/`buildBlockedTaskStatusMessage`/`parseTaskStatusFilter`/`getTaskScopeBuckets`/`parseTaskIdFromText`/`renderTaskCandidatesForHuman`）——字节级原样搬移，仅依赖 task-store 叶子 import，运行时零依赖 server-v2，无循环。
+- server-v2.ts 保留 `launchBackgroundTaskRunner`（引 handleChat/telegramChannel）与 `handleTaskControlAction`（组合根职责，Phase 5 后期处理），改由 import 使用这些助手；净减 157 行（9,814 → 9,657）。
+- 验证：`typecheck` 0 错；默认 `npm test` 71 passed/2 skipped；`SMALLCLAW_SMOKE=1 npm run smoke` 2 passed（真网关 + `/api/tools` 仍锁 53 工具名快照）；task e2e 补测：真网关 `GET /api/tasks` → 200（jobs 结构不变），无残留、18789 释放。
+- 备份点：`git tag backup/pre-phase5-20261011`。
+
 ---
 
 ### 2026-10-04 — 2026-10-11 — Feature & Hardening Wave (D)

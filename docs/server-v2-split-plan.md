@@ -1,6 +1,6 @@
 # server-v2.ts 拆分方案（规划文档）
 
-> 状态：Phase 0（安全网）✅、Phase 1（config-bootstrap + 失败熔断）✅、Phase 2a（工具压缩纯函数 → tool-registry）✅、Phase 2b（buildTools 整簇 → tool-registry）✅、Phase 2c（filterToolsByIntent 簇 → tool-registry）✅、Phase 2d（applyToolPolicy policy 簇 → tool-registry）✅、Phase 1.5（Model-Busy 守卫 → model-busy-guard）✅、Phase 3（realtime SSE/WS → realtime.ts）✅、Phase 4（flow-integration → flow-integration.ts）✅ 已完成并验证；Phase 5–6 待执行。`server-v2.ts` 现为 **~9,810 行**（原 10,814，累计净减 ~1,004），业务行为字节级不变。
+> 状态：Phase 0（安全网）✅、Phase 1（config-bootstrap + 失败熔断）✅、Phase 2a（工具压缩纯函数 → tool-registry）✅、Phase 2b（buildTools 整簇 → tool-registry）✅、Phase 2c（filterToolsByIntent 簇 → tool-registry）✅、Phase 2d（applyToolPolicy policy 簇 → tool-registry）✅、Phase 1.5（Model-Busy 守卫 → model-busy-guard）✅、Phase 3（realtime SSE/WS → realtime.ts）✅、Phase 4（flow-integration → flow-integration.ts）✅、Phase 5a（task-integration 纯任务助手 → task-integration.ts）✅ 已完成并验证；Phase 5b–6 待执行。`server-v2.ts` 现为 **~9,657 行**（原 10,814，累计净减 ~1,157），业务行为字节级不变。
 > 目标：把 `src/gateway/server-v2.ts`（**10,814 行 / 100+ 导出符号**）从巨型单体拆成按域组织的模块，保留 `server-v2.ts` 作为"组合根（composition root）"——只做模块装配、Express 路由、SSE 接线，业务细节下沉到子模块。
 
 ---
