@@ -240,6 +240,11 @@ app.get('/api/status', async (_req, res) => {
   }
   res.json({
     status: 'ok', version: 'v2-tools', ollama: connected,
+    // providerOnline: connection state of the ACTIVE provider (the legacy
+    // "ollama" field above conflated llama.cpp/ollama states under one name).
+    providerOnline: connected,
+    // gateway: the address this gateway is actually listening on.
+    gateway: `http://127.0.0.1:${rawCfg.gateway?.port ?? 18789}`,
     provider,
     currentModel: activeModel,
     workspace: (getConfig().getConfig() as any).workspace?.path || '',

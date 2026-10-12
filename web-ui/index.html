@@ -2966,7 +2966,7 @@
         <div class="right-section-title" style="margin-bottom:8px">Runtime</div>
         <div class="info-row"><span class="info-key">Model</span><span class="info-val" id="settings-runtime-model">-</span></div>
         <div class="info-row"><span class="info-key">Gateway</span><span class="info-val" id="settings-runtime-gateway">-</span></div>
-        <div class="info-row"><span class="info-key">Ollama</span><span class="info-val" id="settings-runtime-ollama">-</span></div>
+        <div class="info-row"><span class="info-key" id="settings-runtime-provider-key">Provider</span><span class="info-val" id="settings-runtime-provider">-</span></div>
       </div>
       <div style="border:1px solid var(--line);border-radius:12px;padding:12px;background:#fff">
         <div class="right-section-title" style="margin-bottom:8px">Notes</div>
@@ -7610,7 +7610,9 @@ async function openSettings(tab) {
     document.getElementById('settings-runtime-model').textContent = status.currentModel || '-';
     loadOrchestrationConfig();
     document.getElementById('settings-runtime-gateway').textContent = status.gateway || '-';
-    document.getElementById('settings-runtime-ollama').textContent = status.ollama ? 'Online' : 'Offline';
+    const providerName = ({ ollama: 'Ollama', llama_cpp: 'llama.cpp', lm_studio: 'LM Studio', openai: 'OpenAI', openai_codex: 'OpenAI Codex' })[status.provider] || status.provider || 'Unknown';
+    document.getElementById('settings-runtime-provider-key').textContent = providerName;
+    document.getElementById('settings-runtime-provider').textContent = status.providerOnline ? 'Online' : 'Offline';
   } catch {}
   try {
     const paths = await api('/api/settings/paths');
