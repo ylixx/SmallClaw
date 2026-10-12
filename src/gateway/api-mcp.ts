@@ -13,6 +13,18 @@ export interface McpRouteDeps {
 export function registerMcpRoutes(app: express.Express, deps: McpRouteDeps): void {
 
 
+// GET /api/mcp/servers — server list with live status. Missing previously:
+// the front-end list view fell through to the SPA catch-all and got index.html.
+app.get('/api/mcp/servers', (_req, res) => {
+  try {
+    const mgr = getMCPManager();
+    const servers = mgr.getStatus().map((s) => ({ ...s, toolCount: s.tools }));
+    res.json({ success: true, servers });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 app.post('/api/mcp/servers', (req, res) => {
   try {
     const mgr = getMCPManager();
@@ -25,23 +37,6 @@ app.post('/api/mcp/servers', (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 });
-
-
-
-app.post('/api/mcp/servers', (req, res) => {
-  try {
-    const mgr = getMCPManager();
-    const cfg = req.body;
-    if (!cfg.id || !cfg.name) { res.status(400).json({ success: false, error: 'id and name are required' }); return; }
-    if (!cfg.id.match(/^[a-z0-9_-]+$/i)) { res.status(400).json({ success: false, error: 'id must be alphanumeric/underscore/dash only' }); return; }
-    mgr.upsertConfig(cfg);
-    res.json({ success: true });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-
 
 app.delete('/api/mcp/servers/:id', (req, res) => {
   try {
