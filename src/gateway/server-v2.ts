@@ -216,6 +216,7 @@ import { registerFlowRoutes } from './api-flows';
 import { resolveChannelsConfig, registerChannelsRoutes } from './api-channels';
 import { registerSchedulesRoutes } from './api-schedules';
 import { registerAgentRoutes } from './api-agents';
+import { registerKbRoutes } from './api-kb';
 import { registerFileRoutes } from './api-files';
 import { skillsManager, isOrchestrationSkillEnabled, renderFlowInstruction, recoverSkillsIfEmpty, setOrchestrationEnabled } from './skills-bootstrap';
 import { buildPersonalityContext } from './personality-context';
@@ -228,7 +229,7 @@ import {
   AGENT_BUILDER_TOOL_NAMES,
   getWorkflowContextBlock,
 } from './agent-builder-integration';
-import { normalizeCwd, validateWorkspacePath, getConfigDirPath, derivePort, deriveHost, repairLegacyTaskChannelMetadata } from './config-bootstrap';
+import { normalizeCwd, validateWorkspacePath, getConfigDirPath, derivePort, deriveHost, repairLegacyTaskChannelMetadata, KNOWLEDGE_DIR } from './config-bootstrap';
 import { noteToolFailure, resetToolFailure } from './request-guards';
 import { getModelTier, applyToolCompactness, buildTools, agentShellEnabled, MCP_TOOL_PREFIX, collectMcpToolEntries, filterToolsByIntent, detectToolCategories, applyToolPolicy, checkToolDenied, sessionAgentBindings } from './tool-registry';
 import { getModelBusy, setModelBusy } from './model-busy-guard';
@@ -601,7 +602,6 @@ async function resolveModelTier(): Promise<ModelTier> {
 
 
 
-const KNOWLEDGE_DIR = path.join(__dirname, '..', '..', 'knowledge');
 
 // Knowledge auto-injection: questions that clearly reference stored material
 // trigger a local RAG lookup. Kept deliberately narrow so everyday chat is
@@ -790,6 +790,7 @@ async function tryHandleBlockedTaskFollowup(sessionId: string, rawMessage: strin
 const app = express();
 
 registerFileRoutes(app);
+registerKbRoutes(app);
 
 registerChannelsRoutes(app, { telegramChannel });
 app.use(cors());
@@ -801,47 +802,6 @@ app.use(express.static(webUiPath));
 // ─── Files: upload / download ─────────────────────────────────────────────────
 // Upload sends raw bytes (Content-Type: application/octet-stream) so the global
 // express.json() limit never applies to binary payloads.
-
-// ─── Knowledge base REST (web UI management) ────────────────────────────────
-// GET    /api/knowledge          — list + status
-// POST   /api/knowledge/add      — { filename } relative to workspace (or path)
-// POST   /api/knowledge/remove   — { name }
-app.get('/api/knowledge', async (_req, res) => {
-  try {
-    const [listOut, statusOut] = await Promise.all([
-      executeKnowledgeTool('knowledge_list', {}, KNOWLEDGE_DIR),
-      executeKnowledgeTool('knowledge_status', {}, KNOWLEDGE_DIR),
-    ]);
-    res.json({ success: true, files: listOut.files || [], status: statusOut });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err?.message || String(err) });
-  }
-});
-
-app.post('/api/knowledge/add', async (req, res) => {
-  try {
-    const raw = String(req.body?.filename || req.body?.path || '').trim();
-    if (!raw) { res.status(400).json({ success: false, error: 'filename required' }); return; }
-    const workspacePath = getConfig().getWorkspacePath();
-    const resolved = resolveToolFilePath(workspacePath, raw);
-    if (!resolved.ok) { res.status(403).json({ success: false, error: resolved.error }); return; }
-    const outcome = await executeKnowledgeTool('knowledge_add', { path: resolved.path }, KNOWLEDGE_DIR);
-    res.json({ success: !!outcome.ok, ...(outcome.ok ? { name: outcome.name, chunks: outcome.chunks, total_files: outcome.total_files } : { error: outcome.error }) });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err?.message || String(err) });
-  }
-});
-
-app.post('/api/knowledge/remove', async (req, res) => {
-  try {
-    const name = String(req.body?.name || '').trim();
-    if (!name) { res.status(400).json({ success: false, error: 'name required' }); return; }
-    const outcome = await executeKnowledgeTool('knowledge_remove', { name }, KNOWLEDGE_DIR);
-    res.json({ success: !!outcome.ok, ...(outcome.ok ? { removed: outcome.removed } : { error: outcome.error }) });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err?.message || String(err) });
-  }
-});
 
 app.post('/api/chat', async (req, res) => {
   const { message, sessionId = 'default', pinnedMessages, agentId } = req.body;

@@ -1,8 +1,0 @@
-﻿Phase 5d-16: extract file/doc/plan/artifacts/status routes into api-files.ts
-
-sanitizeUploadName + /api/files + /api/fs + /api/doc/apply + /api/plan +
-/api/artifacts + /api/status -> api-files.ts registerFileRoutes(app); zero
-deps injection (config local var -> getConfig()). server-v2.ts -> 1,288.
-
-- Verified: typecheck 0 errors; npm test 70 passed/2 skipped;
-  SMALLCLAW_SMOKE=1 smoke 2 passed.

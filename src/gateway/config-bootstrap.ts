@@ -24,6 +24,9 @@ import { listTasks, saveTask } from './task-store';
 // scheduler, ...) keep resolving correctly regardless of where it was launched.
 export const PROJECT_ROOT = path.join(__dirname, '..', '..');
 
+// knowledge base 数据目录（单一来源：server-v2 组合根与 api-kb 共用）
+export const KNOWLEDGE_DIR = path.join(PROJECT_ROOT, 'knowledge');
+
 export function normalizeCwd(): void {
   try {
     if (path.resolve(process.cwd()) !== path.resolve(PROJECT_ROOT)) {

@@ -1,0 +1,8 @@
+﻿Phase 5d-17: extract Knowledge base REST routes into api-kb.ts
+
+/api/knowledge + /add + /remove -> api-kb.ts registerKbRoutes(app).
+KNOWLEDGE_DIR hoisted to config-bootstrap as single source. server-v2.ts
+-> 1,248.
+
+- Verified: typecheck 0 errors; npm test 70 passed/2 skipped;
+  SMALLCLAW_SMOKE=1 smoke 2 passed.
