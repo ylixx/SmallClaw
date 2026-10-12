@@ -20,7 +20,7 @@ export function registerSchedulesRoutes(app: express.Express, deps: SchedulesRou
 
 
 app.post('/api/schedules', (req: any, res: any) => {
-  const { name, pattern, prompt, timezone, delivery_channel, confirm } = req.body;
+  const { name, pattern, prompt, timezone, confirm } = req.body;
   
   // Require confirmation for create
   if (!isConfirmed(confirm)) {
@@ -62,7 +62,7 @@ app.post('/api/schedules', (req: any, res: any) => {
 
 
 app.post('/api/schedules', (req: any, res: any) => {
-  const { name, pattern, prompt, timezone, delivery_channel, confirm } = req.body;
+  const { name, pattern, prompt, timezone, confirm } = req.body;
   
   // Require confirmation for create
   if (!isConfirmed(confirm)) {

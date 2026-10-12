@@ -26,7 +26,6 @@ app.get('/api/agent/session/:id', (req, res) => {
   const sessionId = req.params.id;
   const history = getHistory(sessionId, 50);
   const userMessages = history.filter(h => h.role === 'user');
-  const aiMessages = history.filter(h => h.role === 'assistant');
   const recent = history.slice(-8).map(h => ({
     kind: h.role,
     status: 'completed',

@@ -126,11 +126,6 @@ app.delete('/api/skills/:id', (req, res) => {
 
 // ——— Orchestration Settings API ————————————————————————————————
 
-function clampInt(value: any, min: number, max: number, fallback: number): number {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return fallback;
-  return Math.min(max, Math.max(min, Math.floor(n)));
-}
 
 
 

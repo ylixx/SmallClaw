@@ -18,34 +18,6 @@ function loadWorkspaceFile(workspacePath: string, filename: string, maxChars: nu
   } catch { return ''; }
 }
 
-function readDailyMemoryContext(workspacePath: string, maxTokens: number = 800): string {
-  try {
-    const memDir = path.join(workspacePath, 'memory');
-    const today = new Date().toISOString().slice(0, 10);
-    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-    const sections: string[] = [];
-
-    for (const day of [yesterday, today]) {
-      const p = path.join(memDir, `${day}.md`);
-      if (!fs.existsSync(p)) continue;
-      const raw = fs.readFileSync(p, 'utf-8').trim();
-      if (!raw) continue;
-      sections.push(`### Memory: ${day}\n${raw}`);
-    }
-
-    if (!sections.length) return '';
-
-    let combined = sections.join('\n\n');
-    const charLimit = Math.floor(maxTokens * 3.5);
-    if (combined.length > charLimit) {
-      combined = combined.slice(-charLimit);
-    }
-    return `\n\n## Recent Memory Notes\n${combined}`;
-  } catch {
-    return '';
-  }
-}
-
 // ─── Tiered Prompt System ─────────────────────────────────────────────────────
 
 
@@ -79,16 +51,6 @@ const TOOL_BLOCKS: Record<string, string> = {
 };
 
 // Read memory categories for a specific file (for category-aware injection)
-function readMemoryCategories(workspacePath: string, file: 'user' | 'soul'): string[] {
-  const filename = file === 'user' ? 'USER.md' : 'SOUL.md';
-  const filePath = path.join(workspacePath, filename);
-  if (!fs.existsSync(filePath)) return [];
-  const content = fs.readFileSync(filePath, 'utf-8');
-  const matches = content.match(/^##\s+([^\n]+)/gm) || [];
-  return matches.map(m => m.replace(/^##\s+/, '').trim());
-}
-
-// Read memory snippets matching detected categories (for category-aware injection)
 function readMemorySnippets(workspacePath: string, categories: string[]): string {
   if (categories.length === 0) return '';
   const snippets: string[] = [];

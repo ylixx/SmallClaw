@@ -2,7 +2,7 @@
  * server-v2.ts (Phase 5d-7). deps: chat loop singletons (handleChat/addMessage);
  * flowsManager/flow-integration + realtime SSE + busy guard are imports. */
 import express from 'express';
-import { flowsManager, buildFlowDonePayload, listFlows, getFlowById, createFlow, updateFlow, deleteFlow } from './flow-integration';
+import { flowsManager, buildFlowDonePayload, createFlow, updateFlow, deleteFlow } from './flow-integration';
 import { createSSESender } from './realtime';
 import { getModelBusy, setModelBusy } from './model-busy-guard';
 
