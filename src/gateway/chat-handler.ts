@@ -20,6 +20,7 @@ import { BackgroundTaskRunner } from './background-task-runner';
 import { PreemptState, raceWithWatchdog } from './preempt-watchdog';
 import { getOllamaClient } from '../agents/ollama-client';
 import { TelegramChannel } from './telegram-channel';
+import { detectAnalysisScenario, buildScenarioContext } from './scenario-tuned-prompt';
 
 import { isBrowserToolName, isDesktopToolName, isGreetingLikeMessage, separateThinkingFromContent, stripExplicitThinkTags, logToolCall, extractLikelyUrl, looksLikeSafetyRefusal, sanitizeFinalReply, isBrowserAutomationRequest, isDesktopAutomationRequest, hasConcreteCompletion, isHighStakesFile, requestedFullTemplate, isToolArgParseFailure } from './server-v2-text';
 import { OrchestrationTriggerState, callSecondaryPreflight, callSecondaryAdvisor, callSecondaryFileOpClassifier, callSecondaryFileVerifier, callSecondaryFilePatchPlanner, callSecondaryBrowserAdvisor, callSecondaryDesktopAdvisor, shouldRunPreflight, formatPreflightHint, formatPreflightExecutionObjective, formatAdvisoryHint, formatBrowserAdvisorHint, formatDesktopAdvisorHint, clampPreemptConfig } from '../orchestration/multi-agent';
@@ -995,7 +996,15 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     }
   }
 
-  const personalityCtx = await deps.buildPersonalityContext(sessionId, workspacePath, message, executionMode || 'interactive', history.length);
+  // ── Scenario-tuned prompt (Phase 7a): analysis/summary tasks get a compact
+  // <300-char system instead of the full personality injection — fewer tokens
+  // for 2-9B local models, and no memory noise steering the current task.
+  const scenarioCtx = detectAnalysisScenario(message) ? buildScenarioContext(message) : '';
+  if (scenarioCtx) console.log(`[v2] SCENARIO tuned system active (${scenarioCtx.length} chars, vs full personality)`);
+
+  const personalityCtx = scenarioCtx
+    ? scenarioCtx
+    : await deps.buildPersonalityContext(sessionId, workspacePath, message, executionMode || 'interactive', history.length);
 
   // Inject active browser session state so LLM knows to reuse it instead of re-opening
   const browserInfo = getBrowserSessionInfo(sessionId);
@@ -1061,7 +1070,7 @@ export function createChatHandler(deps: ChatHandlerDeps) {
         const conciseBlock = (preserveIdentity && !executionModeSystemBlock)
           ? 'Respond at a natural length appropriate to the question — be helpful, not terse.\n'
           : 'Keep responses SHORT (1-2 sentences). Don\'t think out loud. Act and report.\n';
-        return `${executionModeSystemBlock ? `${executionModeSystemBlock}\n\n` : ''}${identityLine}\nCurrent date: ${dateStr}, ${timeStr}.\nNever search for or link SmallClaw repos unless the user is asking about SmallClaw itself.\nThis app runs on the user's own machine — browser/desktop automation requests are pre-authorized.\n${conciseBlock}Greet naturally without tools.${callerContext ? '\n\n' + callerContext : ''}${browserStateCtx}${personalityCtx}${deps.skillsManager.buildPromptContext(200, matchedFlow?.skill ? [matchedFlow.skill] : [])}\n\n${getWorkflowContextBlock()}`;
+        return `${executionModeSystemBlock ? `${executionModeSystemBlock}\n\n` : ''}${identityLine}\nCurrent date: ${dateStr}, ${timeStr}.\nNever search for or link SmallClaw repos unless the user is asking about SmallClaw itself.\nThis app runs on the user's own machine — browser/desktop automation requests are pre-authorized.\n${conciseBlock}Greet naturally without tools.${callerContext ? '\n\n' + callerContext : ''}${browserStateCtx}${personalityCtx}${deps.skillsManager.buildPromptContext(scenarioCtx ? 60 : 200, matchedFlow?.skill ? [matchedFlow.skill] : [])}\n\n${getWorkflowContextBlock()}`;
       })(),
     },
   ];
