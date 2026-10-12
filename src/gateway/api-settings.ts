@@ -10,6 +10,44 @@ import { startOAuthFlow, isConnected, clearTokens, loadTokens, exchangeManualCod
 import { LlamaServerManager } from './llama-server-manager';
 import { getConfigDirPath } from './config-bootstrap';
 
+
+export function getSearchSettingsPayload() {
+  const cm = getConfig();
+  const cfg = (cm.getConfig() as any).search || {};
+  // Resolve then mask — never send actual key values to the browser.
+  // Returns '••••••••' if a key is present (vault or plaintext), '' if not set.
+  const maskIfSet = (val: string | undefined): string => {
+    if (!val) return '';
+    const resolved = cm.resolveSecret(val);
+    return resolved ? '••••••••' : '';
+  };
+  return {
+    preferred_provider: cfg.preferred_provider || 'tavily',
+    search_rigor: cfg.search_rigor || 'verified',
+    tavily_api_key: maskIfSet(cfg.tavily_api_key),
+    google_api_key: maskIfSet(cfg.google_api_key),
+    google_cx: cfg.google_cx || '',   // CSE ID is not a secret
+    brave_api_key: maskIfSet(cfg.brave_api_key),
+  };
+}
+export function getThinkSettingsPayload() {
+  try {
+    const cfg = getConfig().getConfig() as any;
+    const activeId = String(cfg.llm?.active_preset || '').trim();
+    const preset = cfg.llm?.presets?.[activeId] || {};
+    const t = preset.think;
+    let enabled = false;
+    let level: 'low' | 'medium' | 'high' = 'medium';
+    if (t === true || t === 'high') { enabled = true; level = 'high'; }
+    else if (t === 'medium') { enabled = true; level = 'medium'; }
+    else if (t === 'low') { enabled = true; level = 'low'; }
+    return { success: true, active_preset: activeId, enabled, level };
+  } catch (err: any) {
+    return { success: false, error: err?.message || String(err) };
+  }
+}
+
+
 const CONFIG_DIR_PATH = getConfigDirPath();
 
 export function registerSettingsRoutes(app: express.Express): void {
@@ -337,24 +375,10 @@ app.post('/api/settings/hooks/test', async (req, res) => {
 
 // ─── Settings API ────────────────────────────────────────────────────────────────
 
+
+
 app.get('/api/settings/search', (_req, res) => {
-  const cm = getConfig();
-  const cfg = (cm.getConfig() as any).search || {};
-  // Resolve then mask — never send actual key values to the browser.
-  // Returns '••••••••' if a key is present (vault or plaintext), '' if not set.
-  const maskIfSet = (val: string | undefined): string => {
-    if (!val) return '';
-    const resolved = cm.resolveSecret(val);
-    return resolved ? '••••••••' : '';
-  };
-  res.json({
-    preferred_provider: cfg.preferred_provider || 'tavily',
-    search_rigor: cfg.search_rigor || 'verified',
-    tavily_api_key: maskIfSet(cfg.tavily_api_key),
-    google_api_key: maskIfSet(cfg.google_api_key),
-    google_cx: cfg.google_cx || '',   // CSE ID is not a secret
-    brave_api_key: maskIfSet(cfg.brave_api_key),
-  });
+  res.json(getSearchSettingsPayload());
 });
 
 app.post('/api/settings/search', (req, res) => {
@@ -499,21 +523,10 @@ app.post('/api/settings/model', (req, res) => {
 });
 
 // GET /api/settings/think — active model preset's thinking (think) config
+
+
 app.get('/api/settings/think', (_req, res) => {
-  try {
-    const cfg = getConfig().getConfig() as any;
-    const activeId = String(cfg.llm?.active_preset || '').trim();
-    const preset = cfg.llm?.presets?.[activeId] || {};
-    const t = preset.think;
-    let enabled = false;
-    let level: 'low' | 'medium' | 'high' = 'medium';
-    if (t === true || t === 'high') { enabled = true; level = 'high'; }
-    else if (t === 'medium') { enabled = true; level = 'medium'; }
-    else if (t === 'low') { enabled = true; level = 'low'; }
-    res.json({ success: true, active_preset: activeId, enabled, level });
-  } catch (err: any) {
-    res.json({ success: false, error: err?.message || String(err) });
-  }
+  res.json(getThinkSettingsPayload());
 });
 
 // POST /api/settings/think — set think for the active preset (takes effect

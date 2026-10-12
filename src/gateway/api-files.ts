@@ -12,6 +12,53 @@ import { setPlanModeEnabled, getPlanState, getPendingPlan, resolvePlanDecision }
 import { getOllamaClient } from '../agents/ollama-client';
 import { getOrchestrationConfig } from '../orchestration/multi-agent';
 
+
+export async function getStatusPayload() {
+  let connected = false;
+  try {
+    connected = await getOllamaClient().testConnection();
+  } catch {
+    connected = false; // a misconfigured provider must never crash the gateway
+  }
+  const rawCfg = getConfig().getConfig() as any;
+  const provider: string = rawCfg.llm?.provider || 'ollama';
+  const providerCfg = rawCfg.llm?.providers?.[provider] || {};
+  const activeModel: string = providerCfg.model || rawCfg.models?.primary || 'unknown';
+  const orchCfg = getOrchestrationConfig();
+  // Report the EFFECTIVE secondary model (follows the active preset, then the
+  // primary model) instead of the raw configured value, so the UI never shows
+  // a stale hard-coded model the user is not actually running.
+  let effectiveSecondary: { provider: string; model: string } | null = null;
+  if (orchCfg) {
+    const llm = rawCfg.llm || {};
+    const preset = llm.presets?.[String(llm.active_preset || '')];
+    const effProvider: string = preset?.provider || llm.provider || orchCfg.secondary.provider;
+    const effModel: string =
+      preset?.providers?.[preset.provider]?.model ||
+      providerCfg.model ||
+      rawCfg.models?.primary ||
+      orchCfg.secondary.model;
+    effectiveSecondary = { provider: String(effProvider), model: String(effModel) };
+  }
+  return {
+    status: 'ok', version: 'v2-tools', ollama: connected,
+    // providerOnline: connection state of the ACTIVE provider (the legacy
+    // "ollama" field above conflated llama.cpp/ollama states under one name).
+    providerOnline: connected,
+    // gateway: the address this gateway is actually listening on.
+    gateway: `http://127.0.0.1:${rawCfg.gateway?.port ?? 18789}`,
+    provider,
+    currentModel: activeModel,
+    workspace: (getConfig().getConfig() as any).workspace?.path || '',
+    search: rawCfg.search?.google_api_key ? 'google' : (rawCfg.search?.tavily_api_key ? 'tavily' : 'none'),
+    orchestration: orchCfg ? {
+      enabled: orchCfg.enabled,
+      secondary: effectiveSecondary,
+    } : null,
+  };
+}
+
+
 export function registerFileRoutes(app: express.Express): void {
 function sanitizeUploadName(raw: unknown): string | null {
   const value = String(raw ?? '').trim();
@@ -211,48 +258,10 @@ app.get('/api/artifacts', requireGatewayAuth, (req, res) => {
   res.json({ ok: true, artifacts: listArtifacts(sessionId) });
 });
 
+
+
 app.get('/api/status', async (_req, res) => {
-  let connected = false;
-  try {
-    connected = await getOllamaClient().testConnection();
-  } catch {
-    connected = false; // a misconfigured provider must never crash the gateway
-  }
-  const rawCfg = getConfig().getConfig() as any;
-  const provider: string = rawCfg.llm?.provider || 'ollama';
-  const providerCfg = rawCfg.llm?.providers?.[provider] || {};
-  const activeModel: string = providerCfg.model || rawCfg.models?.primary || 'unknown';
-  const orchCfg = getOrchestrationConfig();
-  // Report the EFFECTIVE secondary model (follows the active preset, then the
-  // primary model) instead of the raw configured value, so the UI never shows
-  // a stale hard-coded model the user is not actually running.
-  let effectiveSecondary: { provider: string; model: string } | null = null;
-  if (orchCfg) {
-    const llm = rawCfg.llm || {};
-    const preset = llm.presets?.[String(llm.active_preset || '')];
-    const effProvider: string = preset?.provider || llm.provider || orchCfg.secondary.provider;
-    const effModel: string =
-      preset?.providers?.[preset.provider]?.model ||
-      providerCfg.model ||
-      rawCfg.models?.primary ||
-      orchCfg.secondary.model;
-    effectiveSecondary = { provider: String(effProvider), model: String(effModel) };
-  }
-  res.json({
-    status: 'ok', version: 'v2-tools', ollama: connected,
-    // providerOnline: connection state of the ACTIVE provider (the legacy
-    // "ollama" field above conflated llama.cpp/ollama states under one name).
-    providerOnline: connected,
-    // gateway: the address this gateway is actually listening on.
-    gateway: `http://127.0.0.1:${rawCfg.gateway?.port ?? 18789}`,
-    provider,
-    currentModel: activeModel,
-    workspace: (getConfig().getConfig() as any).workspace?.path || '',
-    search: rawCfg.search?.google_api_key ? 'google' : (rawCfg.search?.tavily_api_key ? 'tavily' : 'none'),
-    orchestration: orchCfg ? {
-      enabled: orchCfg.enabled,
-      secondary: effectiveSecondary,
-    } : null,
-  });
+  const payload = await getStatusPayload();
+  res.json(payload);
 });
 }

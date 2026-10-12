@@ -13,31 +13,39 @@
   var applying = false;
   var CJK = /[\u4e00-\u9fff]/;
 
+  /* perf: compile rule regexes once + cache translate results */
+  var RULES_RE = [];
+  for (var _ri = 0; _ri < RULES.length; _ri++) RULES_RE.push(new RegExp(RULES[_ri].s));
+  var CACHE = Object.create(null);
+  var CACHE_CAP = 3000;
+  var CACHE_KEYS = [];
+
   function norm(s) { return s.replace(/\s+/g, " ").trim(); }
 
   function translate(s) {
     if (!s || s.length > 4000 || !/[A-Za-z]/.test(s)) return null;
+    if (Object.prototype.hasOwnProperty.call(CACHE, s)) return CACHE[s];
     var lead = s.match(/^\s*/)[0];
     var trail = s.match(/\s*$/)[0];
     var t = norm(s);
-    if (!t) return null;
+    if (!t) { CACHE[s] = null; return null; }
     var hit = DICT[t];
-    if (hit) return lead + hit + trail;
+    if (hit) return store(s, lead + hit + trail);
     var i, p;
     for (i = 0; i < PREFIX.length; i++) {
       p = PREFIX[i];
       if (t.length > p.length && t.lastIndexOf(p, 0) === 0 && DICT[p]) {
-        return lead + DICT[p] + t.slice(p.length) + trail;
+        return store(s, lead + DICT[p] + t.slice(p.length) + trail);
       }
     }
     if (t.length < 400) {
       for (i = 0; i < RULES.length; i++) {
         var R = RULES[i];
         if (t.length + 60 < R.w) continue;
-        var re = new RegExp(R.s);
+        var re = RULES_RE[i];
         if (re.test(t)) {
           var out = t.replace(re, R.r);
-          if (out && out !== t) return lead + out + trail;
+          if (out && out !== t) return store(s, lead + out + trail);
         }
       }
     }
@@ -50,9 +58,20 @@
         if (o.lastIndexOf(p, 0) === 0) { o = rep + o.slice(p.length); changed = true; }
         else if (o.length > p.length && o.slice(-p.length) === p) { o = o.slice(0, -p.length) + rep; changed = true; }
       }
-      if (changed && o !== t) return lead + o + trail;
+      if (changed && o !== t) return store(s, lead + o + trail);
     }
-    return null;
+    return store(s, null);
+  }
+
+  /* bounded result cache: null hits are cached too (avoids re-scanning unchanged text) */
+  function store(k, v) {
+    if (CACHE_KEYS.length >= CACHE_CAP) {
+      var old = CACHE_KEYS.shift();
+      delete CACHE[old];
+    }
+    CACHE_KEYS.push(k);
+    CACHE[k] = v;
+    return v;
   }
 
   var SKIP = { SCRIPT: 1, STYLE: 1, TEXTAREA: 1, PRE: 1, CODE: 1, NOSCRIPT: 1 };
@@ -82,31 +101,36 @@
 
   var ATTRS = ["placeholder", "title", "aria-label", "alt"];
 
-  function trAllAttrs(el) {
-    if (inNoZone(el)) return;
+  function trAttrsOf(el) {
+    if (!el || el.nodeType !== 1 || inNoZone(el)) return;
     for (var a = 0; a < ATTRS.length; a++) trAttr(el, ATTRS[a]);
-    var els = el.querySelectorAll ? el.querySelectorAll("[placeholder],[title],[aria-label],[alt]") : [];
-    for (var i = 0; i < els.length; i++) {
-      var e = els[i];
-      if (inNoZone(e)) continue;
-      for (var b = 0; b < ATTRS.length; b++) trAttr(e, ATTRS[b]);
-    }
   }
 
+  /* single-pass traversal: translate text nodes and element attrs in one tree walk */
   function walk(el) {
     if (!el || el.nodeType !== 1 || inNoZone(el)) return;
-    trAllAttrs(el);
-    var walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, {
+    var walker = document.createTreeWalker(el, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
       acceptNode: function (n) {
-        if (!n.nodeValue || !n.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
-        var p = n.parentElement;
-        if (p && SKIP[p.tagName]) return NodeFilter.FILTER_REJECT;
-        if (p && inNoZone(p)) return NodeFilter.FILTER_REJECT;
-        return NodeFilter.FILTER_ACCEPT;
+        if (n.nodeType === 3) {
+          if (!n.nodeValue || !n.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+          var p = n.parentElement;
+          if (p && SKIP[p.tagName]) return NodeFilter.FILTER_REJECT;
+          if (p && inNoZone(p)) return NodeFilter.FILTER_REJECT;
+          return NodeFilter.FILTER_ACCEPT;
+        }
+        if (n.nodeType === 1) {
+          if (SKIP[n.tagName]) return NodeFilter.FILTER_REJECT;
+          if (inNoZone(n)) return NodeFilter.FILTER_REJECT;
+          return NodeFilter.FILTER_ACCEPT;
+        }
+        return NodeFilter.FILTER_REJECT;
       }
     });
     var n;
-    while ((n = walker.nextNode())) trNode(n);
+    while ((n = walker.nextNode())) {
+      if (n.nodeType === 3) trNode(n);
+      else trAttrsOf(n);
+    }
   }
 
   function fullPass() {

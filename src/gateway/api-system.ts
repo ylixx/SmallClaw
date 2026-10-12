@@ -26,8 +26,7 @@ function getCpuPercent(): number {
   return Math.round(100 * (1 - idleDiff / totalDiff));
 }
 
-export function registerSystemRoutes(app: express.Express): void {
-  app.get('/api/system-stats', async (_req, res) => {
+export async function getSystemStatsPayload() {
   const totalMem = osModule.totalmem();
   const freeMem = osModule.freemem();
   const usedMem = totalMem - freeMem;
@@ -83,7 +82,7 @@ export function registerSystemRoutes(app: express.Express): void {
     gpuStats = { available: true, gpu_util_percent: 0, vram_used_percent: 0, vram_used_gb: 0, vram_total_gb: 0, name: gpuInfo.name ?? 'Apple Silicon' };
   }
 
-  res.json({
+  return {
     system: {
       cpu_percent: cpuPercent,
       memory_percent: memPercent,
@@ -96,6 +95,12 @@ export function registerSystemRoutes(app: express.Express): void {
     active_provider: (getConfig().getConfig() as any).llm?.provider || 'ollama',
     active_model: (() => { const c = getConfig().getConfig() as any; const p = c.llm?.provider || 'ollama'; return c.llm?.providers?.[p]?.model || c.models?.primary || 'unknown'; })(),
     timestamp: new Date().toISOString(),
-  });
+  };
+}
+
+export function registerSystemRoutes(app: express.Express): void {
+  app.get('/api/system-stats', async (_req, res) => {
+  const payload = await getSystemStatsPayload();
+  res.json(payload);
 });
 }

@@ -6,6 +6,25 @@ import { getConfig } from '../config/config';
 import { getOrchestrationConfig, clampOrchestrationConfig, clampPreemptConfig, checkOrchestrationEligibility } from '../orchestration/multi-agent';
 import { getOrchestrationSessionStats } from './chat-handler';
 
+
+export function getOrchestrationConfigForApi() {
+  const raw = (getConfig().getConfig() as any).orchestration || {};
+  // Use the single-source-of-truth clamp utility — no inline duplication.
+  const clamped = clampOrchestrationConfig(raw);
+  const preempt = clampPreemptConfig(raw.preempt || {});
+  return {
+    enabled: raw.enabled === true,
+    secondary: {
+      provider: String(raw.secondary?.provider || '').trim(),
+      model: String(raw.secondary?.model || '').trim(),
+    },
+    ...clamped,
+    preempt,
+    subagent_mode: raw.subagent_mode === true,
+  };
+}
+
+
 export interface SkillsRouteDeps {
   skillsManager: {
     getAll: () => any[];
@@ -129,22 +148,7 @@ app.delete('/api/skills/:id', (req, res) => {
 
 
 
-function getOrchestrationConfigForApi() {
-  const raw = (getConfig().getConfig() as any).orchestration || {};
-  // Use the single-source-of-truth clamp utility — no inline duplication.
-  const clamped = clampOrchestrationConfig(raw);
-  const preempt = clampPreemptConfig(raw.preempt || {});
-  return {
-    enabled: raw.enabled === true,
-    secondary: {
-      provider: String(raw.secondary?.provider || '').trim(),
-      model: String(raw.secondary?.model || '').trim(),
-    },
-    ...clamped,
-    preempt,
-    subagent_mode: raw.subagent_mode === true,
-  };
-}
+
 
 
 

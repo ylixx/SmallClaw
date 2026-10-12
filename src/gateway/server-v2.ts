@@ -53,6 +53,7 @@ import {BackgroundTaskRunner} from './background-task-runner';
 
 
 import {registerSystemRoutes} from './api-system';
+import {registerBootstrapRoutes} from './api-bootstrap';
 
 import {registerMiscRoutes} from './api-misc';
 import {registerMcpRoutes} from './api-mcp';
@@ -621,6 +622,7 @@ registerSchedulesRoutes(app, { cronScheduler });
 
 registerSystemRoutes(app);
 
+registerBootstrapRoutes(app);
 
 
 
