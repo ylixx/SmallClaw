@@ -15,7 +15,7 @@ set "P1_MODEL=D:\models\Qwen3.8-9B-heretic-uncensored.Q4_K_M\Qwen3.8-9B-heretic-
 set "P1_CTX=16384"
 set "P1_ALIAS=Qwen3.8-9B-heretic-uncensored.Q4_K_M"
 rem 需要图片理解能力时，取消下面一行的注释（注意显存占用会增加）：
-rem set "P1_MMPROJ=D:\models\Qwen3.8-9B-heretic-uncensored.Q4_K_M\mmproj-Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-BF16.gguf"
+set "P1_MMPROJ=D:\models\Qwen3.8-9B-heretic-uncensored.Q4_K_M\mmproj-Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-BF16.gguf"
 
 rem ---- 预设 2：MiniCPM5-2B ----
 set "P2_ID=minicpm5"
