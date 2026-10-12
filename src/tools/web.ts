@@ -292,48 +292,6 @@ function cleanClaimText(claim: string): string {
     .slice(0, 220);
 }
 
-async function buildEventOutcomeAnswer(query: string, ranked: SearchResultItem[]): Promise<string> {
-  const filtered = ranked.filter(r => !isLowValueResult(r));
-  const tiered = applySourceTierPolicy(query, filtered);
-  const clustered = selectDominantStoryCluster(query, tiered);
-  const gated = clustered.filter(r => relevanceScore(query, `${r.title} ${r.snippet}`) >= 2);
-  const picked = (gated.length ? gated : clustered).slice(0, 4);
-  if (!picked.length) return '';
-
-  const evidence: Array<{ claim: string; source: number }> = [];
-  for (let i = 0; i < picked.length; i++) {
-    const r = picked[i];
-    const fromSnippet = extractEvidenceSentences(query, r.snippet, 2);
-    for (const c of fromSnippet) evidence.push({ claim: c, source: i + 1 });
-    if (evidence.length >= 8) continue;
-    try {
-      const clean = await fetchCleanArticle(r.url, 4500);
-      const fromPage = extractEvidenceSentences(query, clean, 2);
-      for (const c of fromPage) evidence.push({ claim: c, source: i + 1 });
-    } catch {
-      // best effort
-    }
-  }
-
-  const dedup = new Set<string>();
-  const top: Array<{ claim: string; source: number }> = [];
-  for (const e of evidence) {
-    const cleaned = cleanClaimText(e.claim);
-    if (!cleaned || cleaned.length < 20) continue;
-    const k = cleaned.toLowerCase().replace(/[^a-z0-9\s]/g, '').slice(0, 140);
-    if (dedup.has(k)) continue;
-    dedup.add(k);
-    top.push({ claim: cleaned, source: e.source });
-    if (top.length >= 3) break;
-  }
-
-  if (!top.length) return '';
-  const first = top[0];
-  const summaryLine = `Answer: ${first.claim} [${first.source}]`;
-  const bullets = top.slice(1).map(t => `- ${t.claim} [${t.source}]`).join('\n');
-  const sources = picked.slice(0, 3).map((r, i) => `[${i + 1}] ${r.url}`).join(' ');
-  return `${summaryLine}${bullets ? `\n${bullets}` : ''}\nSources: ${sources}`;
-}
 
 async function buildStructuredEventBundle(query: string, ranked: SearchResultItem[]): Promise<{
   answer: string;

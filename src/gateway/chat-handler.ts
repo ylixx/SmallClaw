@@ -21,7 +21,7 @@ import { PreemptState, raceWithWatchdog } from './preempt-watchdog';
 import { getOllamaClient } from '../agents/ollama-client';
 import { TelegramChannel } from './telegram-channel';
 
-import { isBrowserToolName, isDesktopToolName, isGreetingLikeMessage, isExecutionLikeRequest, separateThinkingFromContent, stripExplicitThinkTags, logToolCall, extractLikelyUrl, looksLikeSafetyRefusal, sanitizeFinalReply, isBrowserAutomationRequest, isDesktopAutomationRequest, hasConcreteCompletion, isHighStakesFile, requestedFullTemplate, isToolArgParseFailure } from './server-v2-text';
+import { isBrowserToolName, isDesktopToolName, isGreetingLikeMessage, separateThinkingFromContent, stripExplicitThinkTags, logToolCall, extractLikelyUrl, looksLikeSafetyRefusal, sanitizeFinalReply, isBrowserAutomationRequest, isDesktopAutomationRequest, hasConcreteCompletion, isHighStakesFile, requestedFullTemplate, isToolArgParseFailure } from './server-v2-text';
 import { OrchestrationTriggerState, callSecondaryPreflight, callSecondaryAdvisor, callSecondaryFileOpClassifier, callSecondaryFileVerifier, callSecondaryFilePatchPlanner, callSecondaryBrowserAdvisor, callSecondaryDesktopAdvisor, shouldRunPreflight, formatPreflightHint, formatPreflightExecutionObjective, formatAdvisoryHint, formatBrowserAdvisorHint, formatDesktopAdvisorHint, clampPreemptConfig } from '../orchestration/multi-agent';
 import { FileOpProgressWatchdog, FileOpType, classifyFileOpType, resolveFileOpSettings, isFileMutationTool, isFileCreateTool, extractFileToolTarget, estimateFileToolChange, canPrimaryApplyFileTool, shouldVerifyFileTurn, isSmallSuggestedFix, buildFailureSignature, buildPatchSignature, clearFileOpCheckpoint, loadFileOpCheckpoint, saveFileOpCheckpoint } from '../orchestration/file-op-v2';
 import { getBrowserSessionInfo, getBrowserAdvisorPacket } from './browser-tools';
@@ -643,7 +643,6 @@ export function createChatHandler(deps: ChatHandlerDeps) {
   const allToolResults: ToolResult[] = [];
   let toolArgParseRetries = 0;
   let allThinking = '';
-  let preflightRoute: 'primary_direct' | 'primary_with_plan' | 'secondary_chat' | 'background_task' | null = null;
   let preflightReasonForTurn = '';
   let continuationNudges = 0;
   const MAX_CONTINUATION_NUDGES = 2;
@@ -863,7 +862,6 @@ export function createChatHandler(deps: ChatHandlerDeps) {
   let fileOpPrimaryWriteChars = 0;
   let fileOpHadCreate = false;
   let fileOpHadToolFailure = false;
-  let fileOpPrimaryStallPromoted = false;
   let fileOpLastFailureSignature = '';
   const fileOpPatchSignatures: string[] = [];
   const fileOpWatchdog = new FileOpProgressWatchdog(fileOpSettings.watchdog_no_progress_cycles);
@@ -1411,7 +1409,6 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     });
 
     if (preflight) {
-      preflightRoute = preflight.route;
       preflightReasonForTurn = String(preflight.reason || '').trim();
       orchestrationLog.push(`[preflight:${preflight.route}] ${preflight.reason || 'no reason'}`);
       console.log(
@@ -1934,7 +1931,6 @@ export function createChatHandler(deps: ChatHandlerDeps) {
     // Primary only needs: minimal system + original goal + last 4 tool acks + this directive.
     // Wipe now, before pushing the hint pair, so the hint ends up at the bottom cleanly.
     if (multiAgentActive) {
-      const systemMsg = messages[0]; // always keep system at [0]
       // Stripped executor system — no editing rules, no identity prose, just tool list + 3 rules
       const strippedSystem = {
         role: 'system',
@@ -2159,7 +2155,6 @@ RULES:
       || /\b(landing page|full html|multi.?section|multiple sections|panels?|sections?.+panels?|panels?.+sections?|full.?page|whole page|full.?site|complete.?page)\b/i.test(message);
     if (looksLarge) {
       fileOpOwner = 'secondary';
-      fileOpPrimaryStallPromoted = true;
       sendSSE('info', {
         message: 'FILE_OP v2: large FILE_CREATE detected upfront — routing directly to secondary (skipping primary generation).',
       });
@@ -2359,7 +2354,6 @@ RULES:
       };
       messages.push(syntheticAssistant);
 
-      let roundHadProgressSynthetic = false;
       for (const call of syntheticCalls) {
         const toolCallId = String((call as any)?.id || '').trim();
         const toolName = call.function?.name || 'unknown';
@@ -2371,7 +2365,6 @@ RULES:
         allToolResults.push(toolResult);
         logToolCall(workspacePath, toolName, toolArgs, toolResult.result, toolResult.error);
         trackFileOpMutation(toolName, toolArgs, toolResult, 'secondary');
-        if (!toolResult.error) roundHadProgressSynthetic = true;
 
         orchestrationLog.push(
           toolResult.error
@@ -2503,18 +2496,6 @@ RULES:
       // In multi-agent mode, disable thinking for browser ops — the secondary AI
       // holds all context and issues exact directives; the primary just executes.
       // Thinking during browser ops burns the full stall threshold (110s) for no gain.
-      const isActiveAutomationOp = multiAgentActive && (
-        fileOpType === 'BROWSER_OP'
-        || fileOpType === 'DESKTOP_OP'
-        || browserContinuationPending
-        || browserAdvisorRoute !== null
-        || desktopContinuationPending
-        || desktopAdvisorRoute !== null
-        || allToolResults.some(r =>
-          typeof r.name === 'string'
-          && (r.name.startsWith('browser_') || r.name.startsWith('desktop_')),
-        )
-      );
       // Thinking is ONLY enabled when the active model preset explicitly asks
       // for it. Auto-enabling for "multi-agent" turns broke MiniCPM5-2B (a
       // reasoning model): with think=true it burns its whole output budget on
@@ -2575,12 +2556,6 @@ RULES:
           ) {
             sendSSE('info', {
               message: `FILE_OP v2: stall detected during ${fileOpType} after ${Math.round(watchdogOutcome.elapsedMs / 1000)}s — promoting immediately to secondary (no Ollama restart).`,
-            });
-            fileOpOwner = 'secondary';
-            fileOpPrimaryStallPromoted = true;
-            maybeSaveFileOpCheckpoint({
-              phase: 'repair',
-              next_action: 'stall promotion to secondary patch planning',
             });
             const patchPlan = await callSecondaryFilePatchPlanner({
               userMessage: message,
@@ -2814,10 +2789,6 @@ RULES:
 
       const rawAssistantText = String(response.content || '').trim();
       const candidateText = String(reply || rawAssistantText || '').trim();
-      const isExecutionTurn =
-        preflightRoute === 'primary_with_plan'
-        || allToolResults.length > 0
-        || isExecutionLikeRequest(message);
       const lastToolFailed = allToolResults.length > 0 && allToolResults[allToolResults.length - 1].error;
       // DISABLED: Force continuation was causing excessive unnecessary tool calls
       // Users should get immediate final response, not artificial padding

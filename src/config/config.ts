@@ -1,8 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { AgentDefinition, SmallClawConfig } from '../types.js';
-import { getVault, scrubSecrets } from '../security/vault.js';
+import {AgentDefinition, SmallClawConfig} from '../types.js';
+import {getVault} from '../security/vault.js';
 
 function migrateLegacyDir(legacyDir: string, targetDir: string): void {
   try {

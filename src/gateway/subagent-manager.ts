@@ -10,8 +10,7 @@
 
 import fs from 'fs';
 import path from 'path';
-import { TaskRecord, createTask } from './task-store';
-import { BackgroundTaskRunner } from './background-task-runner';
+import {createTask} from './task-store';
 
 export interface SubagentDefinition {
   id: string;
@@ -77,7 +76,7 @@ export class SubagentManager {
   private storePath: string;
   private broadcastFn?: (data: any) => void;
 
-  constructor(workspacePath: string, broadcastFn?: (data: any) => void) {
+  constructor(workspacePath: string, _broadcastFn?: (data: any) => void) {
     this.storePath = path.join(workspacePath, SUBAGENT_STORE_DIR);
     if (!fs.existsSync(this.storePath)) {
       fs.mkdirSync(this.storePath, { recursive: true });

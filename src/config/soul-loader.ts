@@ -313,7 +313,7 @@ export function buildSystemPrompt(options?: BuildSystemPromptOptions): string {
     ? PROMPT_BUDGET_MINIMAL
     : PROMPT_BUDGET_FULL;
   const soul = loadSoul();
-  const memory = loadMemory();
+  const _memory = loadMemory();
   const allSkills = loadSkills();
 
   // Skills are opt-in per turn to keep context tight on small models.

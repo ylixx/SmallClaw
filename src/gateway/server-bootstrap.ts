@@ -83,10 +83,10 @@ const credentialHandler = initCredentialHandler(encryptionKey);
 const verificationFlowManager = getVerificationFlowManager();
 getErrorAnalyzer();
 getErrorHistory();
-const retryStrategy = getRetryStrategy();
-const visualErrorDetector = getVisualErrorDetector();
-const errorAudit = getErrorAudit(process.env.ERROR_AUDIT_LOG_PATH || path.join(deps.configDirPath, 'logs', 'audit.log'));
-const contextInjectionManager = getContextInjectionManager();
+getRetryStrategy();
+getVisualErrorDetector();
+getErrorAudit(process.env.ERROR_AUDIT_LOG_PATH || path.join(deps.configDirPath, 'logs', 'audit.log'));
+getContextInjectionManager();
 
 console.log('[Server] ✅ Advanced error response systems initialized');
 console.log(`[Server] - Credential Handler: ${encryptionKey.substring(0, 8)}...`);

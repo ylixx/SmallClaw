@@ -9,7 +9,6 @@
 
 import express from 'express';
 import cors from 'cors';
-import http from 'http';
 import path from 'path';
 import fs from 'fs';
 
@@ -21,7 +20,7 @@ import {broadcastWS} from './realtime';
 
 
 import {createExecuteTool, createTaskControlHandler} from './chat-execution';
-import {createChatHandler, type SubagentProfile, probeLlamaNctx, resolveHistoryBudgetTokens} from './chat-handler';
+import {createChatHandler, probeLlamaNctx} from './chat-handler';
 
 
 
@@ -29,13 +28,12 @@ import {addMessage, getHistory, setWorkspace, clearHistory, cleanupSessions} fro
 import {hookBus} from './hooks';
 
 import {runBootMd} from './boot';
-import {resolveRunCommand} from './run-command-router';
 
 import {TaskState} from './task-runner';
 
 
 
-import {getBrowserAdvisorPacket} from './browser-tools';
+
 
 
 
@@ -77,8 +75,8 @@ import {internalAgentTaskRouter} from './internal-agent-task';
 
 import {normalizeCwd, validateWorkspacePath, getConfigDirPath, derivePort, deriveHost, repairLegacyTaskChannelMetadata, KNOWLEDGE_DIR} from './config-bootstrap';
 
-import {getModelTier, applyToolCompactness} from './tool-registry';
-import {getModelBusy, setModelBusy} from './model-busy-guard';
+import {getModelTier} from './tool-registry';
+import {getModelBusy} from './model-busy-guard';
 
 // ─── Config ────────────────────────────────────────────────────────────────────
 // cwd 规范化 / 配置加载 / workspace 路径校验 / 端口推导 已下沉到 config-bootstrap.ts
@@ -112,9 +110,6 @@ const activeTasks: Map<string, TaskState> = new Map();
 
 
 // Safe commands allowlist for run_command
-const isWindows = process.platform === 'win32';
-const isMac = process.platform === 'darwin';
-const isLinux = process.platform === 'linux';
 
 // run_command routing now lives in ./run-command-router.ts - extracted so the
 // allowlist logic can be unit-tested without booting the whole gateway.
@@ -124,13 +119,7 @@ const isLinux = process.platform === 'linux';
 // src/tools/shell.ts already implements a full shell (PTY + workspace
 
 
-// ── Sub-Agent Tool Profiles ────────────────────────────────────────────────────────────
-const TOOL_PROFILES: Record<SubagentProfile, Set<string>> = {
-  file_editor:  new Set(['read_file', 'create_file', 'replace_lines', 'insert_after', 'delete_lines', 'find_replace', 'list_files']),
-  researcher:   new Set(['read_file', 'list_files', 'web_search', 'web_fetch']),
-  shell_runner: new Set(['run_command', 'read_file', 'list_files']),
-  reader_only:  new Set(['read_file', 'list_files']),
-};
+// ── Sub-Agent Tool Profiles (moved to server-v2-text.ts as TOOL_PROFILES) ───────────────
 
 // ─── Model-Busy Guard (state owned by model-busy-guard.ts; see getModelBusy/setModelBusy) ──
 
@@ -491,11 +480,7 @@ async function resolveModelTier(): Promise<ModelTier> {
 // for the advisor's directive telling it what to do next.
 
 
-function goalIsInteractiveAction(goal: string): boolean {
-  // Returns true when the user's goal is to DO something on the page (post, click, fill, submit)
-  // rather than READ or RESEARCH. Used to skip feed-collection mode on social feeds.
-  return /\b(post|tweet|retweet|reply|send|publish|submit|compose|write.*tweet|make.*post|create.*post|type.*message|fill|click|navigate to|go to|open composer|draft)\b/i.test(String(goal || ''));
-}
+// (goalIsInteractiveAction moved to server-v2-text.ts)
 
 
 
@@ -686,7 +671,7 @@ console.log('[InternalAgentTask] Endpoint mounted at POST /internal/agent-task')
 
 app.get('*', (_req, res) => { res.sendFile(path.join(webUiPath, 'index.html')); });
 
-const { server, shutdown: shutdownGateway } = createServerLifecycle({
+const { server } = createServerLifecycle({
   app,
   host: HOST,
   port: PORT,

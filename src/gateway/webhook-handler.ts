@@ -49,7 +49,6 @@ export interface WebhookDeps {
 // Per-IP failed auth attempt tracking (brute-force rate limiting)
 const authFailures = new Map<string, { count: number; lockedUntil: number }>();
 const AUTH_RATE_LIMIT_MAX = 5;
-const AUTH_RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
 const AUTH_RATE_LIMIT_LOCKOUT_MS = 15 * 60 * 1000; // 15 minute lockout
 
 // ─── Config helpers ────────────────────────────────────────────────────────────
@@ -218,7 +217,6 @@ export function buildWebhookRouter(deps: WebhookDeps): express.Router {
       message,
       name,
       sessionKey,
-      wakeMode,
       deliver = true,
       channel = 'last',
       model,

@@ -108,7 +108,7 @@ export function setupErrorResponseEndpoint(app: Express): void {
     }
 
     const pendingId = `${taskId}_${Date.now()}`;
-    const responsePromise = new Promise<any>((resolve, reject) => {
+    void new Promise<any>((resolve, reject) => {
       const timeoutHandle = setTimeout(() => {
         pendingErrors.delete(pendingId);
         reject(new Error('User response timeout'));
@@ -258,7 +258,7 @@ export function setupErrorResponseEndpoint(app: Express): void {
   app.get('/api/error-response/stats', (_req: Request, res: Response) => {
     const analyzer = getErrorAnalyzer();
     const history = getErrorHistory();
-    const verificationFlowManager = getVerificationFlowManager();
+    getVerificationFlowManager();
 
     return res.json({
       analyzer: analyzer.getStats(),

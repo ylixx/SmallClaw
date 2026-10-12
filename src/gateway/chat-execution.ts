@@ -7,42 +7,30 @@
  * createExecuteTool(deps) to avoid a circular import (both close over
  * handleChat / telegramChannel which stay in the composition root).
  */
-import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
-import { getConfig } from '../config/config';
-import { getOllamaClient } from '../agents/ollama-client';
-import {
-  isPlanGateActive, isPlanModeEnabledFor, isPlanTool, getPlanState, getPendingPlan,
-  planGateMessage, awaitPlanDecision, PLAN_READONLY_TOOLS,
-} from './plan-mode';
-import {
-  executeOfficeTool, isOfficeReadFile, isOfficeWriteFile,
-} from '../tools/office';
-import { executeImageTool } from '../tools/image';
-import { executeFileBatchTool } from '../tools/file-batch';
-import { executeKnowledgeTool } from '../tools/knowledge';
-import {
-  browserOpen, browserSnapshot, browserClick, browserFill, browserPressKey,
-  browserWait, browserScroll, browserClose,
-} from './browser-tools';
-import {
-  desktopScreenshot, desktopFindWindow, desktopFocusWindow, desktopClick, desktopDrag,
-  desktopWait, desktopType, desktopPressKey, desktopGetClipboard, desktopSetClipboard,
-} from './desktop-tools';
-import { getMCPManager } from './mcp-manager';
-import { SubagentManager } from './subagent-manager';
-import { broadcastWS } from './realtime';
-import { resolveRunCommand, suggestRunCommandFix, SAFE_COMMANDS, ARG_SAFE_COMMANDS } from './run-command-router';
-import { webSearch, webFetch } from './server-v2-search';
-import { noteToolFailure, resetToolFailure } from './request-guards';
-import { checkToolDenied, agentShellEnabled, collectMcpToolEntries } from './tool-registry';
-import { executeAgentBuilderTool } from './agent-builder-integration';
-import type { CronScheduler } from './cron-scheduler';
+import {getConfig} from '../config/config';
 
-import { ACTIVE_TASK_STATUSES, getTaskScopeBuckets, summarizeTaskRecord, parseTaskStatusFilter } from './task-integration';
-import { loadTask, saveTask, createTask, updateTaskStatus, appendJournal, updateResumeContext, deleteTask, type TaskRecord, type TaskStatus } from './task-store';
-import { BackgroundTaskRunner } from './background-task-runner';
+import {isPlanGateActive, isPlanModeEnabledFor, isPlanTool, getPlanState, getPendingPlan, planGateMessage, awaitPlanDecision, PLAN_READONLY_TOOLS} from './plan-mode';
+import {executeOfficeTool, isOfficeReadFile, isOfficeWriteFile} from '../tools/office';
+import {executeImageTool} from '../tools/image';
+import {executeFileBatchTool} from '../tools/file-batch';
+import {executeKnowledgeTool} from '../tools/knowledge';
+import {browserOpen, browserSnapshot, browserClick, browserFill, browserPressKey, browserWait, browserScroll, browserClose} from './browser-tools';
+import {desktopScreenshot, desktopFindWindow, desktopFocusWindow, desktopClick, desktopDrag, desktopWait, desktopType, desktopPressKey, desktopGetClipboard, desktopSetClipboard} from './desktop-tools';
+import {getMCPManager} from './mcp-manager';
+import {SubagentManager} from './subagent-manager';
+import {broadcastWS} from './realtime';
+import {resolveRunCommand, suggestRunCommandFix, SAFE_COMMANDS, ARG_SAFE_COMMANDS} from './run-command-router';
+import {webSearch, webFetch} from './server-v2-search';
+import {noteToolFailure, resetToolFailure} from './request-guards';
+import {checkToolDenied, agentShellEnabled, collectMcpToolEntries} from './tool-registry';
+import {executeAgentBuilderTool} from './agent-builder-integration';
+import type {CronScheduler} from './cron-scheduler';
+
+import {ACTIVE_TASK_STATUSES, getTaskScopeBuckets, summarizeTaskRecord, parseTaskStatusFilter} from './task-integration';
+import {loadTask, saveTask, updateTaskStatus, appendJournal, updateResumeContext, deleteTask, type TaskRecord, type TaskStatus} from './task-store';
+import {BackgroundTaskRunner} from './background-task-runner';
 
 // Last-filename memory shared by executeToolImpl's file tools (moved with it).
 const lastFilenameUsed: Map<string, string> = new Map();
@@ -388,7 +376,7 @@ export async function executeToolImpl(name: string, args: any, workspacePath: st
         let stderr = '';
         let timedOut = false;
         try {
-          await new Promise<void>((resolve, reject) => {
+          await new Promise<void>((resolve, _reject) => {
             execFile(
               bin,
               [tmpFile],

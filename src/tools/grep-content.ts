@@ -214,7 +214,7 @@ export async function executeGrepContent(args: GrepContentArgs): Promise<ToolRes
 function formatGrepResult(
   hits: Array<{ file: string; line: number; text: string }>,
   limit: number,
-  extraNote = '',
+  _extraNote = '',
 ): ToolResult {
   if (hits.length === 0) {
     return { success: true, stdout: '未找到匹配', data: { count: 0, results: [] } };

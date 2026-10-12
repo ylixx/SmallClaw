@@ -89,7 +89,6 @@ export const taskControlTool = {
         task_id,
         goal,
         status,
-        include_all_sessions,
         limit,
         new_status,
         journal_entry,

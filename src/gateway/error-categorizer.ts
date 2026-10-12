@@ -28,7 +28,7 @@ export class ErrorCategorizer {
   /**
    * Categorize an error based on message + context
    */
-  categorizeError(errorMessage: string, context?: any): ErrorCategorization {
+  categorizeError(errorMessage: string, _context?: any): ErrorCategorization {
     const normalized = String(errorMessage || '').toLowerCase();
 
     // Try each category in order of specificity

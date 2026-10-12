@@ -139,14 +139,6 @@ export function getNextRun(cronExpr: string | null, from: Date, tz?: string): Da
 // TODO: Replace this stub with actual telegram delivery when implementing Telegram channel.
 // The interface is already defined — just fill in the body of deliverTelegram().
 
-async function deliverTelegram(_jobName: string, _content: string): Promise<void> {
-  // STUB — Telegram not yet configured.
-  // When implementing:
-  //   1. Read config.channels.telegram.botToken and allowedUserIds
-  //   2. POST to https://api.telegram.org/bot{token}/sendMessage
-  //   3. Split content if > 4096 chars
-  console.log('[CronScheduler] Telegram delivery stub called — not yet implemented');
-}
 
 // ─── CronScheduler Class ───────────────────────────────────────────────────────
 
@@ -518,7 +510,6 @@ export class CronScheduler {
 
     let resultText = '';
     let duration = 0;
-    let spawnedTaskId: string | null = null;
 
     try {
       if (job.payloadKind === 'systemEvent') {
@@ -535,7 +526,6 @@ export class CronScheduler {
         // correct tool access — instead of a raw single-shot handleChat call.
         const spawned = await this.deps.spawnBackgroundTask(job);
         if (spawned) {
-          spawnedTaskId = spawned.taskId;
           console.log(`[CronScheduler] Job "${job.name}" spawned as background task ${spawned.taskId}`);
           // The task runs asynchronously — we mark the job complete now.
           // The BackgroundTaskRunner will broadcast task_complete when done.

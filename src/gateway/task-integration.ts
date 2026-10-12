@@ -5,17 +5,7 @@
  * (it closes over handleChat/telegramChannel) but delegates these helpers, so
  * handleChat / executeToolImpl no longer depend on server-v2-local task helpers.
  */
-import {
-  loadTask,
-  saveTask,
-  updateTaskStatus,
-  appendJournal,
-  updateResumeContext,
-  listTasks,
-  deleteTask,
-  type TaskRecord,
-  type TaskStatus,
-} from './task-store';
+import {listTasks, type TaskRecord, type TaskStatus} from './task-store';
 
 export const ACTIVE_TASK_STATUSES: TaskStatus[] = [
   'queued',

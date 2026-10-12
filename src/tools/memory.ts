@@ -13,7 +13,7 @@ export async function executeMemoryWrite(args: { fact: string; action?: 'append'
     const actor = args.actor || 'agent';
     const reference = args.reference ? sanitizeMemoryText(args.reference) : undefined;
     const source_tool = args.source_tool ? sanitizeMemoryText(args.source_tool) : undefined;
-    const source_output = args.source_output ? sanitizeMemoryText(args.source_output) : undefined;
+    const _source_output = args.source_output ? sanitizeMemoryText(args.source_output) : undefined;
     const key = args.key ? sanitizeMemoryText(args.key) : undefined;
 
     // Build bullet with metadata

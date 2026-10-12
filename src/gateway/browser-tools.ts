@@ -789,16 +789,14 @@ async function extractStructuredFromPage(
       out.pageType = 'chat_interface';
 
       // Detect if the AI is still generating — look for stop/streaming indicators
-      const bodyText = normalize(doc.body?.innerText || '', 200);
-      const stopBtn = doc.querySelector(
+            const stopBtn = doc.querySelector(
         'button[aria-label*="Stop"], button[data-testid*="stop"], [aria-label*="Stop generating"], .stop-button',
       );
       const streamingIndicator = doc.querySelector(
         '[data-testid="streaming-indicator"], .result-streaming, [class*="streaming"], [class*="generating"]',
       );
       // Heuristic: page title "ChatGPT" (not yet renamed to conversation topic) + very few response nodes
-      const stillOnDefaultTitle = /^chatgpt$/i.test(title.trim());
-      out.isGenerating = !!(stopBtn || streamingIndicator);
+            out.isGenerating = !!(stopBtn || streamingIndicator);
 
       // Extract the last assistant message — ChatGPT uses [data-message-author-role="assistant"]
       // Claude.ai uses [data-is-streaming], Gemini uses .model-response-text

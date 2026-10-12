@@ -9,9 +9,9 @@
  * resetProvider() from the settings API). No other files need touching.
  */
 
-import { getProvider, getModelForRole, getPrimaryModel, resetProvider } from '../providers/factory';
-import type { LLMProvider } from '../providers/LLMProvider';
-import { AgentRole } from '../types';
+import {getProvider, getModelForRole, resetProvider} from '../providers/factory';
+import type {LLMProvider} from '../providers/LLMProvider';
+import {AgentRole} from '../types';
 
 export interface GenerateOutput {
   response: string;

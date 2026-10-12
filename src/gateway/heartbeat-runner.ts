@@ -7,8 +7,8 @@
 
 import fs from 'fs';
 import path from 'path';
-import { loadTask, listTasks } from './task-store';
-import { BackgroundTaskRunner } from './background-task-runner';
+import {listTasks} from './task-store';
+import {BackgroundTaskRunner} from './background-task-runner';
 
 export interface HeartbeatRunnerConfig {
   enabled: boolean;

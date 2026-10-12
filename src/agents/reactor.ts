@@ -144,7 +144,6 @@ export function extractNodeCallBlocks(text: string): string[] {
   return results;
 }
 // Keep regex for backward compat detection (e.g. checking if node_call exists in text)
-const NODE_CALL_RE = /node_call</gi;
 const URL_LIKE_RE = /\bhttps?:\/\/|www\./i;
 const WEB_HINT_RE = /\b(url|link|website|web|internet|browse|scrape|crawl|fetch|search)\b/i;
 const CODING_HINT_RE = /\b(code|script|file|folder|directory|path|repo|repository|build|compile|test|debug|patch|refactor|typescript|javascript|python|npm|node)\b/i;
@@ -483,7 +482,7 @@ If you need to ask the user a question instead of acting:
 function buildNativeToolSystemPrompt(
   toolSchemas: string,
   options: ReactOptions,
-  userMessage: string
+  _userMessage: string
 ): string {
   const today = new Date().toISOString().slice(0, 10);
   const soul = buildSystemPrompt({
@@ -563,16 +562,6 @@ function mapToolAlias(actionName: string): string {
   return actionName;
 }
 
-function looksLikeInternalReasoning(text: string): boolean {
-  const t = String(text || '').trim().toLowerCase();
-  if (!t) return false;
-  if (/^(thought:|action:|param:|tool_hint:)/i.test(t)) return true;
-  if (/^(okay|alright|hmm|wait)[,!\s]/.test(t)) return true;
-  if (/\bthe user wants\b/.test(t)) return true;
-  if (/\blet me (think|check|figure|tackle|analyze)\b/.test(t)) return true;
-  if (/\btools provided\b/.test(t)) return true;
-  return false;
-}
 
 function hashText(input: string): string {
   const text = String(input || '');
