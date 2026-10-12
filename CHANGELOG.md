@@ -21,6 +21,13 @@ A running log of features, fixes, and improvements added to SmallClaw. Each entr
 - 拆分产物新增：personality-context ≈263 / skills-bootstrap ≈154 / api-files ≈254 / api-kb ≈51 / chat-routes ≈280。
 - 验证链：每步 tag 备份；typecheck 0 错、`npm test` 70 passed/2 skipped、`SMALLCLAW_SMOKE=1 npm run smoke` 2 passed；每步 commit+push（local==origin/main）。
 
+### 2026-10-12 — server-v2 Split Phase 5d（19~20）：文档收尾 + Server 启动区下沉——已完成并推送
+
+- **5d-19**（3781798）：文档收尾——CHANGELOG 补 5d-13~18 全段（含每步 hash + 行数）；split-plan 状态行更新至 ~1,005 行（累计 -9,809）。
+- **5d-20**（12fd61）：Server 启动区（http/ws + listen + 启动动作 + gracefulShutdown，~160 行）→ server-bootstrap.ts **createServerLifecycle(deps) 工厂**（app/host/port/configDirPath/skillsManager/cronScheduler/telegramChannel/heartbeatRunner/scheduleTaskHeartbeat/loadTaskHeartbeatConfig 注入；listen 在工厂内立即执行，同原语义；返回 { server, shutdown }，组合根 export server）。顺带 git rm 清理 5d-19 误提交的 .git-msg-phase5d19.txt。server-v2.ts 1,005 → **858**。
+- **真实启动冒烟（5d-20 后）**：tsx 启动网关 → GET /api/status 200（ollama=true、provider=llama_cpp、MiniCPM5-2B、workspace 正确）+ /api/tools 200；无致命启动错误（仅一条预存的 config.tools.enabled 名称不匹配警告）。
+- server-v2.ts 现为 **858 行组合根**（原 10,814，累计净减 **-9,956**），剩余全部为装配：import / Config 启动 / 平台与工具档案 / cronScheduler·telegramChannel·heartbeatRunner 装配 / buildBootStartupSnapshot / app 装配 + 路由注册 / Webhook IIFE + SPA / createServerLifecycle 调用。
+
 ### 2026-10-11 — server-v2 Split Phase 5d: REST 路由按域下沉（1~12）——已完成并推送
 
 > 方法论：变更前 `git tag backup/pre-phase5dN` → 提取脚本（ts AST/行范围）→ `api-*.ts`（`registerXxxRoutes(app, deps)` 模式）→ server-v2 原位替换 → 三层验证（typecheck 0 错 / `npm test` 70 passed+2 skipped / `SMALLCLAW_SMOKE=1 npm run smoke` 2 passed）→ commit+push。`server-v2.ts` 由 **4,369 行降至 1,920 行**（累计 -2,449），业务行为字节级不变。
