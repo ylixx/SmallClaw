@@ -12,220 +12,73 @@ import cors from 'cors';
 import http from 'http';
 import path from 'path';
 import fs from 'fs';
-import crypto from 'crypto';
-import { WebSocketServer, WebSocket } from 'ws';
-import {
-  getConfig,
-  getAgents,
-  getAgentById,
-  getDefaultAgent,
-  ensureAgentWorkspace,
-  resolveAgentWorkspace,
-} from '../config/config';
-import { getMCPManager, type MCPTool } from './mcp-manager';
-import { mergeOptimizationTier, tierFromContextWindow } from './server-v2-text';
-import { broadcastWS, createSSESender, setWss, closeWss } from './realtime';
-import { flowsManager, buildFlowDonePayload, listFlows, getFlowById, createFlow, updateFlow, deleteFlow } from './flow-integration';
-import { ACTIVE_TASK_STATUSES, inferTaskChannelFromSession, latestTaskForSession, findBlockedTaskForSession, isResumeIntent, isRerunIntent, isCancelIntent, isStatusQuestion, isTaskListIntent, isAdjustmentIntent, getLatestPauseContext, summarizeTaskRecord, buildBlockedTaskStatusMessage, parseTaskStatusFilter, getTaskScopeBuckets, parseTaskIdFromText, renderTaskCandidatesForHuman } from './task-integration';
-import { createExecuteTool, createTaskControlHandler, isConfirmed, normalizeToolArgs, resolveAnalysisTarget, listArtifacts, ANALYSIS_INJECT_MAX_CHARS, resolveToolFilePath, type ToolResult, type TaskControlResponse } from './chat-execution';
-import { createChatHandler, MAX_TOOL_ROUNDS, type ExecutionMode, type OrchestrationEvent, type OrchestrationSessionStats, getOrchestrationSessionStats, recordOrchestrationEvent, getPreemptSessionCount, incrementPreemptSessionCount, type SubagentProfile, logToDaily, KB_AUTO_INJECT_RE, collectFileSnapshots, buildBrowserAck, buildDesktopAck, isBrowserHeavyResearchPage, type SnapshotDiagnostics, type BrowserSnapshotQuality, goalLikelyNeedsTextInput, parseSnapshotDiagnostics, evaluateBrowserSnapshotQuality, type HandleChatResult, maybeSuggestModelSwitch, buildMultimodalUserContent, MAX_TOOL_ARG_PARSE_RETRIES, TOOL_ARG_PARSE_RETRY_HINT, probeLlamaNctx, resolveHistoryBudgetTokens, computeSessionMetaAnswer, buildChatLogReport } from './chat-handler';
-import { getVault } from '../security/vault';
-import { getOllamaClient } from '../agents/ollama-client';
-import { spawnAgent } from '../agents/spawner';
-import { getSession, addMessage, getHistory, getHistoryForApiCall, getWorkspace, setWorkspace, clearHistory, deleteSession, cleanupSessions } from './session';
-import { hookBus } from './hooks';
-import { loadWorkspaceHooks } from './hook-loader';
-import { runBootMd } from './boot';
-import { resolveRunCommand, suggestRunCommandFix, SAFE_COMMANDS, ARG_SAFE_COMMANDS } from './run-command-router';
-import { LlamaServerManager } from './llama-server-manager';
-import { TaskState } from './task-runner';
-import { webSearch, webFetch, tavilySearch, googleSearch, duckDuckGoSearch } from './server-v2-search';
-import {
-  logToolCall,
-  separateThinkingFromContent,
-  normalizeForDedup,
-  isGreetingLikeMessage,
-  sanitizeFinalReply,
-  stripExplicitThinkTags,
-  isExecutionLikeRequest,
-  isBrowserAutomationRequest,
-  isDesktopAutomationRequest,
-  extractLikelyUrl,
-  looksLikeSafetyRefusal,
-  looksLikeIntentOnlyReply,
-  hasConcreteCompletion,
-  isBrowserToolName,
-  isDesktopToolName,
-  isHighStakesFile,
-  requestedFullTemplate,
-  isToolArgParseFailure,
-} from './server-v2-text';
-import { SkillsManager } from './skills-manager';
-import {
-  browserOpen,
-  browserSnapshot,
-  browserClick,
-  browserFill,
-  browserPressKey,
-  browserWait,
-  browserScroll,
-  browserClose,
-  getBrowserToolDefinitions,
-  getBrowserSessionInfo,
-  getBrowserAdvisorPacket,
-} from './browser-tools';
-import {
-  desktopScreenshot,
-  desktopFindWindow,
-  desktopFocusWindow,
-  desktopClick,
-  desktopDrag,
-  desktopWait,
-  desktopType,
-  desktopPressKey,
-  desktopGetClipboard,
-  desktopSetClipboard,
-  getDesktopToolDefinitions,
-  getDesktopAdvisorPacket,
-} from './desktop-tools';
-import {
-  getOfficeToolDefinitions,
-  executeOfficeTool,
-  ensureOfficeCapabilities,
-  isOfficeReadFile,
-  isOfficeWriteFile,
-  consumeLastDocPreview,
-  getDocPreview,
-  parseDocPreview,
-} from '../tools/office';
-import {
-  getImageToolDefinitions,
-  executeImageTool,
-} from '../tools/image';
-import {
-  getFileBatchToolDefinitions,
-  executeFileBatchTool,
-} from '../tools/file-batch';
-import {
-  getKnowledgeToolDefinitions,
-  executeKnowledgeTool,
-  KNOWLEDGE_TOOL_NAMES,
-} from '../tools/knowledge';
-import {
-  planToolDefinitions,
-  isPlanGateActive,
-  isPlanModeEnabledFor,
-  isPlanTool,
-  setPlanModeEnabled,
-  getPlanState,
-  getPendingPlan,
-  resolvePlanDecision,
-  planGateMessage,
-  awaitPlanDecision,
-  PLAN_READONLY_TOOLS,
-} from './plan-mode';
-import { CronScheduler } from './cron-scheduler';
-import { HeartbeatRunner } from './heartbeat-runner';
-import {
-  initializeAgentSchedules,
-  reloadAgentSchedules,
-  stopAgentSchedules,
-  getAgentRunHistory,
-  getAgentLastRun,
-  recordAgentRun,
-} from '../scheduler';
-import { TelegramChannel } from './telegram-channel';
-import {
-  OrchestrationTriggerState,
-  callSecondaryPreflight,
-  callSecondaryAdvisor,
-  callSecondaryFileOpClassifier,
-  callSecondaryFileAnalyzer,
-  callSecondaryFileVerifier,
-  callSecondaryFilePatchPlanner,
-  callSecondaryBrowserAdvisor,
-  callSecondaryDesktopAdvisor,
-  callSecondaryHeartbeatAdvisor,
-  formatPreflightExecutionObjective,
-  formatPreflightHint,
-  formatAdvisoryHint,
-  formatBrowserAdvisorHint,
-  formatDesktopAdvisorHint,
-  getOrchestrationConfig,
-  clampOrchestrationConfig,
-  clampPreemptConfig,
-  checkOrchestrationEligibility,
-  shouldRunPreflight,
-  type TaskSnapshot as HeartbeatTaskSnapshot,
-} from '../orchestration/multi-agent';
-import {
-  createTask,
-  loadTask,
-  saveTask,
-  updateTaskStatus,
-  appendJournal,
-  updateResumeContext,
-  listTasks,
-  deleteTask,
-  mutatePlan,
-  buildTaskSnapshot,
-  type TaskRecord,
-  type TaskStatus,
-} from './task-store';
-import { BackgroundTaskRunner } from './background-task-runner';
-import { SubagentManager } from './subagent-manager';
-import {
-  FileOpProgressWatchdog,
-  FileOpType,
-  classifyFileOpType,
-  resolveFileOpSettings,
-  isFileMutationTool,
-  isFileCreateTool,
-  isFileEditTool,
-  extractFileToolTarget,
-  estimateFileToolChange,
-  canPrimaryApplyFileTool,
-  shouldVerifyFileTurn,
-  isSmallSuggestedFix,
-  buildFailureSignature,
-  buildPatchSignature,
-  loadFileOpCheckpoint,
-  saveFileOpCheckpoint,
-  clearFileOpCheckpoint,
-} from '../orchestration/file-op-v2';
-import { OllamaProcessManager } from './ollama-process-manager';
-import { raceWithWatchdog, PreemptState } from './preempt-watchdog';
-import { detectGpu, logGpuStatus } from './gpu-detector';
-import { registerSystemRoutes } from './api-system';
-import { requireGatewayAuth } from './api-auth';
-import { registerMiscRoutes } from './api-misc';
-import { registerMcpRoutes } from './api-mcp';
-import { registerSettingsRoutes } from './api-settings';
-import { registerSkillsRoutes } from './api-skills';
-import { registerTasksRoutes } from './api-tasks';
-import { registerFlowRoutes } from './api-flows';
-import { resolveChannelsConfig, registerChannelsRoutes } from './api-channels';
-import { registerSchedulesRoutes } from './api-schedules';
-import { registerAgentRoutes } from './api-agents';
-import { createServerLifecycle } from './server-bootstrap';
-import { registerChatRoutes } from './chat-routes';
-import { registerKbRoutes } from './api-kb';
-import { registerFileRoutes } from './api-files';
-import { skillsManager, isOrchestrationSkillEnabled, renderFlowInstruction, recoverSkillsIfEmpty, setOrchestrationEnabled } from './skills-bootstrap';
-import { buildPersonalityContext } from './personality-context';
-import { createHeartbeatDomain, registerHeartbeatRoutes } from './task-heartbeat';
-import { buildWebhookRouter, resolveHookConfig } from './webhook-handler';
-import { internalAgentTaskRouter } from './internal-agent-task';
-import {
-  registerAgentBuilderTools,
-  executeAgentBuilderTool,
-  AGENT_BUILDER_TOOL_NAMES,
-  getWorkflowContextBlock,
-} from './agent-builder-integration';
-import { normalizeCwd, validateWorkspacePath, getConfigDirPath, derivePort, deriveHost, repairLegacyTaskChannelMetadata, KNOWLEDGE_DIR } from './config-bootstrap';
-import { noteToolFailure, resetToolFailure } from './request-guards';
-import { getModelTier, applyToolCompactness, buildTools, agentShellEnabled, MCP_TOOL_PREFIX, collectMcpToolEntries, filterToolsByIntent, detectToolCategories, applyToolPolicy, checkToolDenied, sessionAgentBindings } from './tool-registry';
-import { getModelBusy, setModelBusy } from './model-busy-guard';
+
+
+import {getConfig} from '../config/config';
+
+import {mergeOptimizationTier, tierFromContextWindow} from './server-v2-text';
+import {broadcastWS} from './realtime';
+
+
+import {createExecuteTool, createTaskControlHandler} from './chat-execution';
+import {createChatHandler, type SubagentProfile, probeLlamaNctx, resolveHistoryBudgetTokens} from './chat-handler';
+
+
+
+import {addMessage, getHistory, setWorkspace, clearHistory, cleanupSessions} from './session';
+import {hookBus} from './hooks';
+
+import {runBootMd} from './boot';
+import {resolveRunCommand} from './run-command-router';
+
+import {TaskState} from './task-runner';
+
+
+
+import {getBrowserAdvisorPacket} from './browser-tools';
+
+
+
+
+
+
+import {CronScheduler} from './cron-scheduler';
+import {HeartbeatRunner} from './heartbeat-runner';
+
+import {TelegramChannel} from './telegram-channel';
+import {callSecondaryPreflight} from '../orchestration/multi-agent';
+import {createTask, appendJournal, listTasks} from './task-store';
+import {BackgroundTaskRunner} from './background-task-runner';
+
+
+
+
+
+import {registerSystemRoutes} from './api-system';
+
+import {registerMiscRoutes} from './api-misc';
+import {registerMcpRoutes} from './api-mcp';
+import {registerSettingsRoutes} from './api-settings';
+import {registerSkillsRoutes} from './api-skills';
+import {registerTasksRoutes} from './api-tasks';
+import {registerFlowRoutes} from './api-flows';
+import {resolveChannelsConfig, registerChannelsRoutes} from './api-channels';
+import {registerSchedulesRoutes} from './api-schedules';
+import {registerAgentRoutes} from './api-agents';
+import {createServerLifecycle} from './server-bootstrap';
+import {registerChatRoutes} from './chat-routes';
+import {registerKbRoutes} from './api-kb';
+import {registerFileRoutes} from './api-files';
+import {skillsManager, isOrchestrationSkillEnabled, renderFlowInstruction, recoverSkillsIfEmpty, setOrchestrationEnabled} from './skills-bootstrap';
+import {buildPersonalityContext} from './personality-context';
+import {createHeartbeatDomain, registerHeartbeatRoutes} from './task-heartbeat';
+import {buildWebhookRouter, resolveHookConfig} from './webhook-handler';
+import {internalAgentTaskRouter} from './internal-agent-task';
+
+import {normalizeCwd, validateWorkspacePath, getConfigDirPath, derivePort, deriveHost, repairLegacyTaskChannelMetadata, KNOWLEDGE_DIR} from './config-bootstrap';
+
+import {getModelTier, applyToolCompactness} from './tool-registry';
+import {getModelBusy, setModelBusy} from './model-busy-guard';
 
 // ─── Config ────────────────────────────────────────────────────────────────────
 // cwd 规范化 / 配置加载 / workspace 路径校验 / 端口推导 已下沉到 config-bootstrap.ts
