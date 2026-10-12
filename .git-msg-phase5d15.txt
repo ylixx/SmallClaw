@@ -1,9 +1,0 @@
-﻿Phase 5d-15: extract skills bootstrap into skills-bootstrap.ts
-
-skills dir resolution + SkillsManager singleton + orchestration-skill
-helpers + startup IIFE -> skills-bootstrap.ts (module-level init; server-v2
-is the only importer). CONFIG_DIR_PATH -> getConfigDirPath(). server-v2.ts
--> 1,523.
-
-- Verified: typecheck 0 errors; npm test 70 passed/2 skipped;
-  SMALLCLAW_SMOKE=1 smoke 2 passed.
