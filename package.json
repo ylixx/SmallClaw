@@ -15,7 +15,7 @@
     "test": "vitest run",
     "smoke": "vitest run tests/smoke-gateway.test.ts",
     "test:desktop": "tsx tests/desktop-tools.ts",
-    "lint": "eslint src tests --max-warnings 300",
+    "lint": "eslint src tests --max-warnings 0",
     "lint:fix": "eslint src tests --fix",
     "format": "prettier --write \"src/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\""
