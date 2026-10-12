@@ -1,0 +1,3 @@
+﻿Phase 5d-19: documentation catch-up (CHANGELOG 5d-13..18 + split-plan status)
+
+server-v2.ts now ~1,005 lines (10,814 -> 1,005, cumulative -9,809).

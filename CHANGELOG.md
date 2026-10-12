@@ -8,6 +8,19 @@ A running log of features, fixes, and improvements added to SmallClaw. Each entr
 
 > Features built but not yet tagged in a release.
 
+### 2026-10-12 — server-v2 Split Phase 5d（13~18）：Personality / Skills / Files / KB / Chat 路由下沉——已完成并推送
+
+> 承接 5d-1~12 节奏：tag 备份 → 提取脚本 → 新模块（registerXxxRoutes(app, deps)）→ 三层验证 → commit+push。`server-v2.ts` 由 **1,920 行降至 1,005 行**（累计 10,814 → 1,005，净减 **-9,809**），剩余为组合根装配（Express 装配、路由注册、Webhook IIFE、SPA catch-all、Server 启动区）。
+
+- **5d-13**（`42abd04`）：文档收尾——CHANGELOG 补 5d-1~12 全段（含每步 hash）；split-plan 状态行更新。
+- **5d-14**（`9b5f326`）：Workspace Memory + Tiered Prompt 簇（loadWorkspaceFile/readDailyMemoryContext/MEMORY_RECALL_RE/TOOL_BLOCKS/readMemoryCategories/readMemorySnippets/TOOL_TO_MEMORY_CATS/buildPersonalityContext，~255 行）→ `personality-context.ts`（纯 import）。buildPersonalityContext export（handleChat deps 用）。1,920 → 1,666。
+- **5d-15**（`683abd1`）：Skills 初始化簇（目录解析 + SkillsManager 单例 + isOrchestrationSkillEnabled/renderFlowInstruction/recoverSkillsIfEmpty/setOrchestrationEnabled + 启动对齐 IIFE，~143 行）→ `skills-bootstrap.ts`（**模块顶层副作用**：resolveSkillsDir + new SkillsManager；server-v2 是唯一 importer，vitest 不碰，安全）。修 CONFIG_DIR_PATH → getConfigDirPath()、config → getConfig().getConfig()。1,666 → 1,523。
+- **5d-16**（`b027e8c`）：Files/Doc/Plan/artifacts/status 路由（sanitizeUploadName + /api/files + /api/fs + /api/doc/apply + /api/plan + /api/artifacts + /api/status，~235 行）→ `api-files.ts`（零 deps 注入）。修 /api/status 的 `config` 本地变量 → getConfig().getConfig()。1,523 → 1,288。
+- **5d-17**（`9c594aa`）：Knowledge base REST（/api/knowledge + /add + /remove，~40 行）→ `api-kb.ts`；**KNOWLEDGE_DIR 上移 config-bootstrap 单一来源**（server-v2 与 api-kb 共用）。1,288 → 1,248。
+- **5d-18**（`c33b5cc`）：Chat 路由区（tryHandleBlockedTaskFollowup + /api/chat + /api/open-path + /api/clear-history + /api/sessions/delete + /api/memory/clear，~245 行）→ `chat-routes.ts`（deps={ handleChat, handleTaskControlAction, setMainSessionId }；lastMainSessionId 用 setter 闭包）。1,248 → 1,005。
+- 拆分产物新增：personality-context ≈263 / skills-bootstrap ≈154 / api-files ≈254 / api-kb ≈51 / chat-routes ≈280。
+- 验证链：每步 tag 备份；typecheck 0 错、`npm test` 70 passed/2 skipped、`SMALLCLAW_SMOKE=1 npm run smoke` 2 passed；每步 commit+push（local==origin/main）。
+
 ### 2026-10-11 — server-v2 Split Phase 5d: REST 路由按域下沉（1~12）——已完成并推送
 
 > 方法论：变更前 `git tag backup/pre-phase5dN` → 提取脚本（ts AST/行范围）→ `api-*.ts`（`registerXxxRoutes(app, deps)` 模式）→ server-v2 原位替换 → 三层验证（typecheck 0 错 / `npm test` 70 passed+2 skipped / `SMALLCLAW_SMOKE=1 npm run smoke` 2 passed）→ commit+push。`server-v2.ts` 由 **4,369 行降至 1,920 行**（累计 -2,449），业务行为字节级不变。
