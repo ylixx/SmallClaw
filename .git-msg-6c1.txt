@@ -1,0 +1,6 @@
+﻿Phase 6c-1: remove stale tools.enabled from config.json
+
+Legacy tool names (shell/read/write/edit/search) no longer exist in the
+current tool universe; the entry was always ignored with a startup warning.
+Dropping the field keeps actual behavior identical and silences the warning.
+Boot verified: /api/status 200, no warnings in stderr.
