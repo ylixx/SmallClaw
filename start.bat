@@ -10,7 +10,7 @@ set "GATEWAY_PORT=18789"
 rem ==================================
 
 echo ============================================
-echo   SmallClaw 网关启动器
+echo   SmallClaw 网关启动器（模型请用 start-model.bat）
 echo ============================================
 
 rem 1. 检查 Python
@@ -21,15 +21,14 @@ if exist "%SMALLCLAW_PYTHON%" (
   echo        请修改本文件顶部的 SMALLCLAW_PYTHON 后重试
 )
 
-rem 2. 检查模型端口（llama.cpp / Ollama 共用）
+rem 2. 检查模型端口（只提示，不启动模型）
 for /f "usebackq delims=" %%i in (`powershell -NoProfile -Command "$c=New-Object Net.Sockets.TcpClient; try{$c.Connect('127.0.0.1',%MODEL_PORT%);'UP'}catch{'DOWN'};$c.Close()"`) do set "MODEL_STATUS=%%i"
 if /i "%MODEL_STATUS%"=="UP" (
   echo [OK] 模型在线（端口 %MODEL_PORT%）
 ) else (
   echo [警告] 模型端口 %MODEL_PORT% 未响应！
-  echo        请先启动模型，例如：
-  echo        ^& "E:\llama-b11000\llama-server.exe" -m "D:/models/MiniCPM5-2B-Q4_K_M/MiniCPM5-2B-Q4_K_M.gguf" -c 128000 --context-shift -ngl 99 --flash-attn on --cache-type-k q8_0 --cache-type-v q8_0 -b 2048 -ub 1024 -t 6 --host 0.0.0.0 --port 8080
-  echo        10 秒后仍会启动网关（回车继续 / Ctrl+C 取消）
+  echo        请先运行 start-model.bat 启动模型（可切换预设）。
+  echo        10 秒后仍将启动网关（回车继续 / Ctrl+C 取消）
   timeout /t 10 /nobreak >nul
 )
 
