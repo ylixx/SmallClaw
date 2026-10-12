@@ -3754,6 +3754,26 @@ RULES:
     sendSSE('info', { message: `Processing... (step ${round + 1})` });
   }
 
-  return { type: 'execute', text: 'Hit max steps.', toolResults: allToolResults };
+  // Hit max steps: keep the model's last substantive text as a partial result
+  // instead of returning only a bare "Hit max steps." — small models that burn
+  // the round budget on tool calls still leave the user with what was produced.
+  const lastAssistantText = (() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i];
+      if (m?.role !== 'assistant') continue;
+      if (Array.isArray(m.tool_calls) && m.tool_calls.length > 0) continue;
+      const t = String(m?.content || '').trim();
+      if (t && t.length > 4) return t.slice(0, 2000);
+    }
+    return '';
+  })();
+
+  return {
+    type: 'execute',
+    text: lastAssistantText
+      ? `[已达到工具步数上限，以下是模型在过程中给出的部分内容]\n${lastAssistantText}`
+      : 'Hit max steps.',
+    toolResults: allToolResults,
+  };
 }
 }
