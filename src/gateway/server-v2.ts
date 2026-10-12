@@ -38,15 +38,7 @@ import { loadWorkspaceHooks } from './hook-loader';
 import { runBootMd } from './boot';
 import { resolveRunCommand, suggestRunCommandFix, SAFE_COMMANDS, ARG_SAFE_COMMANDS } from './run-command-router';
 import { LlamaServerManager } from './llama-server-manager';
-import { TaskRunner, runTask, TaskTool, TaskState } from './task-runner';
-import { setupErrorResponseEndpoint } from './error-response-endpoint-integrated';
-import { initCredentialHandler, getCredentialHandler } from '../security/credential-handler';
-import { getVerificationFlowManager } from './verification-flow';
-import { getErrorAnalyzer } from './error-analyzer';
-import { getErrorHistory } from './error-history';
-import { getRetryStrategy } from './retry-strategy';
-import { getVisualErrorDetector } from './visual-error-detection';
-import { getErrorAudit } from '../security/error-audit';
+import { TaskState } from './task-runner';
 import { webSearch, webFetch, tavilySearch, googleSearch, duckDuckGoSearch } from './server-v2-search';
 import {
   logToolCall,
@@ -68,7 +60,6 @@ import {
   requestedFullTemplate,
   isToolArgParseFailure,
 } from './server-v2-text';
-import { getContextInjectionManager } from './context-injection';
 import { SkillsManager } from './skills-manager';
 import {
   browserOpen,
