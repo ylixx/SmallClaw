@@ -216,6 +216,7 @@ import { registerFlowRoutes } from './api-flows';
 import { resolveChannelsConfig, registerChannelsRoutes } from './api-channels';
 import { registerSchedulesRoutes } from './api-schedules';
 import { registerAgentRoutes } from './api-agents';
+import { createServerLifecycle } from './server-bootstrap';
 import { registerChatRoutes } from './chat-routes';
 import { registerKbRoutes } from './api-kb';
 import { registerFileRoutes } from './api-files';
@@ -841,165 +842,17 @@ console.log('[InternalAgentTask] Endpoint mounted at POST /internal/agent-task')
 
 app.get('*', (_req, res) => { res.sendFile(path.join(webUiPath, 'index.html')); });
 
-// ─── Server ────────────────────────────────────────────────────────────────────
-
-const server = http.createServer(app);
-const wsServer = new WebSocketServer({ server, path: '/ws' });
-setWss(wsServer);
-wsServer.on('error', (err: any) => {
-  if (err?.code === 'EADDRINUSE') {
-    console.error(`[Gateway] Port ${HOST}:${PORT} is already in use.`);
-    console.error('[Gateway] Another gateway instance is likely already running.');
-    console.error('[Gateway] Use one instance only, then open http://127.0.0.1:18789');
-    process.exit(1);
-    return;
-  }
-  console.error('[Gateway] WebSocket error:', err?.message || err);
-  process.exit(1);
+const { server, shutdown: shutdownGateway } = createServerLifecycle({
+  app,
+  host: HOST,
+  port: PORT,
+  configDirPath: CONFIG_DIR_PATH,
+  skillsManager,
+  cronScheduler,
+  telegramChannel,
+  heartbeatRunner,
+  scheduleTaskHeartbeat: () => heartbeatDomain.scheduleTaskHeartbeat(),
+  loadTaskHeartbeatConfig: () => heartbeatDomain.loadTaskHeartbeatConfig(),
 });
-wsServer.on('connection', (ws: WebSocket) => {
-  console.log('[v2] WS connected');
-  ws.on('message', (d) => { try { JSON.parse(d.toString()); } catch {} });
-  ws.on('close', () => console.log('[v2] WS disconnected'));
-});
-
-server.on('error', (err: any) => {
-  if (err?.code === 'EADDRINUSE') {
-    console.error(`[Gateway] Port ${HOST}:${PORT} is already in use.`);
-    console.error('[Gateway] Another gateway instance is likely already running.');
-    console.error('[Gateway] Use one instance only, then open http://127.0.0.1:18789');
-    process.exit(1);
-    return;
-  }
-  console.error('[Gateway] HTTP server error:', err?.message || err);
-  process.exit(1);
-});
-
-// Setup error response endpoint
-setupErrorResponseEndpoint(app);
-
-// ─── Initialize Advanced Error Response Systems ────────────────────────────────
-const encryptionKey = process.env.CREDENTIAL_ENCRYPTION_KEY || crypto.randomBytes(32).toString('hex');
-const credentialHandler = initCredentialHandler(encryptionKey);
-const verificationFlowManager = getVerificationFlowManager();
-const errorAnalyzer = getErrorAnalyzer();
-const errorHistory = getErrorHistory();
-const retryStrategy = getRetryStrategy();
-const visualErrorDetector = getVisualErrorDetector();
-const errorAudit = getErrorAudit(process.env.ERROR_AUDIT_LOG_PATH || path.join(CONFIG_DIR_PATH, 'logs', 'audit.log'));
-const contextInjectionManager = getContextInjectionManager();
-
-console.log('[Server] ✅ Advanced error response systems initialized');
-console.log(`[Server] - Credential Handler: ${encryptionKey.substring(0, 8)}...`);
-console.log('[Server] - Verification Flow Manager: Ready');
-console.log('[Server] - Error Analyzer: Ready');
-console.log('[Server] - Error History: Ready');
-console.log('[Server] - Retry Strategy: Ready');
-console.log('[Server] - Visual Error Detector: Ready');
-console.log('[Server] - Error Audit: Ready');
-console.log('[Server] - Context Injection Manager: Ready');
-
-server.listen(PORT, HOST, () => {
-  // Detect GPU hardware once — logs a single clean line, caches result for
-  // the lifetime of the process (used by /api/system-stats, no repeated probes).
-  logGpuStatus();
-
-  const liveConfig = getConfig().getConfig();
-  const searchCfg = (liveConfig as any).search || {};
-  // HIGH-03: resolve vault references before checking presence — never log the key value itself
-  const cm = getConfig();
-  const tavilyKey = cm.resolveSecret(searchCfg.tavily_api_key);
-  const googleKey = cm.resolveSecret(searchCfg.google_api_key);
-  const hasSearch = tavilyKey ? '✓ Tavily' : googleKey ? '✓ Google' : '✗ None (configure in Settings → Search)';
-  console.log(`
-╔════════════════════════════════════════════════════════════════╗
-║              SmallClaw v2 Gateway (Native Tools)              ║
-╠════════════════════════════════════════════════════════════════╣
-║  Tasks:   Cron scheduler active, jobs at .smallclaw/cron/     ║
-║  Skills: ${String(skillsManager.getAll().length + ' loaded, ' + skillsManager.getEnabledSkills().length + ' enabled').padEnd(49)}║
-║  Search:  ${hasSearch.padEnd(49)}║
-║  Memory:  SOUL.md + IDENTITY.md + USER.md + MEMORY.md         ║
-║                                                               ║
-║  Web UI:    http://${HOST}:${PORT}                            ║
-║  Model:     ${liveConfig.models.primary.padEnd(45)}║
-║  Workspace: ${liveConfig.workspace.path.slice(0, 43).padEnd(45)}║
-╚════════════════════════════════════════════════════════════════╝
-`);
-  // Auto-connect enabled MCP servers
-  getMCPManager().startEnabledServers().catch(err => console.warn('[MCP] Startup error:', err?.message));
-
-  // Probe the Office helper (Python) in the background so doc_* tools appear
-  // in buildTools() as soon as capabilities are known.
-  ensureOfficeCapabilities();
-
-  cronScheduler.start();
-  console.log('[CronScheduler] Tick loop started — heartbeat:', cronScheduler.getConfig().enabled ? 'ON' : 'OFF');
-  initializeAgentSchedules();
-  console.log('[Scheduler] Agent cron schedules initialized.');
-  heartbeatRunner.start();
-  console.log('[HeartbeatRunner] Started — interval:', heartbeatRunner.getConfig().intervalMinutes, 'min');
-  telegramChannel.start().then(() => {
-    // Check if we just restarted after a self-update
-    const selfUpdateStatusFile = path.join(require('os').homedir(), '.smallclaw', 'last_self_update.txt');
-    if (fs.existsSync(selfUpdateStatusFile)) {
-      try {
-        const statusContent = fs.readFileSync(selfUpdateStatusFile, 'utf-8').trim();
-        fs.unlinkSync(selfUpdateStatusFile); // consume it — only notify once
-        if (statusContent.startsWith('UPDATE_SUCCESS')) {
-          const lines = statusContent.split('\n');
-          const timestamp = lines[1] || '';
-          const msg = `✅ SmallClaw self-update complete!\n\nI ran the update, rebuilt, and have restarted the gateway. I'm back online and up to date.\n\n🕐 Updated at: ${timestamp.trim()}`;
-          setTimeout(() => telegramChannel.sendToAllowed(msg).catch(() => {}), 3000);
-          console.log('[Gateway] Post-update Telegram notification queued.');
-        } else if (statusContent.startsWith('UPDATE_FAILED')) {
-          const lines = statusContent.split('\n');
-          const timestamp = lines[1] || '';
-          const msg = `❌ SmallClaw self-update failed.\n\nThe update process encountered an error. Gateway has restarted with the previous version. Check the terminal for details.\n\n🕐 Attempted at: ${timestamp.trim()}`;
-          setTimeout(() => telegramChannel.sendToAllowed(msg).catch(() => {}), 3000);
-          console.log('[Gateway] Post-update failure Telegram notification queued.');
-        }
-      } catch (e: any) {
-        console.warn('[Gateway] Could not read self-update status file:', e.message);
-      }
-    }
-  }).catch(err => console.error('[Telegram] Start failed:', err.message));
-  heartbeatDomain.scheduleTaskHeartbeat();
-  console.log('[TaskHeartbeat] Scheduled — interval:', heartbeatDomain.loadTaskHeartbeatConfig().interval_minutes, 'min');
-
-  const bootWorkspace = getConfig().getWorkspacePath() || (getConfig().getConfig() as any).workspace?.path || '';
-  if (bootWorkspace) {
-    loadWorkspaceHooks(bootWorkspace);
-    hookBus
-      .fire({ type: 'gateway:startup', workspacePath: bootWorkspace })
-      .catch((err: any) => console.warn('[hooks] gateway:startup error:', err?.message || err));
-  }
-});
-
-let shuttingDown = false;
-function gracefulShutdown(signal: 'SIGINT' | 'SIGTERM'): void {
-  if (shuttingDown) return;
-  shuttingDown = true;
-  console.log('[Gateway] Shutting down error response systems...');
-  try { credentialHandler.stop(); console.log('[Gateway] ✅ Credential handler stopped'); } catch (e) { console.error('[Gateway] Error:', e); }
-  try { verificationFlowManager.stop(); console.log('[Gateway] ✅ Verification flow stopped'); } catch (e) { console.error('[Gateway] Error:', e); }
-  console.log(`[Gateway] Received ${signal}; shutting down...`);
-  try { skillsManager.persistState(); } catch {}
-  try { telegramChannel.stop(); } catch {}
-  try { getMCPManager().disconnectAll(); } catch {}
-  try { cronScheduler.stop(); } catch {}
-  try { stopAgentSchedules(); } catch {}
-  try { heartbeatRunner.stop(); } catch {}
-  try { closeWss(); } catch {}
-  try {
-    server.close(() => process.exit(0));
-    const forceExitTimer = setTimeout(() => process.exit(0), 1200) as any;
-    if (typeof forceExitTimer?.unref === 'function') forceExitTimer.unref();
-  } catch {
-    process.exit(0);
-  }
-}
-
-process.on('SIGINT', () => gracefulShutdown('SIGINT'));
-process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 
 export { app, server };
