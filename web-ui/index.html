@@ -1,5 +1,5 @@
 ﻿<!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -39,6 +39,17 @@
     --shadow-md: 0 8px 24px rgba(16, 32, 64, 0.08);
     --col-sidebar: 280px;
     --col-right: max(380px, 34vw);
+    --sel-bg: #eaf2ff;
+    --sel-border: #bdd3f6;
+    --sel-text: #0d4faf;
+    --plan-warn-bg: #fff4e0;
+    --plan-warn-fg: #8a5a00;
+    --plan-warn-bd: #f0d090;
+    --plan-ok-bg: #e7f7ec;
+    --plan-ok-fg: #12633a;
+    --plan-ok-bd: #b7e4c7;
+    --plan-on-bg: #eef4ff;
+    --plan-on-bd: #c3d6f6;
   }
 
   :root[data-theme="dark"] {
@@ -57,6 +68,17 @@
     --err: #e06d6d;
     --shadow-sm: 0 2px 8px rgba(4, 7, 12, 0.28);
     --shadow-md: 0 10px 30px rgba(4, 7, 12, 0.36);
+    --sel-bg: #24334f;
+    --sel-border: #3d5f8f;
+    --sel-text: #9cc1ff;
+    --plan-warn-bg: #3a3320;
+    --plan-warn-fg: #e0b96a;
+    --plan-warn-bd: #6a5526;
+    --plan-ok-bg: #1f352b;
+    --plan-ok-fg: #7fd6a8;
+    --plan-ok-bd: #2f5a44;
+    --plan-on-bg: #24334f;
+    --plan-on-bd: #3d5f8f;
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -263,7 +285,7 @@
   .sidebar-tab {
     flex: 1;
     border: 1px solid var(--line);
-    background: #fff;
+    background: var(--panel);
     color: var(--muted);
     border-radius: 999px;
     padding: 8px 10px;
@@ -280,9 +302,9 @@
   :root[data-theme="dark"] .sidebar-tab { background: var(--panel); }
 
   .sidebar-tab.active {
-    background: #eaf2ff;
-    border-color: #bdd3f6;
-    color: #0d4faf;
+    background: var(--sel-bg);
+    border-color: var(--sel-border);
+    color: var(--sel-text);
   }
 
   #sidebar-jobs,
@@ -306,7 +328,7 @@
 
   .sidebar-action {
     border: 1px solid var(--line);
-    background: #fff;
+    background: var(--panel);
     border-radius: 999px;
     padding: 5px 10px;
     font-size: 11px;
@@ -443,8 +465,8 @@
     color: var(--text) !important;
     border-color: var(--line) !important;
   }
-  :root[data-theme="dark"] #settings-modal [style*="background:#fff"],
-  :root[data-theme="dark"] #settings-modal [style*="background: #fff"] {
+  :root[data-theme="dark"] #settings-modal [style*="background:var(--panel)"],
+  :root[data-theme="dark"] #settings-modal [style*="background: var(--panel)"] {
     background: var(--panel-2) !important;
     color: var(--text) !important;
   }
@@ -459,8 +481,8 @@
   :root[data-theme="dark"] #settings-modal .info-row {
     border-bottom-color: var(--line);
   }
-  :root[data-theme="dark"] #settings-modal button[style*="background:#fff"],
-  :root[data-theme="dark"] #settings-modal button[style*="background: #fff"] {
+  :root[data-theme="dark"] #settings-modal button[style*="background:var(--panel)"],
+  :root[data-theme="dark"] #settings-modal button[style*="background: var(--panel)"] {
     background: var(--panel) !important;
     color: var(--text) !important;
     border-color: var(--line) !important;
@@ -472,6 +494,20 @@
   :root[data-theme="dark"] .CodeMirror {
     background: #1f242d;
     color: #e8edf6;
+  }
+  :root[data-theme="dark"] .skill-badge.needs_setup,
+  :root[data-theme="dark"] .skill-badge.blocked,
+  :root[data-theme="dark"] .skill-badge.risk-medium,
+  :root[data-theme="dark"] .skill-badge.risk-high {
+    background: #3a3320;
+    color: #e0b96a;
+    border-color: #6a5526;
+  }
+  :root[data-theme="dark"] .skill-badge.blocked,
+  :root[data-theme="dark"] .skill-badge.risk-high {
+    background: #3d2828;
+    color: #f09999;
+    border-color: #6a3535;
   }
   :root[data-theme="dark"] .CodeMirror-gutters {
     background: #232a35;
@@ -491,7 +527,7 @@
   .approval-card {
     border: 1px solid var(--line);
     border-radius: var(--radius-md);
-    background: #fff;
+    background: var(--panel);
     transition: all 0.15s ease;
   }
 
@@ -518,9 +554,9 @@
   .badge-planning { background: #e6f0ff; color: #225ab6; }
   .badge-executing { background: #e9f8ff; color: #1d7ea7; }
   .badge-completed { background: #e8fbf3; color: #0f8b63; }
-  .badge-failed { background: #fff0f0; color: #c33f3f; }
+  .badge-failed { background: var(--panel)0f0; color: #c33f3f; }
   .badge-queued { background: #eef2f7; color: #607086; }
-  .badge-needs_approval { background: #fff6e9; color: #b06b00; }
+  .badge-needs_approval { background: var(--panel)6e9; color: #b06b00; }
 
   .empty-state {
     border: 1px dashed var(--line-strong);
@@ -539,7 +575,7 @@
   }
 
   .status-paused {
-    background: #fff4d6;
+    background: var(--panel)4d6;
     color: #7d5700;
   }
 
@@ -577,7 +613,7 @@
   .agent-metric {
     border: 1px solid var(--line);
     border-radius: 10px;
-    background: #fff;
+    background: var(--panel);
     padding: 8px;
   }
 
@@ -617,7 +653,7 @@
     overflow: auto;
     border: 1px solid var(--line);
     border-radius: 10px;
-    background: #fff;
+    background: var(--panel);
     padding: 8px;
   }
   .agent-context-scroll .task-list {
@@ -675,17 +711,17 @@
   .status-chip.planned { background: #eef2f7; color: #607086; }
   .status-chip.running { background: #e6f0ff; color: #225ab6; }
   .status-chip.in_progress { background: #e6f0ff; color: #225ab6; }
-  .status-chip.verifying { background: #fff6e9; color: #b06b00; }
+  .status-chip.verifying { background: var(--panel)6e9; color: #b06b00; }
   .status-chip.repaired { background: #e6fff9; color: #0f8b63; }
   .status-chip.done { background: #e8fbf3; color: #0f8b63; }
   .status-chip.skipped { background: #f4f6fa; color: #7d8ca2; }
-  .status-chip.failed { background: #fff0f0; color: #c33f3f; }
+  .status-chip.failed { background: var(--panel)0f0; color: #c33f3f; }
 
   main {
     grid-area: main;
     display: flex;
     flex-direction: column;
-    background: #fff;
+    background: var(--panel);
     height: 100%;
   }
 
@@ -791,7 +827,7 @@
     text-transform: uppercase;
   }
   .artifact-status.ok { background: #e8fbf3; color: #0f8b63; }
-  .artifact-status.error { background: #fff0f0; color: #c33f3f; }
+  .artifact-status.error { background: var(--panel)0f0; color: #c33f3f; }
   .artifact-status.skipped { background: #f4f6fa; color: #7d8ca2; }
   .artifact-row {
     font-size: 11px;
@@ -808,7 +844,7 @@
   }
   .artifact-btn {
     border: 1px solid var(--line);
-    background: #fff;
+    background: var(--panel);
     color: #1a355f;
     border-radius: 8px;
     padding: 4px 8px;
@@ -821,7 +857,7 @@
     margin-top: 6px;
     border: 1px solid var(--line);
     border-radius: 8px;
-    background: #fff;
+    background: var(--panel);
     padding: 8px;
     font-size: 11px;
     color: #2f3e55;
@@ -870,7 +906,7 @@
     gap: 8px;
     border: 1px solid #d9e4f4;
     border-radius: 10px;
-    background: #fff;
+    background: var(--panel);
     padding: 7px 8px;
     font-size: 12px;
     color: #21324a;
@@ -879,7 +915,7 @@
   .queued-item-btn,
   .queued-clear-btn {
     border: 1px solid var(--line);
-    background: #fff;
+    background: var(--panel);
     color: var(--muted);
     border-radius: 999px;
     font-size: 11px;
@@ -918,7 +954,7 @@
     display: none;
     border: 1px solid #9fc1f7;
     background: #ebf3ff;
-    color: #0d4faf;
+    color: var(--sel-text);
     border-radius: 999px;
     padding: 3px 8px;
     font-size: 10px;
@@ -932,7 +968,7 @@
     flex: 1;
     border: 1px solid var(--line-strong);
     border-radius: 12px;
-    background: #fff;
+    background: var(--panel);
     color: var(--text);
     font-family: 'Manrope', sans-serif;
     font-size: 14px;
@@ -1003,7 +1039,7 @@
     width: 100%;
     border: 1px solid var(--line-strong);
     border-radius: 10px;
-    background: #fff;
+    background: var(--panel);
     color: var(--text);
     padding: 8px 10px;
     font-size: 12px;
@@ -1044,22 +1080,22 @@
   .attach-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 6px; }
   .attach-chip {
     display: inline-flex; align-items: center; gap: 6px; max-width: 100%;
-    border: 1px solid var(--line-strong); background: #eef5ff; color: #0d4faf;
+    border: 1px solid var(--line-strong); background: #eef5ff; color: var(--sel-text);
     border-radius: 999px; padding: 4px 8px 4px 10px; font-size: 11px; font-weight: 700;
   }
   .attach-chip .chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
-  .attach-chip a { color: #0d4faf; text-decoration: none; }
+  .attach-chip a { color: var(--sel-text); text-decoration: none; }
   .attach-chip .chip-x { cursor: pointer; opacity: 0.55; font-weight: 800; padding: 0 2px; }
   .attach-chip .chip-x:hover { opacity: 1; }
 
   .doc-preview-panel {
-    border: 1px solid #bcd3f6; background: #f5f9ff; border-radius: 14px;
+    border: 1px solid #bcd3f6; background: var(--panel-2); border-radius: 14px;
     padding: 12px 14px; margin-bottom: 8px; max-height: 46vh; overflow: auto;
     box-shadow: 0 6px 18px rgba(13, 79, 175, 0.08);
   }
   :root[data-theme="dark"] .doc-preview-panel { background: #101a2c; border-color: #1e3355; }
   .dp-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
-  .dp-title { font-size: 13px; font-weight: 800; color: #0d4faf; word-break: break-all; }
+  .dp-title { font-size: 13px; font-weight: 800; color: var(--sel-text); word-break: break-all; }
   :root[data-theme="dark"] .dp-title { color: #8db8ff; }
   .dp-sub { font-size: 11px; color: var(--muted); margin-bottom: 8px; word-break: break-all; }
   .dp-h { font-size: 13px; font-weight: 800; margin: 10px 0 4px; color: #17335f; }
@@ -1071,16 +1107,16 @@
     border: 1px solid var(--line-strong); padding: 5px 8px; text-align: left;
     white-space: pre-wrap; word-break: break-word; vertical-align: top;
   }
-  .dp-table th { background: #e8f0ff; color: #0d4faf; font-weight: 800; }
+  .dp-table th { background: #e8f0ff; color: var(--sel-text); font-weight: 800; }
   :root[data-theme="dark"] .dp-table th { background: #16233b; color: #8db8ff; }
-  .dp-table td.changed { background: #fff7e6; }
+  .dp-table td.changed { background: var(--panel)7e6; }
   :root[data-theme="dark"] .dp-table td.changed { background: #3a2f12; }
   .dp-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
   .dp-btn {
     border: 1px solid var(--line-strong); background: var(--panel); color: var(--text);
     border-radius: 10px; padding: 7px 14px; font-size: 12px; font-weight: 800; cursor: pointer;
   }
-  .dp-btn.primary { background: #0d4faf; border-color: #0d4faf; color: #fff; }
+  .dp-btn.primary { background: var(--sel-text); border-color: var(--sel-text); color: #fff; }
   .dp-btn.primary:disabled { opacity: 0.5; cursor: wait; }
   .dp-status { font-size: 12px; font-weight: 700; margin-top: 8px; word-break: break-word; }
   .dp-status.ok { color: #1a6e35; }
@@ -1101,7 +1137,7 @@
   /* Floating "use selection" affordance */
   #sel-edit-btn {
     display: none; position: absolute; z-index: 400; align-items: center; gap: 6px;
-    background: #0d4faf; color: #fff; border: none; border-radius: 999px;
+    background: var(--sel-text); color: #fff; border: none; border-radius: 999px;
     padding: 7px 13px; font-size: 12px; font-weight: 800; cursor: pointer;
     box-shadow: 0 8px 22px rgba(13, 79, 175, 0.32);
   }
@@ -1110,7 +1146,7 @@
   .quick-mode-btn {
     border: 1px solid var(--line-strong);
     background: #eef5ff;
-    color: #0d4faf;
+    color: var(--sel-text);
     border-radius: 999px;
     padding: 6px 10px;
     font-size: 11px;
@@ -1129,7 +1165,7 @@
     bottom: 34px;
     width: 240px;
     border: 1px solid var(--line);
-    background: #fff;
+    background: var(--panel);
     border-radius: 12px;
     box-shadow: var(--shadow-md);
     z-index: 120;
@@ -1152,7 +1188,7 @@
   .quick-mode-opt {
     width: 100%;
     border: 1px solid var(--line);
-    background: #fff;
+    background: var(--panel);
     color: var(--text);
     border-radius: 9px;
     padding: 7px 9px;
@@ -1166,7 +1202,7 @@
   .quick-mode-opt.active {
     border-color: #9fc1f7;
     background: #edf4ff;
-    color: #0d4faf;
+    color: var(--sel-text);
     font-weight: 700;
   }
 
@@ -1191,10 +1227,10 @@
   }
   .react-step { font-size: 12px; margin-bottom: 8px; }
   .react-step-thought { color: var(--muted); font-style: italic; }
-  .react-step-action { color: #0d4faf; font-weight: 700; margin-top: 3px; }
+  .react-step-action { color: var(--sel-text); font-weight: 700; margin-top: 3px; }
   .react-step-result { color: var(--ok); margin-top: 3px; font-size: 11px; }
   .react-step-result.error { color: var(--err); }
-  .react-steps-toggle { margin-top: 8px; font-size: 11px; color: #0d4faf; cursor: pointer; }
+  .react-steps-toggle { margin-top: 8px; font-size: 11px; color: var(--sel-text); cursor: pointer; }
 
   .think-block { margin-top: 8px; border: 1px solid #d5e3f8; border-radius: 12px; overflow: hidden; }
   .think-toggle {
@@ -1207,7 +1243,7 @@
   .think-content {
     display: none;
     padding: 10px 12px;
-    background: #fff;
+    background: var(--panel);
     color: var(--muted);
     border-top: 1px solid #dde7f6;
     max-height: 300px;
@@ -1616,7 +1652,7 @@
   .info-val.red { color: var(--err); }
 
   #approvals-list { max-height: 220px; overflow-y: auto; }
-  .approval-card { padding: 12px; margin-bottom: 8px; background: #fffaf0; border-color: #f1dbad; }
+  .approval-card { padding: 12px; margin-bottom: 8px; background: var(--panel)af0; border-color: #f1dbad; }
   .approval-action { color: #8b5c00; font-weight: 700; font-size: 12px; margin-bottom: 4px; }
   .approval-reason { color: #726344; font-size: 11px; line-height: 1.6; margin-bottom: 10px; }
   .approval-buttons { display: flex; gap: 8px; }
@@ -1639,15 +1675,15 @@
     padding: 2px 7px;
   }
   .skill-badge.ready { background:#e8fbf3; color:#0f8b63; border-color:#bde9d4; }
-  .skill-badge.needs_setup { background:#fff6e9; color:#b06b00; border-color:#f0d49e; }
-  .skill-badge.blocked { background:#fff0f0; color:#c33f3f; border-color:#efc0c0; }
+  .skill-badge.needs_setup { background:var(--panel)6e9; color:#b06b00; border-color:#f0d49e; }
+  .skill-badge.blocked { background:var(--panel)0f0; color:#c33f3f; border-color:#efc0c0; }
   .skill-badge.risk-low { background:#e8fbf3; color:#0f8b63; border-color:#bde9d4; }
-  .skill-badge.risk-medium { background:#fff6e9; color:#b06b00; border-color:#f0d49e; }
-  .skill-badge.risk-high { background:#fff0f0; color:#c33f3f; border-color:#efc0c0; }
+  .skill-badge.risk-medium { background:var(--panel)6e9; color:#b06b00; border-color:#f0d49e; }
+  .skill-badge.risk-high { background:var(--panel)0f0; color:#c33f3f; border-color:#efc0c0; }
   .skill-item-actions { display:flex; align-items:center; gap:6px; }
   .skill-mini-btn {
     border: 1px solid var(--line);
-    background: #fff;
+    background: var(--panel);
     color: var(--muted);
     cursor: pointer;
     border-radius: 999px;
@@ -1677,7 +1713,7 @@
   .skill-upload-btn {
     border: 1px solid #bcd4f6;
     background: #ebf3ff;
-    color: #0d4faf;
+    color: var(--sel-text);
     border-radius: 999px;
     padding: 5px 10px;
     font-size: 10px;
@@ -1691,7 +1727,7 @@
   .skill-card {
     border: 1px solid var(--line);
     border-radius: var(--radius-md);
-    background: #fff;
+    background: var(--panel);
     padding: 10px 12px;
     margin-bottom: 8px;
     cursor: pointer;
@@ -1781,7 +1817,7 @@
   .context-pin-active #context-pin-btn {
     background: #dce9ff;
     border-color: #9fc1f7;
-    color: #0d4faf;
+    color: var(--sel-text);
   }
   .pin-card {
     border: 1px solid #86d4a8;
@@ -1814,7 +1850,7 @@
   .skill-result { padding: 10px; margin-bottom: 6px; }
   .skill-result-name { font-size: 12px; font-weight: 700; margin-bottom: 3px; }
   .skill-result-desc { font-size: 11px; color: var(--muted); line-height: 1.6; margin-bottom: 6px; }
-  .skill-install-btn { background: #ebf3ff; color: #0d4faf; border: 1px solid #bcd4f6; padding: 5px 10px; border-radius: 999px; }
+  .skill-install-btn { background: #ebf3ff; color: var(--sel-text); border: 1px solid #bcd4f6; padding: 5px 10px; border-radius: 999px; }
 
   .spinner {
     display: inline-block;
@@ -1843,7 +1879,7 @@
     user-select: none;
   }
   .canvas-tab:hover { background: #f0f4fb; color: var(--text); }
-  .canvas-tab.active { background: #fff; color: var(--text); border-bottom: 2px solid var(--brand); }
+  .canvas-tab.active { background: var(--panel); color: var(--text); border-bottom: 2px solid var(--brand); }
   .canvas-tab-close {
     border: 0; background: transparent; color: var(--muted); cursor: pointer;
     font-size: 14px; line-height: 1; padding: 0 2px; border-radius: 4px;
@@ -1862,7 +1898,7 @@
     font-size: 13px; line-height: 1.65;
   }
   #canvas-editor-wrap { height: 100%; }
-  #canvas-preview-frame { background: #fff; }
+  #canvas-preview-frame { background: var(--panel); }
   /* -- Stop Button ---------------------------------- */
   .send-btn { transition: background 0.15s ease !important; display: flex; align-items: center; justify-content: center; }
 
@@ -1912,7 +1948,7 @@
   }
   .hb-topbar {
     display: flex; align-items: center; gap: 12px; padding: 14px 20px;
-    border-bottom: 1px solid var(--line); background: #fff;
+    border-bottom: 1px solid var(--line); background: var(--panel);
     flex-shrink: 0;
   }
   .hb-status-dot {
@@ -1933,7 +1969,7 @@
   .hb-topbar-meta { font-size: 11px; color: var(--muted); }
   .hb-topbar-actions { margin-left: auto; display: flex; gap: 8px; }
   .hb-btn {
-    border: 1px solid var(--line); background: #fff; color: var(--text);
+    border: 1px solid var(--line); background: var(--panel); color: var(--text);
     border-radius: 8px; padding: 5px 12px; font-size: 11px; font-weight: 700;
     cursor: pointer; font-family: 'Manrope',sans-serif;
     display: flex; align-items: center; gap: 5px;
@@ -1958,7 +1994,7 @@
   .hb-section-dot.gray { background: #ccc; }
 
   .hb-card {
-    border: 1px solid var(--line); border-radius: 10px; background: #fff;
+    border: 1px solid var(--line); border-radius: 10px; background: var(--panel);
     padding: 12px 14px; margin-bottom: 8px;
     cursor: grab; transition: all 0.15s ease;
     display: flex; align-items: flex-start; gap: 10px;
@@ -1993,7 +2029,7 @@
   /* Automated session indicator in sidebar */
   .session-auto-badge {
     display: inline-flex; align-items: center; gap: 3px;
-    font-size: 9px; color: #c77d00; background: #fff8e7;
+    font-size: 9px; color: #c77d00; background: var(--panel)8e7;
     border: 1px solid #f0dfa0; border-radius: 4px;
     padding: 1px 5px; font-weight: 700;
   }
@@ -2004,7 +2040,7 @@
     display: flex; align-items: center; justify-content: center;
   }
   .hb-modal {
-    background: #fff; border-radius: 14px; padding: 24px; width: 420px;
+    background: var(--panel); border-radius: 14px; padding: 24px; width: 420px;
     max-height: 80vh; overflow-y: auto;
     box-shadow: 0 12px 40px rgba(0,0,0,0.15);
   }
@@ -2264,19 +2300,19 @@
         <path d="M21 12.79A9 9 0 1 1 11.21 3c-.04.25-.06.5-.06.76a8 8 0 0 0 9.85 7.84z"></path>
       </svg>
     </button>
-    <button onclick="openSettings()" title="Settings" style="display:flex;align-items:center;gap:6px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-sm);padding:6px 12px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;white-space:nowrap" onmouseover="this.style.color='var(--text)';this.style.borderColor='var(--line-strong)'" onmouseout="this.style.color='var(--muted)';this.style.borderColor='var(--line)'">
+    <button onclick="openSettings()" title="设置" style="display:flex;align-items:center;gap:6px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-sm);padding:6px 12px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;white-space:nowrap" onmouseover="this.style.color='var(--text)';this.style.borderColor='var(--line-strong)'" onmouseout="this.style.color='var(--muted)';this.style.borderColor='var(--line)'">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-      Settings
+      设置
     </button>
-    <div class="status-pill">
+    <div class="status-pill" title="模型后端状态">
       <div class="dot" id="ollama-dot"></div>
-      <span id="ollama-status">Checking...</span>
+      <span id="ollama-status">检测中…</span>
     </div>
-    <div class="status-pill" id="model-pill" onclick="openSettings('models')" title="Click to change model" style="cursor:pointer">
+    <div class="status-pill" id="model-pill" onclick="openSettings('models')" title="点击切换模型" style="cursor:pointer">
       <span id="current-provider-badge" style="font-size:10px;font-weight:700;color:var(--muted);margin-right:4px"></span><span id="current-model">-</span>
     </div>
-    <div class="status-pill" id="plan-pill" onclick="togglePlanMode()" title="Plan mode: read-only tools until a submitted plan is approved" style="cursor:pointer">
-      <span id="plan-pill-label">Plan: off</span>
+    <div class="status-pill" id="plan-pill" onclick="togglePlanMode()" title="计划模式：仅只读工具，直到提交的计划获批" style="cursor:pointer">
+      <span id="plan-pill-label">计划: 关</span>
     </div>
     <div class="status-pill stat-compact" id="system-pill">
       <span id="quick-system-stats">CPU --% • RAM --% • GPU --%</span>
@@ -2287,9 +2323,9 @@
 <!-- SIDEBAR -->
 <aside>
   <div id="sidebar-tabs">
-    <button class="sidebar-tab active" id="tab-jobs" onclick="setSidebarTab('jobs')">Sessions</button>
-    <button class="sidebar-tab" id="tab-skills" onclick="setSidebarTab('skills')">Skills</button>
-    <button class="sidebar-tab" id="tab-flows" onclick="setSidebarTab('flows')">Flows</button>
+    <button class="sidebar-tab active" id="tab-jobs" onclick="setSidebarTab('jobs')">会话</button>
+    <button class="sidebar-tab" id="tab-skills" onclick="setSidebarTab('skills')">技能</button>
+    <button class="sidebar-tab" id="tab-flows" onclick="setSidebarTab('flows')">流程</button>
     <button class="sidebar-tab" id="tab-knowledge" onclick="setSidebarTab('knowledge')">知识库</button>
   </div>
 
@@ -2310,7 +2346,7 @@
   <!-- SKILLS TAB -->
   <div id="sidebar-skills">
     <div class="sidebar-section" style="border-top:none">
-      <span>Skills</span>
+      <span>技能</span>
       <button class="sidebar-action" onclick="openCreateSkillModal()">+ Create</button>
     </div>
     <div id="skills-list" style="flex:1;min-height:0;overflow-y:auto;padding:10px">
@@ -2321,7 +2357,7 @@
   <!-- FLOWS TAB (one-click process templates) -->
   <div id="sidebar-flows" style="display:none">
     <div class="sidebar-section" style="border-top:none">
-      <span>Flows</span>
+      <span>流程</span>
       <span style="font-size:11px;color:var(--muted)">一键流程</span>
     </div>
     <div style="padding:0 14px 4px;font-size:11px;color:var(--muted);line-height:1.5">
@@ -2369,35 +2405,35 @@
       <div class="chat-welcome" id="chat-welcome">
         <div class="chat-welcome-icon">🦞</div>
         <h2>SmallClaw</h2>
-        <p>Chat directly with your local model. No API keys, no cloud — just you and the model.</p>
-        <div class="hint">Switch to Agent mode for multi-step agentic tasks with tools.</div>
+        <p>直接与本地模型对话，无需 API 密钥、不依赖云端 — 只有你和模型。</p>
+        <div class="hint">小模型建议关闭思考以获得更快响应；输入 @ 可引用知识库文件，Ctrl+Enter 发送。</div>
       </div>
     </div>
 
     <div class="chat-input-area">
 	      <div class="agent-toggle">
-        <span class="agent-toggle-label">Mode:</span>
+        <span class="agent-toggle-label">模式:</span>
         <span class="agent-mode-badge" id="agent-mode-badge" title="工具策略：模型能力不足时自动调用工具，无需手动切换（由设置 → Agent Policy 的编排配置控制）">工具: 自动</span>
         <div class="agent-toggle-right" style="display:flex;align-items:center;gap:6px">
           <button class="quick-mode-btn" id="context-pin-btn" onclick="toggleContextPinMode()" title="Pin messages to context">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg>
-            <span id="context-pin-label">Context</span>
+            <span id="context-pin-label">上下文</span>
           </button>
           <div class="quick-mode-popover" id="context-pin-popover" style="width:280px">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-              <div class="quick-mode-title" style="margin:0">Pin Messages to Context</div>
-              <span id="context-pin-count" style="font-size:11px;color:var(--muted);font-weight:700">0/3 selected</span>
+              <div class="quick-mode-title" style="margin:0">固定消息到上下文</div>
+              <span id="context-pin-count" style="font-size:11px;color:var(--muted);font-weight:700">0/3 已选中</span>
             </div>
-            <div style="font-size:11px;color:var(--muted);margin-bottom:8px;line-height:1.5">Click messages in chat to pin them. Pinned messages are re-injected into context with each request.</div>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:8px;line-height:1.5">点击聊天中的消息即可固定。被固定的消息会在每次请求时重新注入上下文。</div>
             <div id="context-pin-list" style="max-height:200px;overflow-y:auto;margin-bottom:8px"></div>
             <div style="display:flex;justify-content:flex-end;gap:6px">
               <button class="skill-mini-btn" onclick="cancelContextPin()" style="display:flex;align-items:center;gap:4px">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                Cancel
+                取消
               </button>
               <button class="skill-mini-btn enabled" onclick="confirmContextPin()" style="display:flex;align-items:center;gap:4px">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
-                Done
+                完成
               </button>
             </div>
           </div>
@@ -2406,21 +2442,21 @@
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
           </button>
           <div class="quick-mode-popover" id="quick-mode-popover">
-            <div class="quick-mode-title">Web Search Rigor</div>
-            <button class="quick-mode-opt" id="rigor-fast" onclick="setQuickSearchRigor('fast')">Fast</button>
-            <button class="quick-mode-opt" id="rigor-verified" onclick="setQuickSearchRigor('verified')">Verified</button>
-            <button class="quick-mode-opt" id="rigor-strict" onclick="setQuickSearchRigor('strict')">Strict</button>
-            <div class="quick-mode-title" style="margin-top:8px">Thinking Mode</div>
-            <button class="quick-mode-opt" id="think-off" onclick="setQuickThinking('off')" title="不思考：小模型/快响应（默认）">Off</button>
-            <button class="quick-mode-opt" id="think-standard" onclick="setQuickThinking('standard')" title="标准思考">Standard</button>
-            <button class="quick-mode-opt" id="think-extended" onclick="setQuickThinking('extended')" title="深度思考（更慢）">Extended</button>
+            <div class="quick-mode-title">联网搜索严谨度</div>
+            <button class="quick-mode-opt" id="rigor-fast" onclick="setQuickSearchRigor('fast')">快速</button>
+            <button class="quick-mode-opt" id="rigor-verified" onclick="setQuickSearchRigor('verified')">已核验</button>
+            <button class="quick-mode-opt" id="rigor-strict" onclick="setQuickSearchRigor('strict')">严格</button>
+            <div class="quick-mode-title" style="margin-top:8px">思考模式</div>
+            <button class="quick-mode-opt" id="think-off" onclick="setQuickThinking('off')" title="不思考：小模型/快响应（默认）">关闭</button>
+            <button class="quick-mode-opt" id="think-standard" onclick="setQuickThinking('standard')" title="标准思考">标准</button>
+            <button class="quick-mode-opt" id="think-extended" onclick="setQuickThinking('extended')" title="深度思考（更慢）">扩展</button>
           </div>
 	        </div>
 	      </div>
 	      <div class="queued-prompts-panel" id="queued-prompts-panel">
 	        <div class="queued-prompts-head">
-	          <span id="queued-prompts-title">Queued prompts</span>
-	          <button class="queued-clear-btn" onclick="clearQueuedPrompts()">Clear</button>
+	          <span id="queued-prompts-title">待发送提示词</span>
+	          <button class="queued-clear-btn" onclick="clearQueuedPrompts()">清空</button>
 	        </div>
 	        <div class="queued-prompts-list" id="queued-prompts-list"></div>
 	      </div>
@@ -2435,7 +2471,7 @@
         <input type="file" id="attach-input" style="display:none" onchange="handleAttachFile(this)">
         <textarea
           id="chat-input"
-          placeholder="Type a message... (Enter to send, Shift+Enter for newline)"
+          placeholder="输入消息…（Enter 发送，Shift+Enter 换行）"
           rows="1"
           autocomplete="off"
         ></textarea>
@@ -2475,7 +2511,7 @@
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-shrink:0">
     <div style="display:flex;align-items:center;gap:12px">
       <span style="font-size:16px;font-weight:800;letter-spacing:-0.01em">后台任务</span>
-      <span id="bgt-count" style="font-size:11px;background:#eaf2ff;color:#0d4faf;border-radius:999px;padding:2px 10px;font-weight:700">0 个任务</span>
+      <span id="bgt-count" style="font-size:11px;background:var(--sel-bg);color:var(--sel-text);border-radius:999px;padding:2px 10px;font-weight:700">0 个任务</span>
     </div>
     <div style="display:flex;gap:8px;align-items:center">
       <button
@@ -2521,7 +2557,7 @@
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-shrink:0">
     <div style="display:flex;align-items:center;gap:12px">
       <span style="font-size:16px;font-weight:800;letter-spacing:-0.01em">定时任务</span>
-      <span id="schedule-count" style="font-size:11px;background:#eaf2ff;color:#0d4faf;border-radius:999px;padding:2px 10px;font-weight:700">0 个任务</span>
+      <span id="schedule-count" style="font-size:11px;background:var(--sel-bg);color:var(--sel-text);border-radius:999px;padding:2px 10px;font-weight:700">0 个任务</span>
     </div>
     <div style="display:flex;gap:8px;align-items:center">
       <button onclick="openScheduleCreateModal()" style="border:1px solid var(--brand);background:var(--brand);color:white;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer">+ 新建定时任务</button>
@@ -2628,7 +2664,7 @@
   <div class="right-panel" id="right-panel" style="position:relative">
   <!-- Right panel topbar with canvas toggle -->
   <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 12px;border-bottom:1px solid var(--line);flex-shrink:0;background:var(--panel);min-height:38px">
-    <span style="font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em">Context</span>
+    <span style="font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em">上下文</span>
     <button id="canvas-toggle-btn" onclick="toggleCanvas()" title="Toggle Canvas" style="display:flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--panel-2);color:var(--muted);border-radius:8px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Manrope',sans-serif;transition:all 0.15s ease">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="18" rx="2"/><path d="M8 9l-4 3 4 3"/><path d="M16 9l4 3-4 3"/><path d="M12 6v12"/></svg>
       Canvas
@@ -2663,7 +2699,7 @@
         <span style="flex:1"></span>
         <a id="art-preview-download" href="#" download style="font-size:11px;font-weight:700;color:var(--brand);text-decoration:none">Download</a>
       </div>
-      <iframe id="art-preview-frame" style="flex:1;border:none;width:100%;min-height:0;background:#fff"></iframe>
+      <iframe id="art-preview-frame" style="flex:1;border:none;width:100%;min-height:0;background:var(--panel)"></iframe>
       <div id="art-preview-meta" style="flex-shrink:0;font-size:11px;color:var(--muted);padding:6px 10px;border-top:1px solid var(--line)"></div>
     </div>
   </div>
@@ -2674,19 +2710,19 @@
     <div style="display:flex;align-items:stretch;border-bottom:1px solid var(--line);background:var(--panel-2);flex-shrink:0;min-height:38px">
       <div id="canvas-tabs" style="display:flex;align-items:stretch;flex:1;min-width:0;overflow-x:auto"></div>
       <div style="display:flex;align-items:center;gap:4px;padding:4px 8px;flex-shrink:0;border-left:1px solid var(--line)">
-        <div style="display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#fff">
+        <div style="display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--panel)">
           <button id="canvas-code-btn" onclick="setCanvasMode('code')" class="canvas-mode-btn active" style="border:0;background:transparent;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Manrope',sans-serif;color:var(--muted)">Code</button>
           <button id="canvas-preview-btn" onclick="setCanvasMode('preview')" class="canvas-mode-btn" style="border:0;background:transparent;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Manrope',sans-serif;color:var(--muted)">Preview</button>
         </div>
-        <button onclick="canvasSave()" title="Save (Ctrl+S)" style="display:flex;align-items:center;gap:5px;border:1px solid var(--line);background:#fff;color:var(--text);border-radius:8px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Manrope',sans-serif">
+        <button onclick="canvasSave()" title="Save (Ctrl+S)" style="display:flex;align-items:center;gap:5px;border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:8px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Manrope',sans-serif">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
           Save
         </button>
-        <button onclick="canvasAddToContext()" title="Add to chat input" style="display:flex;align-items:center;gap:5px;border:1px solid var(--line);background:#fff;color:var(--text);border-radius:8px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Manrope',sans-serif">
+        <button onclick="canvasAddToContext()" title="Add to chat input" style="display:flex;align-items:center;gap:5px;border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:8px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Manrope',sans-serif">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
           Add to Chat
         </button>
-        <button onclick="toggleCanvas()" title="Close canvas" style="display:flex;align-items:center;justify-content:center;border:1px solid var(--line);background:#fff;color:var(--muted);border-radius:8px;width:28px;height:28px;cursor:pointer">
+        <button onclick="toggleCanvas()" title="Close canvas" style="display:flex;align-items:center;justify-content:center;border:1px solid var(--line);background:var(--panel);color:var(--muted);border-radius:8px;width:28px;height:28px;cursor:pointer">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>
@@ -2735,7 +2771,7 @@
     </div>
   </div>
   <div class="right-section" id="agent-context-section">
-    <div class="right-section-title">Agent Context</div>
+    <div class="right-section-title">智能体上下文</div>
     <div class="agent-card">
       <div class="agent-metric-grid">
         <div class="agent-metric">
@@ -2861,7 +2897,7 @@
 
 <!-- CREATE SKILL MODAL -->
 <div id="skill-modal" style="display:none;position:fixed;inset:0;background:rgba(10,20,40,0.35);z-index:9999;align-items:center;justify-content:center;padding:18px">
-  <div style="width:min(520px,96vw);max-height:90vh;overflow:auto;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow-md)">
+  <div style="width:min(520px,96vw);max-height:90vh;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow-md)">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--line)">
       <div style="font-weight:800" id="skill-modal-title">Create Skill</div>
       <button class="btn btn-sm" style="background:var(--panel-2);color:var(--muted);border:1px solid var(--line)" onclick="closeSkillModal()">Close</button>
@@ -2895,7 +2931,7 @@
 
 <!-- FLOW TEMPLATE MODAL -->
 <div id="flow-modal" style="display:none;position:fixed;inset:0;background:rgba(10,20,40,0.35);z-index:9999;align-items:center;justify-content:center;padding:18px">
-  <div style="width:min(560px,96vw);max-height:90vh;overflow:auto;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow-md)">
+  <div style="width:min(560px,96vw);max-height:90vh;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow-md)">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--line)">
       <div style="font-weight:800" id="flow-modal-title">Create Flow</div>
       <button class="btn btn-sm" style="background:var(--panel-2);color:var(--muted);border:1px solid var(--line)" onclick="closeFlowModal()">Close</button>
@@ -2943,7 +2979,7 @@
 
 <!-- SETTINGS MODAL -->
 <div id="settings-modal" style="display:none;position:fixed;inset:0;background:rgba(10,20,40,0.35);z-index:9999;align-items:center;justify-content:center;padding:18px">
-  <div style="width:min(980px,96vw);max-height:90vh;overflow:auto;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow-md)">
+  <div style="width:min(980px,96vw);max-height:90vh;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow-md)">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--line)">
       <div style="font-weight:800">设置</div>
       <button class="btn btn-sm" style="background:var(--panel-2);color:var(--muted);border:1px solid var(--line)" onclick="closeSettings()">关闭</button>
@@ -2962,13 +2998,13 @@
     </div>
 
     <div id="settings-panel-system" style="padding:14px 16px;display:grid;grid-template-columns:1fr 1fr;gap:14px">
-      <div style="border:1px solid var(--line);border-radius:12px;padding:12px;background:#fff">
+      <div style="border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel)">
         <div class="right-section-title" style="margin-bottom:8px">Runtime</div>
         <div class="info-row"><span class="info-key">Model</span><span class="info-val" id="settings-runtime-model">-</span></div>
         <div class="info-row"><span class="info-key">Gateway</span><span class="info-val" id="settings-runtime-gateway">-</span></div>
         <div class="info-row"><span class="info-key" id="settings-runtime-provider-key">Provider</span><span class="info-val" id="settings-runtime-provider">-</span></div>
       </div>
-      <div style="border:1px solid var(--line);border-radius:12px;padding:12px;background:#fff">
+      <div style="border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel)">
         <div class="right-section-title" style="margin-bottom:8px">Notes</div>
         <div style="font-size:12px;color:var(--muted);line-height:1.7">
           These settings apply instantly to this gateway process.
@@ -2993,11 +3029,11 @@
           <option value="verified">Verified</option>
           <option value="strict">Strict</option>
         </select>
-        <div style="margin-top:12px;padding:8px 10px;background:#f0f6ff;border:1px solid #bdd3f6;border-radius:8px;font-size:11px;color:#1e40af">
+        <div style="margin-top:12px;padding:8px 10px;background:#f0f6ff;border:1px solid var(--sel-border);border-radius:8px;font-size:11px;color:#1e40af">
           🔑 API keys are managed in the <strong>Credentials</strong> tab and stored encrypted.
         </div>
       </div>
-      <div style="border:1px solid var(--line);border-radius:12px;padding:12px;background:#fff">
+      <div style="border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel)">
         <div class="right-section-title" style="margin-bottom:8px">Behavior</div>
         <div style="font-size:12px;color:var(--muted);line-height:1.7">
           Fast: quickest lookup, fewer checks.
@@ -3054,7 +3090,7 @@
           </div>
 
           <!-- How it works -->
-          <div style="border:1px solid #bdd3f6;border-radius:12px;padding:14px;background:#f0f6ff">
+          <div style="border:1px solid var(--sel-border);border-radius:12px;padding:14px;background:#f0f6ff">
             <div style="font-size:12px;font-weight:700;color:#1e40af;margin-bottom:6px">🔒 How Credentials Work</div>
             <div style="font-size:11.5px;color:#1e40af;line-height:1.65">
               When you hit <strong>Save Settings</strong>, any key you've entered is encrypted with AES-256-GCM and stored in <code style="background:#dbeafe;padding:1px 4px;border-radius:4px">vault.enc</code>.<br><br>
@@ -3077,7 +3113,7 @@
     </div>
 
     <div id="settings-panel-policy" style="display:none;padding:14px 16px">
-      <div style="border:1px solid var(--line);border-radius:12px;padding:12px;background:#fff">
+      <div style="border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel)">
         <div class="right-section-title" style="margin-bottom:8px">Agent Freshness + Memory Policy</div>
         <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:10px">
           <input type="checkbox" id="settings-force-web-fresh" />
@@ -3139,7 +3175,7 @@
         <div id="presets-status" style="font-size:12px;color:var(--muted);margin-top:8px"></div>
         <div style="margin-top:10px;display:flex;gap:8px">
           <button class="btn btn-sm" onclick="openPresetEditor()" style="background:var(--brand);color:#fff;border:none">＋ 新建档案</button>
-          <button class="btn btn-sm" onclick="loadPresets()" style="background:#fff;border:1px solid var(--line);color:var(--text)">刷新</button>
+          <button class="btn btn-sm" onclick="loadPresets()" style="background:var(--panel);border:1px solid var(--line);color:var(--text)">刷新</button>
         </div>
         <!-- Inline editor (hidden unless editing) -->
         <div id="preset-editor" style="display:none;margin-top:12px;border:1px dashed var(--line-strong);border-radius:10px;padding:12px">
@@ -3171,7 +3207,7 @@
             </div>
           </div>
           <div id="preset-detect-wrap" style="margin-top:8px;display:flex;gap:8px;align-items:center">
-            <button class="btn btn-sm" onclick="presetDetectModels()" style="background:#fff;border:1px solid var(--line);color:var(--text)">检测模型</button>
+            <button class="btn btn-sm" onclick="presetDetectModels()" style="background:var(--panel);border:1px solid var(--line);color:var(--text)">检测模型</button>
             <span id="preset-detect-status" style="font-size:11px;color:var(--muted)"></span>
           </div>
           <div id="preset-model-list" style="display:none;margin-top:8px;max-height:180px;overflow-y:auto;border:1px solid var(--line);border-radius:10px;padding:8px">
@@ -3197,7 +3233,7 @@
           </div>
           <div style="margin-top:12px;display:flex;gap:8px">
             <button class="btn btn-sm" onclick="savePreset()" style="background:var(--brand);color:#fff;border:none">保存档案</button>
-            <button class="btn btn-sm" onclick="closePresetEditor()" style="background:#fff;border:1px solid var(--line);color:var(--text)">取消</button>
+            <button class="btn btn-sm" onclick="closePresetEditor()" style="background:var(--panel);border:1px solid var(--line);color:var(--text)">取消</button>
           </div>
         </div>
       </div>
@@ -3213,8 +3249,8 @@
             <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px">Endpoint</label>
             <input id="settings-ollama-endpoint" type="text" placeholder="http://localhost:11434" style="width:100%;border:1px solid var(--line);border-radius:10px;padding:8px;font-size:12px;font-family:'IBM Plex Mono',monospace" />
             <div style="display:flex;gap:8px;margin-top:8px">
-              <button class="btn btn-sm" onclick="refreshProviderModels()" style="background:#fff;border:1px solid var(--line);color:var(--text)">Refresh Models</button>
-              <button class="btn btn-sm" onclick="testProviderConnection()" style="background:#fff;border:1px solid var(--line);color:var(--text)">Test</button>
+              <button class="btn btn-sm" onclick="refreshProviderModels()" style="background:var(--panel);border:1px solid var(--line);color:var(--text)">Refresh Models</button>
+              <button class="btn btn-sm" onclick="testProviderConnection()" style="background:var(--panel);border:1px solid var(--line);color:var(--text)">Test</button>
             </div>
             <div id="provider-status-msg" style="font-size:11px;color:var(--muted);margin-top:6px"></div>
             <div class="right-section-title" style="margin:14px 0 8px">Primary Model</div>
@@ -3232,7 +3268,7 @@
             <label style="display:block;font-size:12px;color:var(--muted);margin:10px 0 6px">Model name <span style="color:var(--muted);font-weight:400">(type manually)</span></label>
             <input id="settings-llamacpp-model" type="text" placeholder="e.g. MiniCPM5-2B" style="width:100%;border:1px solid var(--line);border-radius:10px;padding:8px;font-size:12px;font-family:'IBM Plex Mono',monospace" />
             <div style="display:flex;gap:8px;margin-top:8px">
-              <button class="btn btn-sm" onclick="testProviderConnection()" style="background:#fff;border:1px solid var(--line);color:var(--text)">Test Connection</button>
+              <button class="btn btn-sm" onclick="testProviderConnection()" style="background:var(--panel);border:1px solid var(--line);color:var(--text)">Test Connection</button>
             </div>
             <div id="provider-status-msg-llamacpp" style="font-size:11px;color:var(--muted);margin-top:6px"></div>
             <div style="font-size:11px;color:var(--muted);margin-top:12px;line-height:1.6">Start with: <code style="background:var(--bg-soft);padding:1px 5px;border-radius:4px">llama-server -m model.gguf --port 8080</code></div>
@@ -3246,8 +3282,8 @@
             <label style="display:block;font-size:12px;color:var(--muted);margin:10px 0 6px">Model name</label>
             <input id="settings-lmstudio-model" type="text" placeholder="e.g. MiniCPM5-2B-Instruct" style="width:100%;border:1px solid var(--line);border-radius:10px;padding:8px;font-size:12px;font-family:'IBM Plex Mono',monospace" />
             <div style="display:flex;gap:8px;margin-top:8px">
-              <button class="btn btn-sm" onclick="refreshProviderModels()" style="background:#fff;border:1px solid var(--line);color:var(--text)">Detect Model</button>
-              <button class="btn btn-sm" onclick="testProviderConnection()" style="background:#fff;border:1px solid var(--line);color:var(--text)">Test</button>
+              <button class="btn btn-sm" onclick="refreshProviderModels()" style="background:var(--panel);border:1px solid var(--line);color:var(--text)">Detect Model</button>
+              <button class="btn btn-sm" onclick="testProviderConnection()" style="background:var(--panel);border:1px solid var(--line);color:var(--text)">Test</button>
             </div>
             <div id="provider-status-msg-lmstudio" style="font-size:11px;color:var(--muted);margin-top:6px"></div>
             <div style="font-size:11px;color:var(--muted);margin-top:12px;line-height:1.6">Enable the Local Server in LM Studio before connecting.</div>
@@ -3266,8 +3302,8 @@
               <option value="o3">o3</option>
             </select>
             <div style="display:flex;gap:8px;margin-top:8px">
-              <button class="btn btn-sm" onclick="refreshOpenAIModels()" style="background:#fff;border:1px solid var(--line);color:var(--text)">Refresh Models</button>
-              <button class="btn btn-sm" onclick="testProviderConnection()" style="background:#fff;border:1px solid var(--line);color:var(--text)">Test Connection</button>
+              <button class="btn btn-sm" onclick="refreshOpenAIModels()" style="background:var(--panel);border:1px solid var(--line);color:var(--text)">Refresh Models</button>
+              <button class="btn btn-sm" onclick="testProviderConnection()" style="background:var(--panel);border:1px solid var(--line);color:var(--text)">Test Connection</button>
             </div>
             <div id="provider-status-msg-openai" style="font-size:11px;color:var(--muted);margin-top:6px"></div>
           </div>
@@ -3276,7 +3312,7 @@
           <div id="prov-fields-openai_codex" style="display:none">
             <div class="right-section-title" style="margin-bottom:8px">OpenAI — GPT Plus / Codex</div>
             <div id="codex-disconnected-state">
-              <div style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.6">Connect your ChatGPT Plus or Pro account via OAuth. Your browser will open to authorize SmallClaw.</div>
+              <div style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.6">通过 OAuth 连接你的 ChatGPT Plus 或 Pro 账号。浏览器将打开以授权 SmallClaw。</div>
               <button class="btn" onclick="startCodexOAuth()" style="width:100%;background:var(--brand);color:#fff;border:none;padding:10px;border-radius:10px;font-size:13px;cursor:pointer">Connect ChatGPT Account</button>
               <div id="codex-oauth-status" style="font-size:11px;color:var(--muted);margin-top:8px;text-align:center"></div>
             </div>
@@ -3295,7 +3331,7 @@
                 <option value="gpt-5.2">gpt-5.2</option>
                 <option value="gpt-5.1">gpt-5.1</option>
               </select>
-              <button class="btn btn-sm" onclick="disconnectCodex()" style="margin-top:10px;background:#fff;border:1px solid var(--err);color:var(--err)">Disconnect Account</button>
+              <button class="btn btn-sm" onclick="disconnectCodex()" style="margin-top:10px;background:var(--panel);border:1px solid var(--err);color:var(--err)">Disconnect Account</button>
             </div>
           </div>
 
@@ -3511,7 +3547,7 @@
 
     <div id="settings-panel-channels" style="display:none;padding:14px 16px">
       <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:14px">
-        <div style="border:1px solid var(--line);border-radius:12px;padding:12px;background:#fff">
+        <div style="border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel)">
           <div class="right-section-title" style="margin-bottom:8px">Channel Connection</div>
           <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px">Channel</label>
           <select id="settings-channel-select" class="settings-input" onchange="onChannelTypeChange()" style="margin-bottom:10px">
@@ -3536,7 +3572,7 @@
           <div id="channel-form-telegram">
             <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px">Bot Token</label>
             <input id="settings-tg-token" type="password" placeholder="123456:ABC-DEF1234..." style="width:100%;border:1px solid var(--line);border-radius:10px;padding:8px;font-size:12px;font-family:'IBM Plex Mono',monospace;box-sizing:border-box" />
-            <label style="display:block;font-size:12px;color:var(--muted);margin:10px 0 6px">Your Telegram User ID(s)</label>
+            <label style="display:block;font-size:12px;color:var(--muted);margin:10px 0 6px">你的 Telegram 用户 ID（多个用英文逗号分隔）</label>
             <input id="settings-tg-userid" type="text" placeholder="e.g. 123456789, 987654321" style="width:100%;border:1px solid var(--line);border-radius:10px;padding:8px;font-size:12px;font-family:'IBM Plex Mono',monospace;box-sizing:border-box" />
             <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin:10px 0 0;cursor:pointer">
               <input type="checkbox" id="settings-tg-enabled" />
@@ -3581,13 +3617,13 @@
           </div>
 
           <div style="display:flex;gap:8px;margin-top:12px">
-            <button class="btn btn-sm" id="channel-test-btn" onclick="testSelectedChannel()" style="background:#fff;border:1px solid var(--line);color:var(--text)">Test</button>
+            <button class="btn btn-sm" id="channel-test-btn" onclick="testSelectedChannel()" style="background:var(--panel);border:1px solid var(--line);color:var(--text)">Test</button>
             <button class="btn btn-sm" onclick="saveSelectedChannelSettings()" style="background:var(--brand);color:#fff;border:1px solid var(--brand)">Save</button>
-            <button class="btn btn-sm" id="channel-send-test-btn" onclick="sendSelectedChannelTest()" style="background:#fff;border:1px solid var(--line);color:var(--text)">Send Test</button>
+            <button class="btn btn-sm" id="channel-send-test-btn" onclick="sendSelectedChannelTest()" style="background:var(--panel);border:1px solid var(--line);color:var(--text)">Send Test</button>
           </div>
         </div>
 
-        <div style="border:1px solid var(--line);border-radius:12px;padding:12px;background:#fff">
+        <div style="border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel)">
           <div class="right-section-title" style="margin-bottom:8px">Instructions</div>
           <div id="channel-guide-telegram" style="font-size:12px;color:var(--muted);line-height:1.8">
             <b>Telegram Setup</b><br>
@@ -3619,7 +3655,7 @@
 
     <div id="settings-panel-agents" style="display:none;padding:14px 16px">
       <div style="display:grid;grid-template-columns:0.9fr 1.1fr;gap:14px">
-        <div style="border:1px solid var(--line);border-radius:12px;padding:12px;background:#fff">
+        <div style="border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel)">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
             <div class="right-section-title">Configured Agents</div>
             <button class="btn btn-sm" style="padding:4px 8px" onclick="agentFormNew()">+ New</button>
@@ -3627,7 +3663,7 @@
           <div id="settings-agents-list" style="display:flex;flex-direction:column;gap:8px;max-height:520px;overflow:auto;font-size:12px;color:var(--muted)">Loading agents...</div>
         </div>
         <div style="display:flex;flex-direction:column;gap:12px">
-          <div style="border:1px solid var(--line);border-radius:12px;padding:12px;background:#fff">
+          <div style="border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel)">
             <div class="right-section-title" style="margin-bottom:8px">Agent Details</div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
               <div>
@@ -3682,25 +3718,25 @@
             <input id="agent-edit-spawn-allowlist" type="text" placeholder="researcher,writer" style="width:100%;border:1px solid var(--line);border-radius:8px;padding:6px 8px;font-size:12px;font-family:'IBM Plex Mono',monospace;box-sizing:border-box" />
             <div style="display:flex;gap:8px;margin-top:10px">
               <button class="btn btn-sm" onclick="saveAgentFromForm()">Save Agent</button>
-              <button class="btn btn-sm" style="background:#fff;border:1px solid var(--line);color:var(--text)" onclick="deleteSelectedAgent()">Delete</button>
+              <button class="btn btn-sm" style="background:var(--panel);border:1px solid var(--line);color:var(--text)" onclick="deleteSelectedAgent()">Delete</button>
             </div>
           </div>
-          <div style="border:1px solid var(--line);border-radius:12px;padding:12px;background:#fff">
+          <div style="border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel)">
             <div class="right-section-title" style="margin-bottom:8px">AGENTS.md (CodeMirror)</div>
             <div id="agent-md-editor-wrap" style="border:1px solid var(--line);border-radius:8px;overflow:hidden"></div>
             <div style="display:flex;gap:8px;margin-top:8px">
-              <button class="btn btn-sm" style="background:#fff;border:1px solid var(--line);color:var(--text)" onclick="loadSelectedAgentMd()">Reload File</button>
+              <button class="btn btn-sm" style="background:var(--panel);border:1px solid var(--line);color:var(--text)" onclick="loadSelectedAgentMd()">Reload File</button>
               <button class="btn btn-sm" onclick="saveSelectedAgentMd()">Save AGENTS.md</button>
             </div>
             <div id="agent-md-path" style="margin-top:6px;font-size:11px;color:var(--muted);font-family:'IBM Plex Mono',monospace"></div>
           </div>
-          <div style="border:1px solid var(--line);border-radius:12px;padding:12px;background:#fff">
+          <div style="border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel)">
             <div class="right-section-title" style="margin-bottom:8px">Manual Spawn + Run History</div>
             <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:4px">Task</label>
             <textarea id="agent-spawn-task" rows="3" style="width:100%;border:1px solid var(--line);border-radius:8px;padding:6px 8px;font-size:12px;box-sizing:border-box;resize:vertical" placeholder="Run a one-off task for this agent..."></textarea>
             <div style="display:flex;gap:8px;margin-top:8px">
               <button class="btn btn-sm" onclick="runSelectedAgentOnce()">Run Once</button>
-              <button class="btn btn-sm" style="background:#fff;border:1px solid var(--line);color:var(--text)" onclick="loadAgentRunHistory()">Refresh History</button>
+              <button class="btn btn-sm" style="background:var(--panel);border:1px solid var(--line);color:var(--text)" onclick="loadAgentRunHistory()">Refresh History</button>
             </div>
             <div id="agent-spawn-result" style="margin-top:8px;font-size:12px;color:var(--muted);white-space:pre-wrap;max-height:120px;overflow:auto"></div>
             <div id="agent-run-history" style="margin-top:8px;display:flex;flex-direction:column;gap:6px;max-height:170px;overflow:auto;font-size:12px"></div>
@@ -3712,15 +3748,15 @@
     <div id="settings-panel-integrations" style="display:none;padding:14px 16px">
       <!-- Sub-tab row -->
       <div style="display:flex;gap:8px;margin-bottom:14px">
-        <button id="itab-webhooks" onclick="setIntegTab('webhooks')" style="padding:5px 14px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid var(--line);background:#eaf2ff;color:#0d4faf">Webhooks</button>
-        <button id="itab-mcp" onclick="setIntegTab('mcp')" style="padding:5px 14px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid var(--line);background:#fff;color:var(--muted)">MCP Servers</button>
+        <button id="itab-webhooks" onclick="setIntegTab('webhooks')" style="padding:5px 14px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid var(--line);background:var(--sel-bg);color:var(--sel-text)">Webhooks</button>
+        <button id="itab-mcp" onclick="setIntegTab('mcp')" style="padding:5px 14px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid var(--line);background:var(--panel);color:var(--muted)">MCP Servers</button>
       </div>
 
       <!-- WEBHOOKS PANEL ----------------------------------------------- -->
       <div id="itab-panel-webhooks">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
           <!-- Left: config -->
-          <div style="border:1px solid var(--line);border-radius:12px;padding:14px;background:#fff">
+          <div style="border:1px solid var(--line);border-radius:12px;padding:14px;background:var(--panel)">
             <div class="right-section-title" style="margin-bottom:10px">Webhook Endpoint</div>
 
             <div id="wh-status-bar" style="display:flex;align-items:center;gap:8px;margin-bottom:12px;padding:8px 10px;border-radius:8px;background:#f8f9fa;font-size:12px">
@@ -3742,17 +3778,17 @@
             <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px">URL Path Prefix</label>
             <input id="wh-path" type="text" value="/hooks" style="width:100%;border:1px solid var(--line);border-radius:8px;padding:7px 10px;font-size:12px;font-family:'IBM Plex Mono',monospace;box-sizing:border-box;margin-bottom:12px" />
 
-            <div id="wh-url-display" style="display:none;background:#f0f7ff;border:1px solid #c7dff7;border-radius:8px;padding:8px 10px;font-size:11px;font-family:'IBM Plex Mono',monospace;color:#0d4faf;margin-bottom:12px;word-break:break-all"></div>
+            <div id="wh-url-display" style="display:none;background:#f0f7ff;border:1px solid #c7dff7;border-radius:8px;padding:8px 10px;font-size:11px;font-family:'IBM Plex Mono',monospace;color:var(--sel-text);margin-bottom:12px;word-break:break-all"></div>
 
             <div style="display:flex;gap:8px">
               <button onclick="saveWebhookSettings()" style="padding:6px 14px;background:var(--brand);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer">Save</button>
-              <button onclick="testWebhookEndpoint()" style="padding:6px 14px;background:#fff;color:var(--text);border:1px solid var(--line);border-radius:8px;font-size:12px;cursor:pointer">Test</button>
-              <button onclick="copyWebhookCurl()" style="padding:6px 14px;background:#fff;color:var(--text);border:1px solid var(--line);border-radius:8px;font-size:12px;cursor:pointer">Copy cURL</button>
+              <button onclick="testWebhookEndpoint()" style="padding:6px 14px;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:8px;font-size:12px;cursor:pointer">Test</button>
+              <button onclick="copyWebhookCurl()" style="padding:6px 14px;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:8px;font-size:12px;cursor:pointer">Copy cURL</button>
             </div>
           </div>
 
           <!-- Right: guide -->
-          <div style="border:1px solid var(--line);border-radius:12px;padding:14px;background:#fff">
+          <div style="border:1px solid var(--line);border-radius:12px;padding:14px;background:var(--panel)">
             <div class="right-section-title" style="margin-bottom:8px">Setup Guide</div>
             <div style="font-size:12px;color:var(--muted);line-height:1.85">
               <b>1. Enable + set a token</b> — any secret string you choose.<br>
@@ -3780,10 +3816,10 @@
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
           <!-- Left: server list + add form -->
           <div>
-            <div style="border:1px solid var(--line);border-radius:12px;padding:14px;background:#fff;margin-bottom:12px">
+            <div style="border:1px solid var(--line);border-radius:12px;padding:14px;background:var(--panel);margin-bottom:12px">
               <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
                 <div class="right-section-title">MCP Servers</div>
-                <button onclick="showMCPAddForm()" style="padding:4px 10px;border:1px solid var(--brand);border-radius:6px;background:#fff;color:var(--brand);font-size:11px;font-weight:600;cursor:pointer">+ Add Server</button>
+                <button onclick="showMCPAddForm()" style="padding:4px 10px;border:1px solid var(--brand);border-radius:6px;background:var(--panel);color:var(--brand);font-size:11px;font-weight:600;cursor:pointer">+ Add Server</button>
               </div>
               <div id="mcp-server-list" style="font-size:12px;color:var(--muted)">Loading...</div>
             </div>
@@ -3832,7 +3868,7 @@
 
               <div style="display:flex;gap:8px">
                 <button onclick="saveMCPServer()" style="padding:6px 14px;background:var(--brand);color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer">Save</button>
-                <button onclick="hideMCPAddForm()" style="padding:6px 14px;background:#fff;color:var(--muted);border:1px solid var(--line);border-radius:7px;font-size:12px;cursor:pointer">Cancel</button>
+                <button onclick="hideMCPAddForm()" style="padding:6px 14px;background:var(--panel);color:var(--muted);border:1px solid var(--line);border-radius:7px;font-size:12px;cursor:pointer">Cancel</button>
               </div>
               <div id="mcp-form-msg" style="margin-top:8px;font-size:11px;color:var(--muted)"></div>
             </div>
@@ -3840,7 +3876,7 @@
 
           <!-- Right: info + popular servers -->
           <div>
-            <div style="border:1px solid var(--line);border-radius:12px;padding:14px;background:#fff;margin-bottom:12px">
+            <div style="border:1px solid var(--line);border-radius:12px;padding:14px;background:var(--panel);margin-bottom:12px">
               <div class="right-section-title" style="margin-bottom:8px">What is MCP?</div>
               <div style="font-size:12px;color:var(--muted);line-height:1.85">
                 <b>Model Context Protocol</b> (by Anthropic) is a standard that lets AI connect to external tools and data sources.<br><br>
@@ -3851,7 +3887,7 @@
               </div>
             </div>
 
-            <div style="border:1px solid var(--line);border-radius:12px;padding:14px;background:#fff">
+            <div style="border:1px solid var(--line);border-radius:12px;padding:14px;background:var(--panel)">
               <div class="right-section-title" style="margin-bottom:8px">Popular Servers</div>
               <div style="font-size:12px;color:var(--muted);line-height:1">
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
@@ -3974,7 +4010,7 @@ function renderQueuedPromptsPanel() {
     return;
   }
   panel.style.display = 'block';
-  title.textContent = `Queued prompts (${count})`;
+  title.textContent = `待发送提示词 (${count})`;
   list.innerHTML = queuedPrompts.map((q, i) => `
     <div class="queued-item">
       <div class="queued-item-text">${escHtml(q)}</div>
@@ -4017,7 +4053,7 @@ function updateQueuedPromptUI() {
   if (input) {
     input.placeholder = isThinking
       ? 'Assistant is responding. Press Enter/Send to queue next prompt.'
-      : 'Type a message... (Enter to send, Shift+Enter for newline)';
+      : '输入消息…（Enter 发送，Shift+Enter 换行）';
   }
   renderQueuedPromptsPanel();
 }
@@ -4380,6 +4416,9 @@ function setSidebarTab(tab) {
   document.getElementById('sidebar-skills').style.display = tab === 'skills' ? 'flex' : 'none';
   document.getElementById('sidebar-flows').style.display = tab === 'flows' ? 'flex' : 'none';
   document.getElementById('sidebar-knowledge').style.display = tab === 'knowledge' ? 'flex' : 'none';
+  // Keep the topbar Knowledge button in sync with the sidebar tab
+  const kbBtn = document.getElementById('btn-knowledge');
+  if (kbBtn) kbBtn.classList.toggle('active', tab === 'knowledge');
   if (tab === 'skills') loadInstalledSkills();
   if (tab === 'flows') loadFlows();
   if (tab === 'knowledge') loadKnowledge();
@@ -4397,7 +4436,10 @@ async function updateAgentModeIndicator() {
     const skillOn = !!(elig && elig.eligible);
     const badge = document.getElementById('agent-mode-badge');
     if (!badge) return;
-    badge.textContent = (orchestrationEnabled && skillOn) ? '工具: 自动 + 编排' : '工具: 自动';
+    badge.textContent = '工具: 自动';
+    badge.title = orchestrationEnabled && skillOn
+      ? '工具策略：模型能力不足时自动调用工具（编排已启用）'
+      : '工具策略：模型能力不足时自动调用工具';
     badge.classList.add('visible');
   } catch { /* keep default badge text */ }
 }
@@ -4411,8 +4453,8 @@ function renderThinkBlock(thinking) {
     <div class="think-block">
       <button class="think-toggle" id="${id}_btn" onclick="toggleThink('${id}')">
         <span class="think-icon">...</span>
-        <span>Thought process</span>
-        <span style="margin-left:auto;opacity:0.5">${wordCount} words</span>
+        <span>思考过程</span>
+        <span style="margin-left:auto;opacity:0.5">${wordCount} 字</span>
       </button>
       <div class="think-content" id="${id}_body">${escHtml(thinking)}</div>
     </div>
@@ -4810,8 +4852,8 @@ function renderChatMessages() {
       <div class="chat-welcome" id="chat-welcome">
         <div class="chat-welcome-icon">🦞</div>
         <h2>SmallClaw</h2>
-        <p>Chat directly with your local model. No API keys, no cloud — just you and the model.</p>
-        <div class="hint">Enable Agent mode when you want planning + tool execution in this chat.</div>
+        <p>直接与本地模型对话，无需 API 密钥、不依赖云端 — 只有你和模型。</p>
+        <div class="hint">小模型建议关闭思考以获得更快响应；输入 @ 可引用知识库文件。</div>
       </div>`;
     return;
   }
@@ -4826,7 +4868,7 @@ function renderChatMessages() {
     <div class="msg ${msg.role}${pinClass}${selectedClass}${confirmedClass}"${clickHandler}>
       <div class="msg-avatar">${msg.role === 'user' ? 'U' : '🦞'}</div>
       <div class="msg-body">
-        <div class="msg-role">${msg.role === 'user' ? 'You' : (msg.mode === 'agentic' ? 'SmallClaw (Agent)' : 'SmallClaw')}</div>
+        <div class="msg-role">${msg.role === 'user' ? '你' : (msg.mode === 'agentic' ? 'SmallClaw (Agent)' : 'SmallClaw')}</div>
         ${msg.role === 'ai' ? renderAssistantContent(msg.content) : `<div class="msg-content">${escHtml(msg.content)}</div>`}
         ${msg.role === 'ai' ? renderArtifacts(msg.artifacts) : ''}
         ${msg.role === 'ai' && msg.processEntries && msg.processEntries.length ? renderProcessPill(msg.processEntries) : ''}
@@ -5274,25 +5316,25 @@ function renderPlanPill() {
   const pill = document.getElementById('plan-pill');
   if (!label || !pill) return;
   if (!planState.enabled) {
-    label.textContent = 'Plan: off';
+    label.textContent = '计划: 关';
     pill.style.background = '';
     pill.style.color = '';
     pill.style.borderColor = '';
   } else if (planState.pending) {
-    label.textContent = 'Plan: approval needed';
-    pill.style.background = '#fff4e0';
-    pill.style.color = '#8a5a00';
-    pill.style.borderColor = '#f0d090';
+    label.textContent = '计划: 待审批';
+    pill.style.background = 'var(--plan-warn-bg)';
+    pill.style.color = 'var(--plan-warn-fg)';
+    pill.style.borderColor = 'var(--plan-warn-bd)';
   } else if (planState.approved) {
-    label.textContent = 'Plan: approved';
-    pill.style.background = '#e7f7ec';
-    pill.style.color = '#12633a';
-    pill.style.borderColor = '#b7e4c7';
+    label.textContent = '计划: 已批准';
+    pill.style.background = 'var(--plan-ok-bg)';
+    pill.style.color = 'var(--plan-ok-fg)';
+    pill.style.borderColor = 'var(--plan-ok-bd)';
   } else {
-    label.textContent = 'Plan: on';
-    pill.style.background = '#eef4ff';
-    pill.style.color = '#0d4faf';
-    pill.style.borderColor = '#c3d6f6';
+    label.textContent = '计划: 开';
+    pill.style.background = 'var(--plan-on-bg)';
+    pill.style.color = 'var(--sel-text)';
+    pill.style.borderColor = 'var(--plan-on-bd)';
   }
 }
 
@@ -5414,7 +5456,7 @@ function toggleArtifacts() {
   if (!panel) return;
   if (artifactsOpen) {
     panel.style.display = 'flex';
-    if (btn) { btn.style.background = '#eaf2ff'; btn.style.borderColor = '#bdd3f6'; btn.style.color = '#0d4faf'; }
+    if (btn) { btn.style.background = 'var(--sel-bg)'; btn.style.borderColor = 'var(--sel-border)'; btn.style.color = 'var(--sel-text)'; }
     setArtifactsTab(artifactsTab);
     refreshArtifacts();
   } else {
@@ -6648,7 +6690,8 @@ async function loadSearchSettingsSummary() {
 
 function updateQuickModeUI() {
   const lbl = document.getElementById('quick-mode-label');
-  if (lbl) lbl.textContent = (quickSearchRigor || 'verified').replace(/^./, c => c.toUpperCase());
+  const RIGOR_LABEL = { fast: '快速', verified: '已核验', strict: '严格' };
+  if (lbl) lbl.textContent = RIGOR_LABEL[quickSearchRigor] || RIGOR_LABEL.verified;
   ['fast', 'verified', 'strict'].forEach(v => {
     const el = document.getElementById(`rigor-${v}`);
     if (el) el.classList.toggle('active', quickSearchRigor === v);
@@ -6752,9 +6795,9 @@ function setSettingsTab(tab) {
     const btn = document.getElementById(`settings-tab-${t}`);
     const panel = document.getElementById(`settings-panel-${t}`);
     if (btn) {
-      btn.style.background = (t === tab) ? '#eaf2ff' : '#fff';
-      btn.style.borderColor = (t === tab) ? '#bdd3f6' : 'var(--line)';
-      btn.style.color = (t === tab) ? '#0d4faf' : 'var(--muted)';
+      btn.style.background = (t === tab) ? 'var(--sel-bg)' : 'var(--panel)';
+      btn.style.borderColor = (t === tab) ? 'var(--sel-border)' : 'var(--line)';
+      btn.style.color = (t === tab) ? 'var(--sel-text)' : 'var(--muted)';
     }
     if (panel) {
       if (t === tab) {
@@ -6948,8 +6991,8 @@ async function loadPresets() {
         '</div>' +
         '<div style="display:flex;gap:6px;flex-shrink:0">' +
           (p.active ? '' : '<button class="btn btn-sm" onclick="switchPreset(\'' + escHtml(p.id) + '\')" style="background:var(--brand);color:#fff;border:none">切换</button>') +
-          '<button class="btn btn-sm" onclick="openPresetEditor(\'' + escHtml(p.id) + '\')" style="background:#fff;border:1px solid var(--line);color:var(--text)">编辑</button>' +
-          (p.builtin ? '' : '<button class="btn btn-sm" onclick="deletePreset(\'' + escHtml(p.id) + '\')" style="background:#fff;border:1px solid var(--err);color:var(--err)">删除</button>') +
+          '<button class="btn btn-sm" onclick="openPresetEditor(\'' + escHtml(p.id) + '\')" style="background:var(--panel);border:1px solid var(--line);color:var(--text)">编辑</button>' +
+          (p.builtin ? '' : '<button class="btn btn-sm" onclick="deletePreset(\'' + escHtml(p.id) + '\')" style="background:var(--panel);border:1px solid var(--err);color:var(--err)">删除</button>') +
         '</div>';
       listEl.appendChild(card);
     });
@@ -7713,9 +7756,9 @@ function renderAgentsList() {
     const selected = a.id === selectedAgentId;
     const lastRun = a.lastRun?.finishedAt ? new Date(a.lastRun.finishedAt).toLocaleString() : 'never';
     const heartbeat = a.lastHeartbeatAt ? new Date(a.lastHeartbeatAt).toLocaleString() : 'never';
-    const badge = a.default ? '<span style="font-size:10px;padding:2px 6px;border-radius:999px;background:#eaf2ff;color:#0d4faf;border:1px solid #bdd3f6">default</span>' : '';
+    const badge = a.default ? '<span style="font-size:10px;padding:2px 6px;border-radius:999px;background:var(--sel-bg);color:var(--sel-text);border:1px solid var(--sel-border)">default</span>' : '';
     return `
-      <button onclick="selectAgent('${escHtml(a.id)}')" style="text-align:left;border:1px solid ${selected ? '#bdd3f6' : 'var(--line)'};border-radius:10px;padding:8px;background:${selected ? '#f5f9ff' : '#fff'};cursor:pointer">
+      <button onclick="selectAgent('${escHtml(a.id)}')" style="text-align:left;border:1px solid ${selected ? 'var(--sel-border)' : 'var(--line)'};border-radius:10px;padding:8px;background:${selected ? 'var(--panel-2)' : 'var(--panel)'};cursor:pointer">
         <div style="display:flex;align-items:center;gap:6px">
           <div style="font-size:15px">${escHtml(a.emoji || '🤖')}</div>
           <div style="font-weight:700;color:var(--text)">${escHtml(a.name || a.id)}</div>
@@ -8481,7 +8524,7 @@ async function checkStatus() {
     const dot = document.getElementById('ollama-dot');
 
     // For cloud providers, always show as online if gateway is up
-    const backendOnline = isCloud ? true : !!status.ollama;
+    const backendOnline = isCloud ? true : (status.providerOnline ?? !!status.ollama);
     dot.className = 'dot ' + (backendOnline ? 'online' : 'offline');
     document.getElementById('ollama-status').textContent = backendOnline
       ? `${providerLabel} Online` : `${providerLabel} Offline`;
@@ -9436,7 +9479,7 @@ function toggleCanvas() {
   if (!panel) return;
   if (canvasOpen) {
     panel.style.display = 'flex';
-    if (btn) { btn.style.background='#eaf2ff'; btn.style.borderColor='#bdd3f6'; btn.style.color='#0d4faf'; }
+    if (btn) { btn.style.background='var(--sel-bg)'; btn.style.borderColor='var(--sel-border)'; btn.style.color='var(--sel-text)'; }
     if (!canvasEditorInitialized) initCanvasEditor();
     canvasRenderTabs();
   } else {
@@ -9717,10 +9760,10 @@ function removePinFromList(index) {
 function updatePinUI() {
   const countEl = document.getElementById('context-pin-count');
   const listEl = document.getElementById('context-pin-list');
-  if (countEl) countEl.textContent = `${pinnedMessageIndices.size}/${MAX_PINS} selected`;
+  if (countEl) countEl.textContent = `${pinnedMessageIndices.size}/${MAX_PINS} 已选中`;
   if (listEl) {
     if (pinnedMessageIndices.size === 0) {
-      listEl.innerHTML = '<div style="font-size:11px;color:var(--muted);text-align:center;padding:8px">Click messages in chat to select them</div>';
+      listEl.innerHTML = '<div style="font-size:11px;color:var(--muted);text-align:center;padding:8px">点击聊天中的消息以选中</div>';
     } else {
       listEl.innerHTML = Array.from(pinnedMessageIndices).map(idx => {
         const msg = chatHistory[idx];
@@ -9833,7 +9876,7 @@ function renderScheduleList() {
         <div style="flex:1;min-width:0">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
             <div style="font-weight:700;font-size:13px">${job.name || '未命名'}</div>
-            <span class="${statusClass}" style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;${job.status === 'active' ? 'background:#c8f0c4;color:#0d5c2f' : job.status === 'paused' ? 'background:#fff4d6;color:#7d5700' : 'background:#ffd6d6;color:#8b0000'}">${statusText}</span>
+            <span class="${statusClass}" style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;${job.status === 'active' ? 'background:#c8f0c4;color:#0d5c2f' : job.status === 'paused' ? 'background:var(--panel)4d6;color:#7d5700' : 'background:#ffd6d6;color:#8b0000'}">${statusText}</span>
           </div>
           <div style="font-size:12px;color:var(--muted);line-height:1.4;margin-bottom:6px">${job.prompt ? job.prompt.slice(0, 60) + (job.prompt.length > 60 ? '...' : '') : '暂无提示词'}</div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:11px;color:var(--muted)">
@@ -10097,7 +10140,7 @@ document.addEventListener('click', (e) => {
 
 // --- Columns config ---------------------------------------------------------
 const BGT_COLUMNS = [
-  { key: 'running',          label: '● 进行中',   empty: '暂无进行中任务', color: '#0d4faf', bg: '#eaf2ff' },
+  { key: 'running',          label: '● 进行中',   empty: '暂无进行中任务', color: 'var(--sel-text)', bg: 'var(--sel-bg)' },
   { key: 'queued',           label: '◷ 排队中',   empty: '暂无排队任务',   color: '#7c4d00', bg: '#fff8e1' },
   { key: 'paused',           label: '‖ 已暂停',   empty: '暂无已暂停任务', color: '#555',    bg: '#f5f5f5' },
   { key: 'stalled',          label: '▲ 卡住',     empty: '暂无卡住任务',   color: '#9c1a1a', bg: '#fff0f0' },
@@ -10219,7 +10262,7 @@ function bgtCardHTML(t, col) {
         <button
           onclick="event.stopPropagation(); bgtDeleteTask('${escHtml(t.id)}', '${escHtml(t.status)}')"
           title="删除任务"
-          style="border:1px solid #fca5a5;background:#fff0f0;color:#9c1a1a;border-radius:7px;padding:1px 6px;font-size:11px;font-weight:700;cursor:pointer"
+          style="border:1px solid #fca5a5;background:var(--panel)0f0;color:#9c1a1a;border-radius:7px;padding:1px 6px;font-size:11px;font-weight:700;cursor:pointer"
         >✕</button>
         <span style="font-size:14px;flex-shrink:0">${STATUS_ICON[t.status] || '?'}</span>
       </div>
@@ -10293,7 +10336,7 @@ async function bgtRefreshOpenPanel() {
   const lastToolAt = task.lastToolCallAt ? new Date(task.lastToolCallAt).toLocaleTimeString() : '—';
   const channel = task.channel === 'telegram' ? 'Telegram' : '网页端';
   const startedAt = task.startedAt ? new Date(task.startedAt).toLocaleString() : '—';
-  const statusColor = { running:'#0d4faf', queued:'#7c4d00', paused:'#555', stalled:'#9c1a1a', needs_assistance:'#6d2d9e', complete:'#1a6e35', failed:'#9c1a1a' };
+  const statusColor = { running:'var(--sel-text)', queued:'#7c4d00', paused:'#555', stalled:'#9c1a1a', needs_assistance:'#6d2d9e', complete:'#1a6e35', failed:'#9c1a1a' };
   const sc = statusColor[task.status] || '#555';
 
   // Build plan steps HTML
@@ -10314,7 +10357,7 @@ async function bgtRefreshOpenPanel() {
   const recentJournal = journal.slice(-30).reverse();
   const journalHTML = recentJournal.map(entry => {
     const time = new Date(entry.t).toLocaleTimeString();
-    const typeColor = { tool_call:'#0d4faf', tool_result:'#1a6e35', error:'#9c1a1a', plan_mutation:'#6d2d9e', status_push:'#555', pause:'#7c4d00', resume:'#7c4d00', advisor_decision:'#555', heartbeat:'var(--brand)' };
+    const typeColor = { tool_call:'var(--sel-text)', tool_result:'#1a6e35', error:'#9c1a1a', plan_mutation:'#6d2d9e', status_push:'#555', pause:'#7c4d00', resume:'#7c4d00', advisor_decision:'#555', heartbeat:'var(--brand)' };
     const tc = typeColor[entry.type] || '#888';
     return `<div style="display:flex;gap:8px;padding:5px 0;border-bottom:1px solid var(--line);font-size:11px">
       <span style="color:var(--muted);flex-shrink:0;min-width:52px">${time}</span>
@@ -10341,7 +10384,7 @@ async function bgtRefreshOpenPanel() {
       + '<div style="border:1px solid #cba8f5;border-radius:10px;overflow:hidden;background:#faf5ff;margin-top:8px">'
       + '<div style="padding:8px 12px;font-size:11px;font-weight:700;color:#6d2d9e;border-bottom:1px solid #e9d8ff">💬 回复给智能体</div>'
       + '<div style="display:flex;gap:8px;padding:8px">'
-      + '<textarea id="task-reply-input" rows="2" placeholder="输入你的回复——智能体将看到并继续..." style="flex:1;resize:none;border:1px solid #cba8f5;border-radius:8px;padding:8px;font-size:12px;font-family:inherit;background:#fff;color:var(--text)"></textarea>'
+      + '<textarea id="task-reply-input" rows="2" placeholder="输入你的回复——智能体将看到并继续..." style="flex:1;resize:none;border:1px solid #cba8f5;border-radius:8px;padding:8px;font-size:12px;font-family:inherit;background:var(--panel);color:var(--text)"></textarea>'
       + '<button id="task-reply-send" data-taskid="' + tid + '" style="background:#7c3aed;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;align-self:flex-end">发送</button>'
       + '</div></div>';
   }
@@ -10394,7 +10437,7 @@ async function bgtRefreshOpenPanel() {
 
     <!-- Delete button -->
     ${(task.status === 'complete' || task.status === 'failed') ? `
-    <button onclick="bgtDeleteTask('${escHtml(task.id)}')" style="border:1px solid #fca5a5;background:#fff0f0;color:#9c1a1a;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer;align-self:flex-start">删除</button>` : ''}
+    <button onclick="bgtDeleteTask('${escHtml(task.id)}')" style="border:1px solid #fca5a5;background:var(--panel)0f0;color:#9c1a1a;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer;align-self:flex-start">删除</button>` : ''}
   `;
 
   // Wire up the reply send button via JS (avoids inline onclick escaping issues)
@@ -10516,9 +10559,9 @@ function setIntegTab(tab) {
     const btn = document.getElementById('itab-' + t);
     const panel = document.getElementById('itab-panel-' + t);
     if (btn) {
-      btn.style.background = t === tab ? '#eaf2ff' : '#fff';
-      btn.style.color = t === tab ? '#0d4faf' : 'var(--muted)';
-      btn.style.borderColor = t === tab ? '#bdd3f6' : 'var(--line)';
+      btn.style.background = t === tab ? 'var(--sel-bg)' : 'var(--panel)';
+      btn.style.color = t === tab ? 'var(--sel-text)' : 'var(--muted)';
+      btn.style.borderColor = t === tab ? 'var(--sel-border)' : 'var(--line)';
     }
     if (panel) panel.style.display = t === tab ? 'block' : 'none';
   });
@@ -10662,7 +10705,7 @@ async function loadMCPServers() {
       const statusColor = s.status === 'connected' ? '#22c55e' : s.status === 'error' ? '#ef4444' : s.status === 'connecting' ? '#f59e0b' : '#9ca3af';
       const statusLabel = s.status === 'connected' ? `Connected · ${s.toolCount} tool${s.toolCount !== 1 ? 's' : ''}` : s.status === 'error' ? 'Error' : s.status === 'connecting' ? 'Connecting…' : 'Disconnected';
       const toolTip = s.toolNames?.length ? s.toolNames.join(', ') : '';
-      return `<div style="display:flex;align-items:flex-start;gap:8px;padding:8px;border:1px solid var(--line);border-radius:8px;margin-bottom:6px;background:${s.enabled ? '#fff' : '#fafafa'}">
+      return `<div style="display:flex;align-items:flex-start;gap:8px;padding:8px;border:1px solid var(--line);border-radius:8px;margin-bottom:6px;background:${s.enabled ? 'var(--panel)' : 'var(--panel-2)'}">
         <div style="padding-top:2px">
           <div style="width:8px;height:8px;border-radius:50%;background:${statusColor};flex-shrink:0"></div>
         </div>
@@ -10673,11 +10716,11 @@ async function loadMCPServers() {
         </div>
         <div style="display:flex;gap:4px;flex-shrink:0">
           ${s.status === 'connected'
-            ? `<button onclick="disconnectMCPServer('${s.id}')" style="padding:3px 8px;border:1px solid var(--line);border-radius:5px;background:#fff;font-size:10px;cursor:pointer">Disconnect</button>`
-            : `<button onclick="connectMCPServer('${s.id}')" style="padding:3px 8px;border:1px solid var(--brand);border-radius:5px;background:#fff;color:var(--brand);font-size:10px;font-weight:600;cursor:pointer">Connect</button>`
+            ? `<button onclick="disconnectMCPServer('${s.id}')" style="padding:3px 8px;border:1px solid var(--line);border-radius:5px;background:var(--panel);font-size:10px;cursor:pointer">Disconnect</button>`
+            : `<button onclick="connectMCPServer('${s.id}')" style="padding:3px 8px;border:1px solid var(--brand);border-radius:5px;background:var(--panel);color:var(--brand);font-size:10px;font-weight:600;cursor:pointer">Connect</button>`
           }
-          <button onclick="editMCPServer('${s.id}')" style="padding:3px 8px;border:1px solid var(--line);border-radius:5px;background:#fff;font-size:10px;cursor:pointer">Edit</button>
-          <button onclick="deleteMCPServer('${s.id}')" style="padding:3px 8px;border:1px solid #fecaca;border-radius:5px;background:#fff;color:#ef4444;font-size:10px;cursor:pointer">?</button>
+          <button onclick="editMCPServer('${s.id}')" style="padding:3px 8px;border:1px solid var(--line);border-radius:5px;background:var(--panel);font-size:10px;cursor:pointer">Edit</button>
+          <button onclick="deleteMCPServer('${s.id}')" style="padding:3px 8px;border:1px solid #fecaca;border-radius:5px;background:var(--panel);color:#ef4444;font-size:10px;cursor:pointer">?</button>
         </div>
       </div>`;
     }).join('');
