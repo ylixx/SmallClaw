@@ -1,0 +1,8 @@
+﻿Phase 5d-14: extract workspace memory loader + tiered prompt into personality-context.ts
+
+loadWorkspaceFile/readDailyMemoryContext/MEMORY_RECALL_RE/TOOL_BLOCKS/
+readMemoryCategories/readMemorySnippets/TOOL_TO_MEMORY_CATS/buildPersonalityContext
+-> personality-context.ts; deps are imports only. server-v2.ts -> 1,666.
+
+- Verified: typecheck 0 errors; npm test 70 passed/2 skipped;
+  SMALLCLAW_SMOKE=1 smoke 2 passed.
