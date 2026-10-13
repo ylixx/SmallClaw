@@ -565,12 +565,16 @@ const executeTool = createExecuteTool({ handleTaskControlAction, cronScheduler }
 
 const app = express();
 
+// Body parsing + CORS must be registered BEFORE the route handlers that read
+// req.body (KB add, channels, file routes). Registering them after caused POST
+// bodies to arrive empty — a regression introduced by the server-v2 split.
+app.use(cors());
+app.use(express.json());
+
 registerFileRoutes(app);
 registerKbRoutes(app);
 
 registerChannelsRoutes(app, { telegramChannel });
-app.use(cors());
-app.use(express.json());
 
 const webUiPath = path.join(__dirname, '..', '..', 'web-ui');
 app.use(express.static(webUiPath));
