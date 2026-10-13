@@ -3,47 +3,71 @@ setlocal
 title SmallClaw Gateway
 cd /d "%~dp0"
 
-rem ============ ¿Éµ÷²ÎÊý ============
-set "SMALLCLAW_PYTHON=C:\Users\LiJiaLu\AppData\Local\Programs\Python\Python314\python.exe"
+rem ============ ï¿½Éµï¿½ï¿½ï¿½ï¿½ï¿½ ============
+rem SMALLCLAW_PYTHON is not hard-coded. If already set in the environment and works, use it;
+rem otherwise auto-detect a working Python 3 on this machine. The knowledge base relies on
+rem knowledge_helper.py, so we smoke-test with "import zipfile" and skip broken interpreters.
 set "MODEL_PORT=8080"
 set "GATEWAY_PORT=18789"
 rem ==================================
 
+rem ---- Auto-detect Python (machine-agnostic; no need to edit this block) ----
+if defined SMALLCLAW_PYTHON (
+  "%SMALLCLAW_PYTHON%" -c "import zipfile" >nul 2>&1 && goto :py_ready
+)
+set "SMALLCLAW_PYTHON="
+for %%e in (python python3) do (
+  for /f "usebackq delims=" %%p in (`where %%e 2^>nul`) do (
+    "%%p" -c "import zipfile" >nul 2>&1 && set "SMALLCLAW_PYTHON=%%p" && goto :py_ready
+  )
+)
+for %%d in (
+  "%LOCALAPPDATA%\Programs\Python\Python312\python.exe"
+  "%LOCALAPPDATA%\Programs\Python\Python313\python.exe"
+  "%LOCALAPPDATA%\Programs\Python\Python314\python.exe"
+  "%ProgramFiles%\Python312\python.exe"
+  "%ProgramFiles%\Python313\python.exe"
+  "%ProgramFiles%\Python314\python.exe"
+) do (
+  if exist %%d ("%%~d" -c "import zipfile" >nul 2>&1 && set "SMALLCLAW_PYTHON=%%~d" && goto :py_ready)
+)
+:py_ready
+
 echo ============================================
-echo   SmallClaw Íø¹ØÆô¶¯Æ÷£¨Ä£ÐÍÇëÓÃ start-model.bat£©
+echo   SmallClaw ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ start-model.batï¿½ï¿½
 echo ============================================
 
-rem 1. ¼ì²é Python
+rem 1. ï¿½ï¿½ï¿½ Python
 if exist "%SMALLCLAW_PYTHON%" (
   echo [OK] Python: %SMALLCLAW_PYTHON%
 ) else (
-  echo [¾¯¸æ] Î´ÕÒµ½ Python: %SMALLCLAW_PYTHON%
-  echo        ÇëÐÞ¸Ä±¾ÎÄ¼þ¶¥²¿µÄ SMALLCLAW_PYTHON ºóÖØÊÔ
+  echo [ï¿½ï¿½ï¿½ï¿½] Î´ï¿½Òµï¿½ Python: %SMALLCLAW_PYTHON%
+  echo        ï¿½ï¿½ï¿½Þ¸Ä±ï¿½ï¿½Ä¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ SMALLCLAW_PYTHON ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 )
 
-rem 2. ¼ì²éÄ£ÐÍ¶Ë¿Ú£¨Ö»ÌáÊ¾£¬²»Æô¶¯Ä£ÐÍ£©
+rem 2. ï¿½ï¿½ï¿½Ä£ï¿½Í¶Ë¿Ú£ï¿½Ö»ï¿½ï¿½Ê¾ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä£ï¿½Í£ï¿½
 for /f "usebackq delims=" %%i in (`powershell -NoProfile -Command "$c=New-Object Net.Sockets.TcpClient; try{$c.Connect('127.0.0.1',%MODEL_PORT%);'UP'}catch{'DOWN'};$c.Close()"`) do set "MODEL_STATUS=%%i"
 if /i "%MODEL_STATUS%"=="UP" (
-  echo [OK] Ä£ÐÍÔÚÏß£¨¶Ë¿Ú %MODEL_PORT%£©
+  echo [OK] Ä£ï¿½ï¿½ï¿½ï¿½ï¿½ß£ï¿½ï¿½Ë¿ï¿½ %MODEL_PORT%ï¿½ï¿½
 ) else (
-  echo [¾¯¸æ] Ä£ÐÍ¶Ë¿Ú %MODEL_PORT% Î´ÏìÓ¦£¡
-  echo        ÇëÏÈÔËÐÐ start-model.bat Æô¶¯Ä£ÐÍ£¨¿ÉÇÐ»»Ô¤Éè£©¡£
-  echo        10 ÃëºóÈÔ½«Æô¶¯Íø¹Ø£¨»Ø³µ¼ÌÐø / Ctrl+C È¡Ïû£©
+  echo [ï¿½ï¿½ï¿½ï¿½] Ä£ï¿½Í¶Ë¿ï¿½ %MODEL_PORT% Î´ï¿½ï¿½Ó¦ï¿½ï¿½
+  echo        ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ start-model.bat ï¿½ï¿½ï¿½ï¿½Ä£ï¿½Í£ï¿½ï¿½ï¿½ï¿½Ð»ï¿½Ô¤ï¿½è£©ï¿½ï¿½
+  echo        10 ï¿½ï¿½ï¿½ï¿½Ô½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ø£ï¿½ï¿½Ø³ï¿½ï¿½ï¿½ï¿½ï¿½ / Ctrl+C È¡ï¿½ï¿½ï¿½ï¿½
   timeout /t 10 /nobreak >nul
 )
 
-rem 3. ÇåÀíÕ¼ÓÃÍø¹Ø¶Ë¿ÚµÄ¾É½ø³Ì
+rem 3. ï¿½ï¿½ï¿½ï¿½Õ¼ï¿½ï¿½ï¿½ï¿½ï¿½Ø¶Ë¿ÚµÄ¾É½ï¿½ï¿½ï¿½
 for /f "usebackq delims=" %%p in (`powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort %GATEWAY_PORT% -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique"`) do (
-  echo [OK] ÒÑÍ£Ö¹¾ÉÍø¹Ø½ø³Ì PID=%%p
+  echo [OK] ï¿½ï¿½Í£Ö¹ï¿½ï¿½ï¿½ï¿½ï¿½Ø½ï¿½ï¿½ï¿½ PID=%%p
   taskkill /F /PID %%p >nul 2>&1
 )
 
-rem 4. Æô¶¯Íø¹Ø
-echo [OK] Æô¶¯Íø¹Ø http://127.0.0.1:%GATEWAY_PORT%
+rem 4. ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+echo [OK] ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ http://127.0.0.1:%GATEWAY_PORT%
 echo ------------------------------------------------------------
 node --import tsx src/gateway/server-v2.ts
 
 echo.
-echo [ÐÅÏ¢] Íø¹ØÒÑÍË³ö¡£
+echo [ï¿½ï¿½Ï¢] ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ë³ï¿½ï¿½ï¿½
 pause
 endlocal
