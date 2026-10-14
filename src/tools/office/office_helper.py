@@ -1874,10 +1874,19 @@ def _plan_docx(ops, path, out_path=None, created=False):
                         }
                     )
             elif kind == "insert":
-                after = str(op.get("after") or "").strip()
+                # 小模型容错：参数可能放在顶层，也可能嵌在 value 里；
+                # 还常见把整段 markdown 当成 insert 的内容传入。
+                val = op.get("value") if isinstance(op.get("value"), dict) else {}
+                after = str(op.get("after") or val.get("after") or "").strip()
+                if not after:
+                    raise OfficeError(
+                        "docx insert op 缺少 'after'。正确形状："
+                        "{op:\"insert\", after:\"#append\"|\"#12\", text:\"...\"} "
+                        "（after='#append' 追加到末尾；after='#N' 插入到第 N 段之后）。"
+                    )
                 if after in ("#append", "#end"):
-                    text = str(op.get("text") or "")
-                    style = op.get("style")
+                    text = str(op.get("text") or val.get("text") or op.get("markdown") or val.get("markdown") or "")
+                    style = op.get("style") or val.get("style")
                     plans.append(
                         {
                             "ok": True,
@@ -1889,12 +1898,15 @@ def _plan_docx(ops, path, out_path=None, created=False):
                     )
                     continue
                 if not after.startswith("#") or after.startswith("#T"):
-                    raise OfficeError("docx insert requires after='#<paragraph index>' or after='#append'")
+                    raise OfficeError(
+                        "docx insert 需要 after='#<段落序号>' 或 after='#append'，"
+                        "但收到 after=%r。正确形状：{op:\"insert\", after:\"#append\", text:\"你的内容\"}" % after
+                    )
                 index = int(after[1:])
                 if index < 0 or index >= len(doc.paragraphs):
                     raise OfficeError("Paragraph `#%d` does not exist (document has %d)." % (index, len(doc.paragraphs)))
-                text = str(op.get("text") or "")
-                style = op.get("style")
+                text = str(op.get("text") or val.get("text") or op.get("markdown") or val.get("markdown") or "")
+                style = op.get("style") or val.get("style")
                 lines = [
                     "**插入到 `#%d` 之后**" % index,
                     "- 位置上文：%s" % (clip(doc.paragraphs[index].text, 200) or "(empty)"),

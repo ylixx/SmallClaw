@@ -412,13 +412,30 @@ function rankResults(query: string, results: SearchResultItem[]) {
 }
 
 // ── Load optional API keys from ~/.smallclaw/config.json ─────────────────────
-function getSearchConfig(): {
+export interface SearchConfig {
   preferred: 'tavily' | 'google' | 'brave' | 'ddg';
   tavilyKey?: string;
   googleKey?: string;
   googleCx?: string;
   braveKey?: string;
-} {
+}
+
+/**
+ * Resolve search provider config.
+ * `override` (e.g. from the gateway's live Settings) wins when it actually
+ * carries a key or an explicit provider, so callers can inject config without
+ * touching ~/.smallclaw/config.json. Falls back to the file when no override.
+ */
+function getSearchConfig(override?: Partial<SearchConfig>): SearchConfig {
+  if (override && (override.preferred || override.tavilyKey || override.googleKey || override.braveKey)) {
+    return {
+      preferred: override.preferred ?? 'tavily',
+      tavilyKey: override.tavilyKey,
+      googleKey: override.googleKey,
+      googleCx: override.googleCx,
+      braveKey: override.braveKey,
+    };
+  }
   try {
     const projectCfg = path.join(process.cwd(), '.smallclaw', 'config.json');
     const cfg = fs.existsSync(projectCfg) ? projectCfg : path.join(os.homedir(), '.smallclaw', 'config.json');
@@ -634,12 +651,15 @@ async function searchDDGHtml(query: string, limit: number): Promise<ToolResult> 
 }
 
 // ── Main web_search tool ──────────────────────────────────────────────────────
-export async function executeWebSearch(args: { query: string; max_results?: number }): Promise<ToolResult> {
+export async function executeWebSearch(
+  args: { query: string; max_results?: number },
+  override?: Partial<SearchConfig>,
+): Promise<ToolResult> {
   if (!args.query?.trim()) return { success: false, error: 'query is required' };
   let limit = Math.min(args.max_results ?? 5, 10);
   if (isPriceQuery(args.query)) limit = Math.max(limit, 5);
 
-  const cfg = getSearchConfig();
+  const cfg = getSearchConfig(override);
   const candidates: Array<'tavily' | 'google' | 'brave' | 'ddg'> = ['tavily', 'google', 'brave', 'ddg'];
   const providerOrder = [cfg.preferred, ...candidates.filter(p => p !== cfg.preferred)];
   const diagnostics: SearchDiagnostics = {

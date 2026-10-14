@@ -8,6 +8,7 @@
  */
 
 import { getConfig } from '../config/config';
+import { executeWebSearch } from '../tools/web.js';
 
 // ─── Search Providers ─────────────────────────────────────────────────────────
 
@@ -106,27 +107,33 @@ async function duckDuckGoSearch(query: string): Promise<string> {
   }
 }
 
-// Unified search router — picks provider based on config
+// Unified search router — delegates to the robust web_search tool
+// (src/tools/web.ts), which has a keyless DuckDuckGo fallback and honors the
+// gateway's live Settings keys via the override argument.
 async function webSearch(query: string): Promise<string> {
   const searchCfg = (getConfig().getConfig() as any).search || {};
-  const provider = searchCfg.preferred_provider || 'google';
-  const tavilyKey = searchCfg.tavily_api_key || '';
-  console.log(`[v2] webSearch via ${provider}: ${query.slice(0, 80)}`);
-
-  if (provider === 'tavily' && tavilyKey) {
-    return tavilySearch(query, tavilyKey);
+  console.log(`[v2] webSearch: ${query.slice(0, 80)}`);
+  try {
+    const res = await executeWebSearch(
+      { query, max_results: 5 },
+      {
+        preferred: searchCfg.preferred_provider || 'tavily',
+        tavilyKey: searchCfg.tavily_api_key,
+        googleKey: searchCfg.google_api_key,
+        googleCx: searchCfg.google_cx,
+        braveKey: searchCfg.brave_api_key,
+      },
+    );
+    if (res.success) {
+      return String(res.stdout || (res.data ? JSON.stringify(res.data) : '') || 'No results.');
+    }
+    // Surface diagnostics so the model can self-correct if every provider fails.
+    const diag = (res.data as any)?.search_diagnostics;
+    const detail = diag ? ` (attempted: ${diag.attempted.map((a: any) => `${a.provider}:${a.status}`).join(', ')})` : '';
+    return `web_search failed: ${res.error || 'unknown error'}${detail}`;
+  } catch (err: any) {
+    return `web_search error: ${err?.message || err}`;
   }
-  if (provider === 'google') {
-    return googleSearch(query);
-  }
-  if (provider === 'ddg' || provider === 'duckduckgo') {
-    return duckDuckGoSearch(query);
-  }
-  // Fallback: try tavily if key exists, then google, then ddg
-  if (tavilyKey) return tavilySearch(query, tavilyKey);
-  const googleResult = await googleSearch(query);
-  if (!googleResult.includes('not configured')) return googleResult;
-  return duckDuckGoSearch(query);
 }
 
 // ─── Web Fetch (full page content) ─────────────────────────────────────────────
