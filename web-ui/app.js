@@ -23,6 +23,29 @@ setAgentSessionId(generateSessionId()); // always fresh session on page load
 // Chat state
 let chatHistory = [];
 let chatSessions = [];
+
+function clientMsgId() {
+  try {
+    return crypto?.randomUUID?.() || ('m_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10));
+  } catch {
+    return 'm_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10);
+  }
+}
+let lastAssistantMessageId = null;
+let editingIdx = -1;
+function showToast(msg) {
+  let t = document.getElementById('sc-toast');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = 'sc-toast';
+    t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--panel);color:var(--text);border:1px solid var(--line);padding:8px 16px;border-radius:10px;font-size:13px;z-index:9999;opacity:0;transition:opacity .2s;pointer-events:none;box-shadow:0 4px 16px rgba(0,0,0,.25)';
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  t.style.opacity = '1';
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => { t.style.opacity = '0'; }, 1800);
+}
 let activeChatSessionId = null;
 let sessionsEditMode = false;
 let isThinking = false;
@@ -927,16 +950,28 @@ function renderChatMessages() {
     // Also show green for confirmed pins even outside pin mode
     const confirmedClass = (!contextPinMode && confirmedPins.some(p => p.content === msg.content && p.role === (msg.role === 'user' ? 'user' : 'assistant'))) ? ' pin-selected' : '';
     const clickHandler = contextPinMode ? ` onclick="togglePinMessage(${idx})"` : '';
+    if (!msg.id) msg.id = clientMsgId();
+    const isEditing = (msg.role === 'user' && idx === editingIdx);
+    const contentHtml = isEditing
+      ? `<div class="msg-edit"><textarea id="edit-ta-${idx}" class="msg-edit-ta">${escHtml(msg.content)}</textarea><div class="msg-edit-actions"><button class="skill-install-btn" onclick="saveEdit(${idx})">保存</button><button class="skill-install-btn" style="opacity:.7" onclick="cancelEdit()">取消</button></div></div>`
+      : (msg.role === 'ai' ? renderAssistantContent(msg.content) : `<div class="msg-content">${escHtml(msg.content)}</div>`);
     return `
-    <div class="msg ${msg.role}${pinClass}${selectedClass}${confirmedClass}"${clickHandler}>
+    <div class="msg ${msg.role}${pinClass}${selectedClass}${confirmedClass}" data-idx="${idx}" data-id="${msg.id}"${clickHandler}>
       <div class="msg-avatar">${msg.role === 'user' ? 'U' : '🦞'}</div>
       <div class="msg-body">
         <div class="msg-role">${msg.role === 'user' ? '你' : (msg.mode === 'agentic' ? 'SmallClaw (Agent)' : 'SmallClaw')}</div>
-        ${msg.role === 'ai' ? renderAssistantContent(msg.content) : `<div class="msg-content">${escHtml(msg.content)}</div>`}
+        ${contentHtml}
         ${msg.role === 'ai' ? renderArtifacts(msg.artifacts) : ''}
         ${msg.role === 'ai' && msg.processEntries && msg.processEntries.length ? renderProcessPill(msg.processEntries) : ''}
         ${msg.role === 'ai' ? renderThinkBlock(msg.thinking) : ''}
         ${msg.role === 'ai' ? renderReactSteps(msg.steps) : ''}
+      </div>
+      <div class="msg-actions" onclick="event.stopPropagation()">
+        <button title="复制" onclick="copyMessage(${idx})">📋</button>
+        ${msg.role === 'ai' ? `<button title="重新生成" onclick="regenerateMessage(${idx})">↻</button>` : ''}
+        ${msg.role === 'user' ? `<button title="编辑" onclick="beginEdit(${idx})">✏️</button>` : ''}
+        <button title="删除" onclick="deleteMessage(${idx})">🗑</button>
+        ${msg.role === 'ai' ? `<button title="赞" class="${msg.feedback === 'up' ? 'rated' : ''}" onclick="rateMessage(${idx},'up')">👍</button><button title="踩" class="${msg.feedback === 'down' ? 'rated' : ''}" onclick="rateMessage(${idx},'down')">👎</button>` : ''}
       </div>
     </div>`;
   }).join('');
@@ -968,6 +1003,93 @@ function renderChatMessages() {
   }
 
   container.scrollTop = container.scrollHeight;
+}
+
+// ---- Message action bar handlers ----
+function copyMessage(idx) {
+  const text = chatHistory[idx]?.content || '';
+  if (!text) return;
+  const done = () => showToast('已复制');
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(done).catch(() => fallbackCopy(text, done));
+  } else {
+    fallbackCopy(text, done);
+  }
+}
+function fallbackCopy(text, done) {
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    done && done();
+  } catch {
+    showToast('复制失败');
+  }
+}
+function regenerateMessage(idx) {
+  if (isThinking) { showToast('请等待当前回复完成'); return; }
+  if (!chatHistory[idx] || chatHistory[idx].role !== 'ai') return;
+  chatHistory = chatHistory.slice(0, idx);
+  persistActiveChat();
+  renderChatMessages();
+  sendChat(null, { regenerate: true });
+}
+function beginEdit(idx) {
+  if (isThinking) return;
+  if (!chatHistory[idx] || chatHistory[idx].role !== 'user') return;
+  editingIdx = idx;
+  renderChatMessages();
+  const ta = document.getElementById('edit-ta-' + idx);
+  if (ta) { ta.focus(); ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 320) + 'px'; }
+}
+function saveEdit(idx) {
+  const ta = document.getElementById('edit-ta-' + idx);
+  const newContent = ta ? ta.value : '';
+  if (!newContent.trim()) { showToast('内容不能为空'); return; }
+  const mid = chatHistory[idx]?.id;
+  chatHistory = chatHistory.slice(0, idx + 1);
+  chatHistory[idx].content = newContent;
+  editingIdx = -1;
+  persistActiveChat();
+  renderChatMessages();
+  sendChat(null, { edit: true, messageId: mid, content: newContent });
+}
+function cancelEdit() {
+  editingIdx = -1;
+  renderChatMessages();
+}
+async function deleteMessage(idx) {
+  if (isThinking) { showToast('请等待当前回复完成'); return; }
+  const mid = chatHistory[idx]?.id;
+  chatHistory = chatHistory.slice(0, idx);
+  persistActiveChat();
+  renderChatMessages();
+  try {
+    await fetch('/api/messages/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: agentSessionId, messageId: mid, index: idx })
+    });
+  } catch {}
+}
+function rateMessage(idx, fb) {
+  const msg = chatHistory[idx];
+  if (!msg || msg.role !== 'ai') return;
+  msg.feedback = (msg.feedback === fb) ? null : fb;
+  persistActiveChat();
+  renderChatMessages();
+  try {
+    fetch('/api/messages/feedback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: agentSessionId, messageId: msg.id, feedback: msg.feedback })
+    });
+  } catch {}
 }
 
 function pushProgressLine(line) {
@@ -1758,31 +1880,41 @@ function updateSelectionAffordance() {
   btn.style.left = left + 'px';
 }
 
-async function sendChat(queuedMessage = null) {
+async function sendChat(queuedMessage = null, opts = {}) {
   const input = document.getElementById('chat-input');
   const sendBtn = document.getElementById('send-btn');
-  let raw = typeof queuedMessage === 'string' ? queuedMessage : input.value;
-  if (pendingAttachments.length && typeof queuedMessage !== 'string') {
+  let raw;
+  if (opts.regenerate) raw = '';
+  else if (opts.edit) raw = opts.content || '';
+  else raw = typeof queuedMessage === 'string' ? queuedMessage : input.value;
+  if (pendingAttachments.length && typeof queuedMessage !== 'string' && !opts.regenerate && !opts.edit) {
     raw = String(raw || '') + pendingAttachments.map(a => '\n\n[attached file] ' + a.path).join('');
     clearAttachments();
   }
   const message = String(raw || '').trim();
-  if (!message) return;
+  if (!message && !opts.regenerate && !opts.edit) return;
   if (isThinking) {
     if (typeof queuedMessage === 'string') return;
-    if (queuedPrompts.length >= MAX_QUEUED_PROMPTS) {
-      addProcessEntry('warn', `Queue full (${MAX_QUEUED_PROMPTS}). Wait for current run to finish.`);
+    if (!opts.regenerate && !opts.edit) {
+      if (queuedPrompts.length >= MAX_QUEUED_PROMPTS) {
+        addProcessEntry('warn', `Queue full (${MAX_QUEUED_PROMPTS}). Wait for current run to finish.`);
+        return;
+      }
+      queuedPrompts.push(message);
+      addProcessEntry('info', `Queued prompt #${queuedPrompts.length}. It will run automatically next.`);
+      input.value = '';
+      input.style.height = 'auto';
+      updateQueuedPromptUI();
       return;
     }
-    queuedPrompts.push(message);
-    addProcessEntry('info', `Queued prompt #${queuedPrompts.length}. It will run automatically next.`);
-    input.value = '';
-    input.style.height = 'auto';
-    updateQueuedPromptUI();
-    return;
   }
 
-  chatHistory.push({ role: 'user', content: message });
+  lastAssistantMessageId = null;
+  if (opts.regenerate || opts.edit) {
+    // do not push a new user message — the target user turn already exists
+  } else {
+    chatHistory.push({ role: 'user', content: message, id: clientMsgId() });
+  }
   persistActiveChat();
   if (typeof queuedMessage !== 'string') {
     input.value = '';
@@ -1813,7 +1945,7 @@ async function sendChat(queuedMessage = null) {
   maybeAutoScrollRightColumn(true);
 
   currentTurnStartIndex = processLogEntries.length;
-  addProcessEntry('user', message);
+  addProcessEntry('user', opts.regenerate ? '(重新生成)' : (opts.edit ? (opts.content || '') : message));
 
   const historyForAPI = chatHistory.slice(-13, -1).map(m => ({
     role: m.role === 'user' ? 'user' : 'assistant',
@@ -1841,14 +1973,25 @@ async function sendChat(queuedMessage = null) {
     currentAbortController = new AbortController();
     let partialContent = '';
 
-    const res = await fetch('/api/chat', {
+    let chatUrl = '/api/chat';
+    let chatBody = { message, history: historyForAPI, sessionId: agentSessionId, pinnedMessages: confirmedPins.length > 0 ? confirmedPins : undefined };
+    if (opts.regenerate) {
+      chatUrl = '/api/chat/regenerate';
+      chatBody = { sessionId: agentSessionId };
+    } else if (opts.edit) {
+      chatUrl = '/api/chat/edit';
+      chatBody = { sessionId: agentSessionId, messageId: opts.messageId, content: opts.content };
+    } else {
+      chatBody.messageId = chatHistory[chatHistory.length - 1]?.id;
+    }
+    const res = await fetch(chatUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'text/event-stream'
       },
       signal: currentAbortController.signal,
-      body: JSON.stringify({ message, history: historyForAPI, sessionId: agentSessionId, pinnedMessages: confirmedPins.length > 0 ? confirmedPins : undefined })
+      body: JSON.stringify(chatBody)
     });
 
     if (!res.ok) {
@@ -2213,6 +2356,7 @@ async function sendChat(queuedMessage = null) {
 
           case 'done':
             finalReply = event.reply || '';
+            lastAssistantMessageId = event.assistantMessageId || null;
             if (finalReply) partialContent = finalReply;
             finalArtifacts = Array.isArray(event.artifacts) ? event.artifacts : [];
             loadAgentSessionContext();
@@ -2239,11 +2383,12 @@ async function sendChat(queuedMessage = null) {
         steps: allSteps,
         mode: 'chat',
         thinking: shouldAttachThinkingPanel ? (mergedThinking || finalStep?.thinking) : '',
-        processEntries: turnEntries
+        processEntries: turnEntries,
+        id: lastAssistantMessageId || undefined
       });
     } else {
       const turnEntries = currentTurnStartIndex >= 0 ? processLogEntries.slice(currentTurnStartIndex) : [];
-      chatHistory.push({ role: 'ai', content: 'No response received.', processEntries: turnEntries });
+      chatHistory.push({ role: 'ai', content: 'No response received.', processEntries: turnEntries, id: lastAssistantMessageId || undefined });
     }
     persistActiveChat();
 
@@ -2253,7 +2398,7 @@ async function sendChat(queuedMessage = null) {
       addProcessEntry('warn', 'Generation stopped by user.');
       const content = partialContent ||
         (allSteps.length ? `[Stopped — ${allSteps.length} step${allSteps.length !== 1 ? 's' : ''} completed]` : '[Generation stopped]');
-      chatHistory.push({ role: 'ai', content, steps: allSteps, mode: 'chat', processEntries: turnEntries });
+      chatHistory.push({ role: 'ai', content, steps: allSteps, mode: 'chat', processEntries: turnEntries, id: lastAssistantMessageId || undefined });
     } else {
       lastHeartbeat = { ...lastHeartbeat, state: 'stalled', level: 'hard', message: String(err.message || 'connection_error'), current_step: 'error' };
       updateHeartbeatUI();

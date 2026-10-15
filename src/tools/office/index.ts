@@ -601,7 +601,7 @@ export function getOfficeToolDefinitions(): any[] {
     function: {
       name: 'doc_write',
       description:
-        'Create or edit an .xlsx / .docx / .pptx (created from scratch if missing). ALWAYS call mode:"preview" first: returns a rendered Markdown preview plus preview_id and writes NOTHING to disk. Only after the user approves, call mode:"apply" with the returned preview_id to actually write the file. NEVER claim a file was created from a preview-only call.\n'
+        'Create or edit an .xlsx / .docx / .pptx (created from scratch if missing). Two modes: (1) mode:"preview" returns a rendered Markdown preview + preview_id but writes NOTHING; follow with mode:"apply" + preview_id to actually write (NEVER claim created from preview alone). (2) mode:"create" writes the file in ONE step without preview — preferred when you are confident in the ops (lower protocol burden for small models). pptx also supports {op:"outline",markdown,theme?,title?,author?}.\n'
         + 'ops by format:\n'
         + 'xlsx: {op:"cells",sheet,ref,values} | {op:"rows",sheet,at,values} | {op:"add_sheet",name} | {op:"chart",range,type:"bar|line|pie|area|scatter",title,anchor} | {op:"formula",sheet,ref,formula:"=SUM(B2:B10)"}. NOTE: a newly created .xlsx has ONE worksheet named "Sheet" (not "Sheet1") — you may omit the sheet field entirely for simple tables.\n'
         + 'docx: NEW document = one op {op:"content",markdown:"<full markdown>"} (headings + paragraphs + tables in a single call - always prefer this). Existing document edits: {op:"heading",at:"#append"|"#12",level,text} | {op:"insert",after:"#append"|"#12",text} | {op:"add_table",rows} | {op:"add_image",image} | table cells: at:"#T0",r,c\n'
@@ -614,8 +614,8 @@ export function getOfficeToolDefinitions(): any[] {
           ops: DOC_OPS_JSON,
           mode: {
             type: 'string',
-            enum: ['preview', 'apply'],
-            description: 'preview (default) = show what would change, write nothing; apply = actually write.',
+            enum: ['preview', 'apply', 'create'],
+            description: 'preview (default) = show what would change, write nothing; apply = write after preview (requires preview_id); create = write in one step without preview (preferred for confident single-shot generation).',
           },
           preview_id: {
             type: 'string',
@@ -895,7 +895,8 @@ export async function executeOfficeTool(
     if (typeof normalizedOps === 'string') return { result: normalizedOps, error: true };
     const ops = normalizedOps;
 
-    const mode = String(args.mode || 'preview').trim().toLowerCase() === 'apply' ? 'apply' : 'preview';
+    const rawMode = String(args.mode || 'preview').trim().toLowerCase();
+    const mode = rawMode === 'apply' ? 'apply' : rawMode === 'create' || rawMode === 'write' || rawMode === 'generate' ? 'create' : 'preview';
     const outPath = args.out ? String(args.out).trim() : '';
     if (outPath) {
       const resolvedOut = resolveOfficePath(workspacePath, outPath, guard);
@@ -935,7 +936,10 @@ export async function executeOfficeTool(
       return { result: clipResult(`${header}${markdown}${footer}`), error: false };
     }
 
-    if (isDocPreviewRequired()) {
+    // apply 模式若开启强制预览则校验 preview_id；create 模式直接落盘（绕过预览，降低小模型协议负担）。
+    // 仅当目标文件【已存在】时才强制预览（防止破坏已有文件）；写入尚不存在的新文件（如 PPT 生成）直接放行，
+    // 避免小模型因 preview 协议反复失败而卡死或幻觉"已写入"（T8 失败根因之一）。
+    if (mode === 'apply' && isDocPreviewRequired() && fs.existsSync(filePath)) {
       const status = docPreviewStatus(sessionId, filePath, ops, args.preview_id);
       if (!status.ok) return { result: status.message || 'preview required', error: true };
     }
@@ -948,7 +952,13 @@ export async function executeOfficeTool(
     const data = res.data || {};
     previewStore.delete(previewId);
     const written = String(data.out || args.out || filePath);
-    return { result: clipResult(String(data.markdown || 'written')), error: data.failed > 0, paths: [written] };
+    // P1c 落盘校验：确认文件真实存在，阻断模型编造"已写入"的成功（如 T8 幻觉）
+    const exists = fs.existsSync(written);
+    const statNote = exists
+      ? `\n[written] ${written} (${fs.statSync(written).size} bytes)`
+      : `\n[ERROR] file not found after write: ${written}`;
+    const markdown = String(data.markdown || 'written');
+    return { result: clipResult(markdown + statNote), error: data.failed > 0 || !exists, paths: [written] };
   }
 
   return { result: `Unknown office tool: ${name}`, error: true };
@@ -964,7 +974,19 @@ function resolveOfficePath(
     const guarded = guard(workspacePath, raw);
     if (guarded && typeof guarded === 'object') return guarded;
   }
-  return { ok: true, path: path.resolve(String(workspacePath || ''), raw) };
+  // 归一化：剥离前导的 workspace 同名段，避免 "workspace/xxx" 被拼成
+  // "<ws>/workspace/xxx"（路径双拼 bug，doc_write 找不到目录、T8 PPT 生成失败）。
+  const ws = String(workspacePath || '').replace(/\\/g, '/');
+  let name = String(raw || '').replace(/\\/g, '/').trim();
+  const base = ws ? path.basename(ws) : '';
+  if (base) {
+    const prefix = base.toLowerCase() + '/';
+    while (name.toLowerCase().startsWith(prefix)) name = name.slice(prefix.length);
+    const alt = './' + prefix;
+    while (name.toLowerCase().startsWith(alt)) name = name.slice(alt.length);
+  }
+  // 已是绝对路径时 path.resolve 直接采用，不再拼 workspace
+  return { ok: true, path: path.resolve(ws || '.', name) };
 }
 
 /** Resolve image paths referenced by ops so python never touches files outside the workspace. */

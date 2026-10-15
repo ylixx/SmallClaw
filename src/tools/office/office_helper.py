@@ -2080,6 +2080,7 @@ def _plan_pptx(ops, path, out_path, created=False):
         prs.slide_width = PptxInches(SLIDE_W_IN)
         prs.slide_height = PptxInches(SLIDE_H_IN)
     plans = []
+    external_rendered = False
 
     for op in ops:
         kind = str(op.get("op") or "").strip()
@@ -2250,9 +2251,6 @@ def _plan_pptx(ops, path, out_path, created=False):
                 slides = parse_outline_slides(text)
                 if not slides:
                     raise OfficeError("outline markdown produced no slides")
-                theme = str(op.get("theme") or DEFAULT_PPT_THEME).strip().lower()
-                if theme not in PPT_THEMES:
-                    raise OfficeError("theme must be one of: %s" % ", ".join(sorted(PPT_THEMES)))
                 ppt_title = str(op.get("title") or "").strip() or None
                 author = str(op.get("author") or "").strip() or None
                 plans.append(
@@ -2260,9 +2258,9 @@ def _plan_pptx(ops, path, out_path, created=False):
                         "ok": True,
                         "op": kind,
                         "target": "%d slide(s)" % len(slides),
-                        "markdown": "**按大纲生成幻灯片（%d 页，主题 %s）**\n\n%s"
-                        % (len(slides), theme, outline_to_markdown(slides)),
-                        "_apply": {"slides": slides, "mode": "outline", "theme": theme, "title": ppt_title, "author": author},
+                        "markdown": "**按大纲生成幻灯片（%d 页，ppt-kit 专业版式库渲染）**\n\n%s"
+                        % (len(slides), outline_to_markdown(slides)),
+                        "_apply": {"mode": "pptkit", "markdown": text, "title": ppt_title, "author": author},
                     }
                 )
             else:
@@ -2274,6 +2272,7 @@ def _plan_pptx(ops, path, out_path, created=False):
             plans.append(_op_error(op, str(exc), getattr(exc, "detail", None)))
 
     def apply():
+        nonlocal external_rendered
         for plan in plans:
             if not plan.get("ok"):
                 continue
@@ -2341,19 +2340,49 @@ def _plan_pptx(ops, path, out_path, created=False):
                         set_shape_text(shape, spec["title"])
                     elif idx == 1 and spec["bullets"]:
                         set_shape_text(shape, "\n".join(spec["bullets"]))
-            elif mode == "outline":
-                _append_outline_slides(
-                    prs,
-                    spec["slides"],
-                    theme=spec.get("theme") or DEFAULT_PPT_THEME,
-                    title=spec.get("title"),
-                    author=spec.get("author"),
-                )
-        tmp = path + ".tmp-%d" % os.getpid()
-        prs.save(tmp)
-        os.replace(tmp, out_path or path)
+            elif mode == "pptkit":
+                _render_via_pptkit(out_path or path, spec.get("markdown"), spec.get("title"), spec.get("author"))
+                external_rendered = True
+        if not external_rendered:
+            tmp = path + ".tmp-%d" % os.getpid()
+            prs.save(tmp)
+            os.replace(tmp, out_path or path)
 
     return plans, apply
+
+
+def _render_via_pptkit(out_path, markdown, title, author):
+    """用 ppt-kit (render_pptx.py) 渲染漂亮 pptx，替代简单 outline 版式。"""
+    import subprocess
+    import tempfile
+    d = os.path.dirname(os.path.abspath(__file__))
+    while d and not os.path.isdir(os.path.join(d, ".smallclaw")):
+        d = os.path.dirname(d)
+    if not d:
+        raise OfficeError("could not locate workspace root (.smallclaw) for ppt-kit")
+    render_py = os.path.join(d, ".smallclaw", "skills", "ppt-kit", "scripts", "render_pptx.py")
+    if not os.path.isfile(render_py):
+        raise OfficeError("ppt-kit render script not found: %s" % render_py)
+    ppt_build = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ppt_build.py")
+    if not os.path.isfile(ppt_build):
+        raise OfficeError("ppt_build.py not found: %s" % ppt_build)
+    md_file = tempfile.NamedTemporaryFile("w", suffix=".md", delete=False, encoding="utf-8")
+    md_file.write(markdown or "")
+    md_file.close()
+    cmd = [sys.executable, ppt_build, "--markdown-file", md_file.name,
+           "--out", out_path, "--render", render_py,
+           "--title", title or "", "--author", author or ""]
+    try:
+        proc = subprocess.run(cmd, cwd=os.path.dirname(os.path.abspath(ppt_build)),
+                              capture_output=True, text=True, timeout=240)
+    finally:
+        try:
+            os.unlink(md_file.name)
+        except Exception:
+            pass
+    if not os.path.isfile(out_path):
+        tail = (proc.stderr or proc.stdout or "")[:600]
+        raise OfficeError("ppt-kit render failed: %s" % tail)
 
 
 def _backup(path):

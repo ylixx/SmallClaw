@@ -7,13 +7,24 @@
 
 import fs from 'fs';
 import path from 'path';
+import { randomUUID } from 'crypto';
 import { getConfig } from '../config/config';
 import { appendDailyMemoryNote } from './memory-manager';
+
+export function genMsgId(): string {
+  try {
+    return randomUUID();
+  } catch {
+    return 'm_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10);
+  }
+}
 
 export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   timestamp: number;
+  id?: string;
+  feedback?: 'up' | 'down' | null;
 }
 
 export interface Session {
@@ -203,7 +214,7 @@ export function getSession(id: string): Session {
       const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
       const session: Session = {
         id: data.id || id,
-        history: Array.isArray(data.history) ? data.history : [],
+        history: Array.isArray(data.history) ? data.history.map((m: any) => ({ ...m, id: m.id || genMsgId() })) : [],
         workspace: data.workspace || getConfig().getWorkspacePath(),
         createdAt: data.createdAt || Date.now(),
         lastActiveAt: data.lastActiveAt || Date.now(),
@@ -297,6 +308,7 @@ export function addMessage(id: string, msg: ChatMessage, options: AddMessageOpti
   }
 
   const storedMsg: ChatMessage = { ...msg };
+  if (!storedMsg.id) storedMsg.id = genMsgId();
 
   if (!deferredForCompaction && !deferredForMemoryFlush) {
     session.history.push(storedMsg);
@@ -411,6 +423,65 @@ export function cleanupSessions(nowMs: number = Date.now()): { deleted: number; 
     return { deleted: 0, scanned: 0 };
   }
   return { deleted, scanned };
+}
+
+export function findMessageIndex(sessionId: string, messageId: string): number {
+  const session = getSession(sessionId);
+  return session.history.findIndex((m) => m.id === messageId);
+}
+
+// Remove the most recent assistant message (and any trailing messages) so the
+// turn can be re-run from the preceding user message. Returns that user message
+// content, or null if there is nothing to regenerate.
+export function popLastAssistantForRegen(sessionId: string): { userContent: string } | null {
+  const session = getSession(sessionId);
+  let ai = session.history.length - 1;
+  while (ai >= 0 && session.history[ai].role !== 'assistant') ai--;
+  if (ai < 0) return null;
+  const removed = session.history.splice(ai); // drop assistant + trailing
+  const lastUser = session.history[session.history.length - 1];
+  if (!lastUser || lastUser.role !== 'user') {
+    // safety: restore the removed slice and bail
+    session.history.push(...removed);
+    return null;
+  }
+  saveSession(sessionId);
+  return { userContent: lastUser.content };
+}
+
+// Replace a user message's content and drop everything after it, so the edited
+// turn can be re-run from that point.
+export function editUserMessageTruncate(sessionId: string, messageId: string, newContent: string): boolean {
+  const session = getSession(sessionId);
+  let idx = session.history.findIndex((m) => m.id === messageId);
+  if (idx < 0) return false;
+  if (session.history[idx].role !== 'user') return false;
+  session.history[idx].content = newContent;
+  session.history = session.history.slice(0, idx + 1);
+  saveSession(sessionId);
+  return true;
+}
+
+// Remove a message (by id, falling back to index) and everything after it.
+export function deleteMessageAndAfter(sessionId: string, messageId: string, index?: number): boolean {
+  const session = getSession(sessionId);
+  let idx = session.history.findIndex((m) => m.id === messageId);
+  if (idx < 0 && typeof index === 'number' && index >= 0 && index < session.history.length) {
+    idx = index;
+  }
+  if (idx < 0) return false;
+  session.history = session.history.slice(0, idx);
+  saveSession(sessionId);
+  return true;
+}
+
+export function setMessageFeedback(sessionId: string, messageId: string, feedback: 'up' | 'down' | null): boolean {
+  const session = getSession(sessionId);
+  const msg = session.history.find((m) => m.id === messageId);
+  if (!msg) return false;
+  msg.feedback = feedback;
+  saveSession(sessionId);
+  return true;
 }
 
 function scrubSession(session: Session): Session {

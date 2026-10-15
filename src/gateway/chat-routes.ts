@@ -7,7 +7,7 @@ import fs from 'fs';
 import path from 'path';
 import { getConfig } from '../config/config';
 import { getAgentById } from '../config/config';
-import { getWorkspace, clearHistory, deleteSession, addMessage } from './session';
+import { getWorkspace, clearHistory, deleteSession, addMessage, popLastAssistantForRegen, editUserMessageTruncate, deleteMessageAndAfter, setMessageFeedback, genMsgId } from './session';
 import { sessionAgentBindings } from './tool-registry';
 import { hookBus } from './hooks';
 import { createSSESender } from './realtime';
@@ -84,7 +84,7 @@ export function registerChatRoutes(app: express.Express, deps: ChatRouteDeps): v
   }
 
 app.post('/api/chat', async (req, res) => {
-  const { message, sessionId = 'default', pinnedMessages, agentId } = req.body;
+  const { message, sessionId = 'default', pinnedMessages, agentId, messageId } = req.body;
   if (!message || typeof message !== 'string') { res.status(400).json({ error: 'Message required' }); return; }
   const lastMainSessionId = String(sessionId || 'default');
   setMainSessionId(lastMainSessionId);
@@ -115,7 +115,7 @@ app.post('/api/chat', async (req, res) => {
   });
 
   try {
-    const userMsg = { role: 'user' as const, content: message, timestamp: Date.now() };
+    const userMsg = { role: 'user' as const, content: message, timestamp: Date.now(), id: (typeof messageId === 'string' && messageId) ? messageId : genMsgId() };
     const addResult = addMessage(sessionId, userMsg, { deferOnMemoryFlush: true, deferOnCompaction: true });
     if (addResult.deferredForCompaction && addResult.compactionPrompt) {
       console.log(`[v2] Context compaction triggered for session ${sessionId} (${addResult.estimatedTokens}/${addResult.contextLimitTokens} est. tokens)`);
@@ -184,9 +184,11 @@ app.post('/api/chat', async (req, res) => {
     const pins = Array.isArray(pinnedMessages) ? pinnedMessages.slice(0, 3) : [];
     const result = await handleChat(message, sessionId, sendSSE, pins.length > 0 ? pins : undefined, abortSignal);
     if (!abortSignal.aborted) {
-      addMessage(sessionId, { role: 'assistant', content: result.text, timestamp: Date.now() });
-      sendSSE('final', { text: result.text });
-      sendSSE('done', buildFlowDonePayload(result));
+      const assistantMsgId = genMsgId();
+      addMessage(sessionId, { role: 'assistant', content: result.text, timestamp: Date.now(), id: assistantMsgId });
+      sendSSE('final', { text: result.text, assistantMessageId: assistantMsgId });
+      const donePayload = { ...buildFlowDonePayload(result), assistantMessageId: assistantMsgId };
+      sendSSE('done', donePayload);
     }
   } catch (err: any) {
     if (!abortSignal.aborted) {
@@ -200,6 +202,78 @@ app.post('/api/chat', async (req, res) => {
     res.end();
   }
 });
+
+  // Shared SSE completion used by regenerate / edit turns. Mirrors the core of
+  // POST /api/chat but skips compaction / memory-flush / blocked-task handling.
+  async function streamCompletion(res: express.Response, sessionId: string, message: string): Promise<void> {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+
+    const sendSSE = createSSESender(res);
+    const heartbeat = setInterval(() => sendSSE('heartbeat', { state: 'processing' }), 5000);
+    setModelBusy(true);
+
+    const abortSignal = { aborted: false };
+    let completed = false;
+    res.on('close', () => {
+      if (!completed && !abortSignal.aborted) {
+        abortSignal.aborted = true;
+        console.log(`[v2] Client disconnected — aborting task for session ${sessionId}`);
+      }
+    });
+
+    try {
+      const result = await handleChat(message, sessionId, sendSSE, undefined, abortSignal);
+      if (!abortSignal.aborted) {
+        const assistantMsgId = genMsgId();
+        addMessage(
+          sessionId,
+          { role: 'assistant', content: result.text, timestamp: Date.now(), id: assistantMsgId },
+          { disableMemoryFlushCheck: true, disableCompactionCheck: true },
+        );
+        sendSSE('final', { text: result.text, assistantMessageId: assistantMsgId });
+        const donePayload = { ...buildFlowDonePayload(result), assistantMessageId: assistantMsgId };
+        sendSSE('done', donePayload);
+      }
+    } catch (err: any) {
+      if (!abortSignal.aborted) sendSSE('error', { message: err?.message || 'Unknown error' });
+    } finally {
+      completed = true;
+      clearInterval(heartbeat);
+      setModelBusy(false);
+      res.end();
+    }
+  }
+
+  app.post('/api/chat/regenerate', async (req, res) => {
+    const { sessionId = 'default' } = req.body;
+    const popped = popLastAssistantForRegen(sessionId);
+    if (!popped) { res.status(400).json({ error: 'No assistant message to regenerate' }); return; }
+    await streamCompletion(res, sessionId, popped.userContent);
+  });
+
+  app.post('/api/chat/edit', async (req, res) => {
+    const { sessionId = 'default', messageId, content } = req.body;
+    if (!content || typeof content !== 'string') { res.status(400).json({ error: 'content required' }); return; }
+    const ok = editUserMessageTruncate(sessionId, messageId, content);
+    if (!ok) { res.status(400).json({ error: 'target message not found or not editable' }); return; }
+    await streamCompletion(res, sessionId, content);
+  });
+
+  app.post('/api/messages/delete', async (req, res) => {
+    const { sessionId = 'default', messageId, index } = req.body;
+    if (!messageId && typeof index !== 'number') { res.status(400).json({ error: 'messageId or index required' }); return; }
+    const ok = deleteMessageAndAfter(sessionId, messageId, typeof index === 'number' ? index : undefined);
+    res.json({ success: ok });
+  });
+
+  app.post('/api/messages/feedback', async (req, res) => {
+    const { sessionId = 'default', messageId, feedback } = req.body;
+    const ok = setMessageFeedback(sessionId, messageId, feedback === 'up' || feedback === 'down' ? feedback : null);
+    res.json({ success: ok });
+  });
 
 app.get('/api/open-path', async (req, res) => {
   const fp = req.query.path as string;

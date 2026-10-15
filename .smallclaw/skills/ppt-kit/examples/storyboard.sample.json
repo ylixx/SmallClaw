@@ -1,0 +1,110 @@
+{
+  "title": "基于示例数据的演示（测试用）",
+  "pages": [
+    {
+      "pattern": "cover",
+      "fields": {
+        "title": "基于深度学习的文本分类方法研究",
+        "en": "Research on Text Classification Based on Deep Learning",
+        "advisor": "指导老师：张三 教授",
+        "presenter": "答辩人：李四"
+      },
+      "notes": "各位老师好，我是李四，我的论文题目是《基于深度学习的文本分类方法研究》。"
+    },
+    {
+      "pattern": "toc",
+      "fields": {
+        "t1": "研究背景", "e1": "Background",
+        "t2": "相关工作", "e2": "Related Work",
+        "t3": "方法设计", "e3": "Methodology",
+        "t4": "实验结果", "e4": "Experiments",
+        "t5": "结论贡献", "e5": "Conclusion",
+        "t6": "总结展望", "e6": "Summary"
+      }
+    },
+    {
+      "pattern": "section",
+      "fields": { "num": "01", "title": "研究背景", "en": "Background", "desc": "问题从哪来，为什么值得研究" }
+    },
+    {
+      "pattern": "text-3",
+      "fields": {
+        "title": "现有方法的三个瓶颈",
+        "s1": "标注成本", "b1": "人工标注依赖强，领域迁移时成本陡增",
+        "s2": "长尾失衡", "b2": "少数类样本稀缺，分类边界严重偏移",
+        "s3": "可解释性", "b3": "黑盒模型难以支撑高风险场景的决策"
+      },
+      "notes": "现有工作主要面临三个瓶颈：标注、长尾和可解释性。"
+    },
+    {
+      "pattern": "chart-line",
+      "fields": {
+        "title": "准确率随数据量变化",
+        "caption": "数据规模达 5 万条后增益趋缓，验证了半监督方案的有效边界"
+      },
+      "chart": {
+        "categories": ["1万", "3万", "5万", "10万"],
+        "series": { "本文方法": [0.78, 0.86, 0.9, 0.91], "基线BERT": [0.74, 0.8, 0.83, 0.84] }
+      },
+      "notes": "这一页看准确率曲线，本文方法在各数据规模上均优于基线。"
+    },
+    {
+      "pattern": "steps-3",
+      "fields": {
+        "title": "方法流程",
+        "desc": "三阶段：表示增强、半监督训练、边界校准",
+        "s1": "STEP 01", "b1": "对比预训练增强文本表示",
+        "s2": "STEP 02", "b2": "伪标签迭代扩充训练集",
+        "s3": "STEP 03", "b3": "置信度校准修正分类边界"
+      }
+    },
+    {
+      "pattern": "table",
+      "fields": {
+        "title": "主实验对比",
+        "table_title": "各方法在三个数据集上的准确率(%)",
+        "caption": "本文方法在三个数据集上均取得最优，平均提升 2.7 个百分点"
+      },
+      "table": {
+        "rows": [
+          ["方法", "数据集A", "数据集B", "数据集C"],
+          ["BERT", "84.2", "80.1", "82.6"],
+          ["RoBERTa", "85.0", "81.3", "83.4"],
+          ["本文方法", "87.1", "83.8", "85.9"]
+        ]
+      }
+    },
+    {
+      "pattern": "compare-2",
+      "fields": {
+        "title": "优势与局限",
+        "mid": "本文方法",
+        "l_top": "低标注依赖", "l_mid": "长尾鲁棒", "l_bot": "决策可解释",
+        "r_top": "算力开销大", "r_mid": "多语言未验证", "r_bot": "阈值需调参"
+      }
+    },
+    {
+      "pattern": "refs",
+      "fields": {
+        "title": "主要参考文献",
+        "ref1": "Devlin J, et al. BERT: Pre-training of Deep Bidirectional Transformers[J]. NAACL, 2019.",
+        "ref2": "Sohn K, et al. FixMatch: Simplifying Semi-Supervised Learning[J]. NeurIPS, 2020.",
+        "ref3": "张三, 等. 文本分类研究综述[J]. 计算机学报, 2023."
+      }
+    },
+    {
+      "pattern": "qa",
+      "fields": { "title": "问答环节", "main": "Q&A" },
+      "notes": "以上是我的汇报，请各位老师批评指正。"
+    },
+    {
+      "pattern": "thanks",
+      "fields": {
+        "main": "THANKS FOR YOUR GUIDANCE",
+        "org": "某某大学毕业答辩",
+        "sub": "THANKS FOR YOUR LISTENING",
+        "presenter": "答辩人：李四"
+      }
+    }
+  ]
+}

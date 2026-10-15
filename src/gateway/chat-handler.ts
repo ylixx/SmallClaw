@@ -36,6 +36,7 @@ import { createTask, loadTask, saveTask, appendJournal } from './task-store';
 import { runTask, type TaskState } from './task-runner';
 import { consumeLastDocPreview, parseDocPreview } from '../tools/office';
 import { SkillsManager } from './skills-manager';
+import { addUsage as recordTokenUsage } from '../tools/token-stats';
 
 
 export const MAX_TOOL_ROUNDS = 20;
@@ -2135,10 +2136,17 @@ RULES:
       if (!read.error && read.result) {
         const full = String(read.result);
         const cap = ANALYSIS_INJECT_MAX_CHARS;
-        const shown = full.length > cap ? `[File truncated: last ${cap} chars of ${full.length} total.]\n${full.slice(-cap)}` : full;
+        let shown = full;
+        let truncNote = '';
+        if (full.length > cap) {
+          // 取前 cap 字符（保留表头/开头，CSV 统计任务对"前 N 字符"更友好），
+          // 并明确提示：聚合类任务应走工具链而非凭上下文心算。
+          shown = full.slice(0, cap);
+          truncNote = `\n[File truncated: showing first ${cap} of ${full.length} chars. For column-wise statistics/grouping/sum, use doc_pivot or run_code tools — do NOT guess from this partial content.]`;
+        }
         messages.push({
           role: 'user',
-          content: `[SYSTEM: I read the file "${analysisTarget}" for you. Use its content to answer the user's question precisely; do not claim you cannot access it.]\n${shown}`,
+          content: `[SYSTEM: I read the file "${analysisTarget}" for you. Use its content to answer the user's question precisely; do not claim you cannot access it.]\n${shown}${truncNote}`,
         });
         sendSSE('info', { message: `FILE_OP v2: injected ${full.length} chars of file content into model context.` });
       } else {
@@ -2284,6 +2292,8 @@ RULES:
     const usage = (result as any)?.usage;
     const completionTokens = Number(usage?.completion_tokens) || 0;
     const elapsedMs = Math.max(1, Date.now() - startedAt);
+    // 累加会话级 token 用量，供 get_token_usage 工具读取
+    recordTokenUsage(Number(usage?.prompt_tokens) || 0, completionTokens);
     const tps = completionTokens > 0 ? completionTokens / (elapsedMs / 1000) : 0;
     console.log(`[v2] GEN: ${completionTokens} tok in ${elapsedMs}ms = ${tps.toFixed(1)} tok/s (prompt ${Number(usage?.prompt_tokens) || 0})`);
     if (completionTokens > 0) {

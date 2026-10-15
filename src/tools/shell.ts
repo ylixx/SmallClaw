@@ -41,6 +41,63 @@ function containsOutOfScopeAbsPath(command: string, workspacePath: string): bool
   return false;
 }
 
+// ── 可配置 Tool-Guard 策略（对标 QwenPaw 的 STRICT/SMART/AUTO/OFF）──────────
+//   OFF    — 不做危险命令模式拦截（仅保留 workspace_only 路径边界，如启用）
+//   SMART  — 拦截真正破坏性的命令；sudo/su/chmod 777 仅告警不拦截（默认）
+//   AUTO   — 同 SMART
+//   STRICT — 拦截全部可疑命令（含 sudo/su/chmod 777）
+export type ShellPolicy = 'OFF' | 'SMART' | 'AUTO' | 'STRICT';
+
+export function getShellPolicy(): ShellPolicy {
+  const raw = (process.env.SMALLCLAW_SHELL_POLICY || 'SMART').toUpperCase();
+  return (['OFF', 'SMART', 'AUTO', 'STRICT'] as const).includes(raw as ShellPolicy)
+    ? (raw as ShellPolicy)
+    : 'SMART';
+}
+
+// 真正破坏性的命令——任何非 OFF 策略都拦截
+const DESTRUCTIVE_PATTERNS: Array<[RegExp, string]> = [
+  [/rm\s+-rf\s+\//, 'rm -rf /'],
+  [/mkfs/, 'filesystem format'],
+  [/dd\s+if=/, 'disk write'],
+  [/>\s*\/dev\//, 'device write'],
+  [/\bcurl\b.*\|.*\bbash\b/, 'curl-pipe-bash'],
+  [/\bwget\b.*-O.*\s*-\s*\|/, 'wget-pipe'],
+];
+// 提权/放宽权限类——仅 STRICT 拦截，其余策略仅告警
+const PRIVILEGED_PATTERNS: Array<[RegExp, string]> = [
+  [/\bsudo\b/, 'privilege escalation'],
+  [/\bsu\s/, 'user switch'],
+  [/chmod\s+777/, 'world-writable permission'],
+];
+
+export function assessShellCommand(
+  command: string,
+  policy: ShellPolicy = getShellPolicy()
+): { blocked: boolean; reason?: string; warned?: boolean } {
+  if (policy === 'OFF') return { blocked: false };
+  for (const [pattern, label] of DESTRUCTIVE_PATTERNS) {
+    if (pattern.test(command)) {
+      return {
+        blocked: true,
+        reason: `Security: Potentially destructive command detected (${label}): ${command.slice(0, 80)}`,
+      };
+    }
+  }
+  for (const [pattern, label] of PRIVILEGED_PATTERNS) {
+    if (pattern.test(command)) {
+      if (policy === 'STRICT') {
+        return {
+          blocked: true,
+          reason: `Security: Privileged command blocked by STRICT policy (${label}): ${command.slice(0, 80)}`,
+        };
+      }
+      return { blocked: false, warned: true };
+    }
+  }
+  return { blocked: false };
+}
+
 export async function executeShell(args: ShellToolArgs): Promise<ToolResult> {
   const config = getConfig().getConfig();
   const permissions = config.tools.permissions.shell;
@@ -80,27 +137,11 @@ export async function executeShell(args: ShellToolArgs): Promise<ToolResult> {
     }
   }
 
-  // Hardcoded dangerous command patterns
-  const dangerousCommands: Array<[RegExp, string]> = [
-    [/rm\s+-rf\s+\//, 'rm -rf /'],
-    [/mkfs/, 'filesystem format'],
-    [/dd\s+if=/, 'disk write'],
-    [/>\s*\/dev\//, 'device write'],
-    [/\bsudo\b/, 'privilege escalation'],
-    [/\bsu\s/, 'user switch'],
-    [/chmod\s+777/, 'world-writable permission'],
-    [/\bcurl\b.*\|.*\bbash\b/, 'curl-pipe-bash'],
-    [/\bwget\b.*-O.*\s*-\s*\|/, 'wget-pipe'],
-  ];
-
-  for (const [pattern, label] of dangerousCommands) {
-    if (pattern.test(args.command)) {
-      log.warn('[shell] Blocked dangerous command:', label);
-      return {
-        success: false,
-        error: `Security: Potentially destructive command detected (${label}): ${args.command.slice(0, 80)}`
-      };
-    }
+  // ── 可配置 Tool-Guard 策略（对标 QwenPaw 的 STRICT/SMART/AUTO/OFF）─────
+  const verdict = assessShellCommand(args.command, getShellPolicy());
+  if (verdict.blocked) {
+    log.warn('[shell] Blocked by policy:', verdict.reason);
+    return { success: false, error: verdict.reason };
   }
 
   try {
@@ -125,7 +166,10 @@ export async function executeShell(args: ShellToolArgs): Promise<ToolResult> {
 
 export const shellTool = {
   name: 'shell',
-  description: 'Execute terminal commands in the workspace',
+  description: 'Execute terminal commands in the workspace. ' +
+    'Dangerous-command guarding is policy-driven via env SMALLCLAW_SHELL_POLICY ' +
+    '(OFF / SMART[default] / AUTO / STRICT): SMART blocks destructive ops (rm -rf /, mkfs, dd, device writes, curl|bash) ' +
+    'and only warns on sudo/su/chmod 777; STRICT blocks those too.',
   execute: executeShell,
   schema: {
     command: 'string (required) - The command to execute',

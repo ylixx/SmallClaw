@@ -1,0 +1,48 @@
+{
+  "_comment": "内容意图(intent)分类表。顶层 key 为 intent 名（生成模型只写它），candidates 为该 intent 下可候选的具体 pattern（必须都存在于 patterns.json）。约束：1) 顶层 key 不以 _ 开头（被 render/resolve 过滤）；2) candidates 都在 patterns.json 中；3) patterns.json 每个 pattern 至少出现在一个 candidates 中（全量覆盖）。新增版式只需在此追加 + patterns.json + 模板，不改任何 Python。",
+
+  "cover":     { "desc": "封面：论文标题 + 英文副标题 + 指导老师/答辩人", "candidates": ["cover"] },
+  "toc":       { "desc": "目录：多章节编号列表", "candidates": ["toc"] },
+  "section":   { "desc": "章节过渡页：编号 + 中文标题 + 英文 + 一句描述", "candidates": ["section"] },
+  "thanks":    { "desc": "致谢/结束页", "candidates": ["thanks"] },
+  "qa":        { "desc": "问答页", "candidates": ["qa"] },
+  "refs":      { "desc": "参考文献页（固定编号列表）", "candidates": ["refs"] },
+
+  "quote":     { "desc": "引文/核心论断段落 + 落款", "candidates": ["text-quote"] },
+  "para":      { "desc": "小标题 + 长段正文（可带副标）", "candidates": ["text-frame", "text-long"] },
+  "points-2":  { "desc": "上下两段文字（各带小标题）", "candidates": ["text-2"] },
+  "points-3":  { "desc": "三列要点（小标题+正文）", "candidates": ["text-3", "steps-3", "mockup-3", "imgtext-3"] },
+  "points-4":  { "desc": "四块要点（2x2）", "candidates": ["text-4", "text-4icon", "imgtext-4", "cycle-4"] },
+  "points-6":  { "desc": "六块要点（3x2）", "candidates": ["text-6"] },
+
+  "hero-img":  { "desc": "横幅大图 + 图注标题 + 说明文字", "candidates": ["imgtext-wide"] },
+  "imgtext-1v1": { "desc": "左图右文（标题+关键词）", "candidates": ["imgtext-1v1"] },
+  "imgtext-2x": { "desc": "双图 + 两段图文", "candidates": ["imgtext-2v2", "imgtext-2pair"] },
+  "imgtext-3": { "desc": "三图三文并列", "candidates": ["imgtext-3"] },
+  "imgtext-4": { "desc": "四图四文并列（含关键词标签）", "candidates": ["imgtext-4"] },
+  "mockup":    { "desc": "样机/产品图 + 右侧三条要点", "candidates": ["mockup-3"] },
+
+  "person":    { "desc": "单人介绍：头像 + 姓名 + 简介", "candidates": ["person"] },
+  "person-2":  { "desc": "双人/单人履历（含多项信息字段）", "candidates": ["person-2", "person-2pair"] },
+  "person-3":  { "desc": "三人物并列", "candidates": ["person-3"] },
+  "person-4":  { "desc": "四人物 2x2 阵列", "candidates": ["person-4"] },
+  "person-6":  { "desc": "六人物阵列", "candidates": ["person-6"] },
+
+  "steps-3":   { "desc": "三步骤流程（圆形/编号）", "candidates": ["steps-3"] },
+  "process-5": { "desc": "五节点横向进程图", "candidates": ["process-5"] },
+  "timeline-4": { "desc": "四节点时间轴（年份+小标题+说明）", "candidates": ["timeline-4", "timeline2-5"] },
+  "timeline-5": { "desc": "五节点创意时间轴", "candidates": ["timeline2-5"] },
+  "swot":      { "desc": "SWOT 分析（S/W/O/T 四象限）", "candidates": ["swot", "swot2"] },
+  "compare-2": { "desc": "左右优劣对比（各三点）", "candidates": ["compare-2"] },
+  "two-views": { "desc": "两派观点对照（各三点）", "candidates": ["two-views"] },
+  "six-views": { "desc": "中心结论 + 六个观点", "candidates": ["six-views"] },
+
+  "table":     { "desc": "数据表格 + 标题 + 结论注释", "candidates": ["table"] },
+  "chart-pie": { "desc": "饼图 + 四角说明", "candidates": ["chart-pie"] },
+  "chart-line": { "desc": "折线/曲线图 + 结论文字", "candidates": ["chart-line", "chart-line-2"] },
+  "chart-bar": { "desc": "柱/条形图 + 结论文字", "candidates": ["chart-bar", "chart-bar-3", "chart-bar-2", "chart-bar-stacked"] },
+  "chart-donut": { "desc": "多圆环百分比", "candidates": ["chart-donut3"] },
+  "compare-data": { "desc": "双圆环数据对比", "candidates": ["compare-data"] },
+  "honors-3":  { "desc": "三项荣誉展示（奖杯图）", "candidates": ["honors-3"] },
+  "honors-6":  { "desc": "六项荣誉展示（奖牌图）", "candidates": ["honors-6"] }
+}

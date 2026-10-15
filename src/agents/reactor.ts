@@ -49,6 +49,8 @@ export interface ReactOptions {
   promptMode?: 'full' | 'minimal' | 'none';
   workspacePath?: string;
   persona?: AgentPersona; // explicit persona override; auto-inferred from message when absent
+  /** Restrict the tools this run may see AND call (narrowed sub-agents). */
+  allowedTools?: string[];
 }
 
 // ─── Persona (场景姿态)：同一通用内核 + 按任务切换的短规则段 ────────────────
@@ -607,7 +609,10 @@ export class Reactor {
     const persona = inferPersona(primaryUserMessage, options.persona);
     const inferredToolProfile = inferToolProfile(primaryUserMessage, options.toolProfile);
     const toolProfile = this.registry.resolveToolProfile(inferredToolProfile);
-    const toolSchemas = this.registry.getToolSchemas(toolProfile);
+    const allowedTools = (Array.isArray(options.allowedTools) && options.allowedTools.length > 0)
+      ? options.allowedTools
+      : undefined;
+    const toolSchemas = this.registry.getToolSchemas(toolProfile, allowedTools);
     const systemPrompt = buildNodeCallSystemPrompt(workspacePath, options, primaryUserMessage, toolProfile, toolSchemas, persona);
     const nativeSystemPrompt = buildNativeToolSystemPrompt(toolSchemas, options, primaryUserMessage);
 
@@ -629,7 +634,7 @@ export class Reactor {
           params: options.serverToolCall.params || {},
           stepNum: 1,
         });
-        const toolResult = await this.registry.execute(mapped, options.serverToolCall.params || {});
+        const toolResult = await this.registry.execute(mapped, options.serverToolCall.params || {}, allowedTools);
         const resultText = toolResult.success
           ? (toolResult.stdout || JSON.stringify(toolResult.data || {}))
           : `ERROR: ${toolResult.error}`;
@@ -650,7 +655,7 @@ export class Reactor {
     // If not, fall through to the node_call<> primary channel.
     if (NATIVE_TOOL_CALLS_ENABLED) {
       try {
-        const allNativeTools = this.registry.getToolDefinitionsForChat(toolProfile);
+        const allNativeTools = this.registry.getToolDefinitionsForChat(toolProfile, allowedTools);
         const nativeMessages: any[] = [
           { role: 'system', content: nativeSystemPrompt },
           { role: 'user', content: userMessage },
@@ -719,7 +724,7 @@ export class Reactor {
               continue;
             }
 
-            const toolResult = await this.registry.execute(mappedName, params);
+            const toolResult = await this.registry.execute(mappedName, params, allowedTools);
             const fullResultText = toolResult.success
               ? (toolResult.stdout || JSON.stringify(toolResult.data || {}))
               : `ERROR: ${toolResult.error}`;

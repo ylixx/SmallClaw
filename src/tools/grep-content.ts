@@ -58,13 +58,17 @@ interface WalkOptions {
   relRoot: string;
   limit: number;
   caseSensitive: boolean;
+  ctxBefore: number;
+  ctxAfter: number;
 }
+
+type GrepHit_ = GrepHit;
 
 async function walkSearch(
   dirAbs: string,
   relDir: string,
   opts: WalkOptions,
-  state: { files: number; hits: Array<{ file: string; line: number; text: string }>; aborted: boolean },
+  state: { files: number; matches: number; hits: GrepHit_[]; aborted: boolean },
   depth: number,
 ): Promise<void> {
   if (state.aborted || depth > MAX_DEPTH) return;
@@ -112,20 +116,45 @@ async function walkSearch(
       continue; // 二进制误判/编码错误跳过
     }
 
-    opts.pattern.lastIndex = 0;
     const lines = content.split('\n');
-    for (let i = 0; i < lines.length && state.hits.length < opts.limit; i++) {
+    const matchIdx: number[] = [];
+    for (let i = 0; i < lines.length; i++) {
       opts.pattern.lastIndex = 0;
       if (opts.pattern.test(lines[i])) {
-        state.hits.push({ file: relName, line: i + 1, text: lines[i].trim().slice(0, 240) });
+        matchIdx.push(i);
+        state.matches += 1;
+        if (state.matches >= opts.limit) {
+          state.aborted = true;
+          break;
+        }
       }
     }
+    if (matchIdx.length === 0) continue;
 
-    if (state.hits.length >= opts.limit) {
-      state.aborted = true;
-      return;
+    // 展开上下文行（按文档顺序，matched 标 isMatch=true）
+    const emitted = new Set<number>();
+    for (const mi of matchIdx) {
+      const from = Math.max(0, mi - opts.ctxBefore);
+      const to = Math.min(lines.length - 1, mi + opts.ctxAfter);
+      for (let j = from; j <= to; j++) {
+        if (emitted.has(j)) continue;
+        emitted.add(j);
+        state.hits.push({
+          file: relName,
+          line: j + 1,
+          text: lines[j].trim().slice(0, 240),
+          isMatch: j === mi,
+        });
+      }
     }
   }
+}
+
+export interface GrepHit {
+  file: string;
+  line: number;
+  text: string;
+  isMatch: boolean;
 }
 
 export interface GrepContentArgs {
@@ -133,6 +162,9 @@ export interface GrepContentArgs {
   path?: string;
   limit?: number;
   case_sensitive?: boolean;
+  context_before?: number; // -B: lines of context before each match
+  context_after?: number;  // -A: lines of context after each match
+  context?: number;        // -C: sets both before and after
 }
 
 export async function executeGrepContent(args: GrepContentArgs): Promise<ToolResult> {
@@ -155,6 +187,11 @@ export async function executeGrepContent(args: GrepContentArgs): Promise<ToolRes
     const limit = Number.isFinite(limitRaw)
       ? Math.min(Math.max(Math.floor(limitRaw), 1), 500)
       : MAX_RESULTS_DEFAULT;
+
+    // 上下文行参数（-B/-A/-C），上限各 10 行，避免噪声过大
+    const ctxC = Math.min(Math.max(Number(args?.context ?? 0) || 0, 0), 10);
+    const ctxB = Math.min(Math.max(Number(args?.context_before ?? ctxC) || 0, 0), 10);
+    const ctxA = Math.min(Math.max(Number(args?.context_after ?? ctxC) || 0, 0), 10);
 
     const config = getConfig().getConfig();
     const workspace = config.workspace.path;
@@ -181,23 +218,37 @@ export async function executeGrepContent(args: GrepContentArgs): Promise<ToolRes
       const content = await fs.readFile(targetAbs, 'utf-8');
       const lines = content.split('\n');
       const relFile = path.relative(workspace, targetAbs).split(path.sep).join('/') || targetAbs;
-      const hits: Array<{ file: string; line: number; text: string }> = [];
+      const hits: GrepHit[] = [];
+      let matches = 0;
+      const matchIdx: number[] = [];
       regex.lastIndex = 0;
-      for (let i = 0; i < lines.length && hits.length < limit; i++) {
+      for (let i = 0; i < lines.length; i++) {
         regex.lastIndex = 0;
         if (regex.test(lines[i])) {
-          hits.push({ file: relFile, line: i + 1, text: lines[i].trim().slice(0, 240) });
+          matchIdx.push(i);
+          matches += 1;
+          if (matches >= limit) break;
         }
       }
-      return formatGrepResult(hits, limit);
+      const emitted = new Set<number>();
+      for (const mi of matchIdx) {
+        const from = Math.max(0, mi - ctxB);
+        const to = Math.min(lines.length - 1, mi + ctxA);
+        for (let j = from; j <= to; j++) {
+          if (emitted.has(j)) continue;
+          emitted.add(j);
+          hits.push({ file: relFile, line: j + 1, text: lines[j].trim().slice(0, 240), isMatch: j === mi });
+        }
+      }
+      return formatGrepResult(hits, limit, matches);
     }
 
     // 目录递归搜索
-    const state = { files: 0, hits: [] as Array<{ file: string; line: number; text: string }>, aborted: false };
+    const state = { files: 0, matches: 0, hits: [] as GrepHit[], aborted: false };
     await walkSearch(
       targetAbs,
       path.relative(workspace, targetAbs).split(path.sep).join('/') || '',
-      { pattern: regex, rootAbs: targetAbs, relRoot: '', limit, caseSensitive: args?.case_sensitive === true },
+      { pattern: regex, rootAbs: targetAbs, relRoot: '', limit, caseSensitive: args?.case_sensitive === true, ctxBefore: ctxB, ctxAfter: ctxA },
       state,
       0,
     );
@@ -205,26 +256,32 @@ export async function executeGrepContent(args: GrepContentArgs): Promise<ToolRes
     const scannedNote = state.files >= MAX_FILES_SCANNED
       ? `\n[扫描文件数已达上限 ${MAX_FILES_SCANNED}，结果可能不完整]`
       : '';
-    return formatGrepResult(state.hits, limit, scannedNote);
+    return formatGrepResult(state.hits, limit, state.matches, scannedNote);
   } catch (err: any) {
     return { success: false, error: `grep_content failed: ${err?.message || err}` };
   }
 }
 
 function formatGrepResult(
-  hits: Array<{ file: string; line: number; text: string }>,
+  hits: GrepHit[],
   limit: number,
-  _extraNote = '',
+  matchCount: number,
+  extraNote = '',
 ): ToolResult {
   if (hits.length === 0) {
     return { success: true, stdout: '未找到匹配', data: { count: 0, results: [] } };
   }
 
-  const lines = hits.map((h) => `${h.file}:${h.line}: ${h.text}`);
+  // 命中行正常输出；上下文行以 "| " 前缀标记
+  const lines = hits.map((h) => {
+    const marker = h.isMatch ? '' : '| ';
+    return `${h.file}:${h.line}: ${marker}${h.text}`;
+  });
   let out = lines.join('\n');
-  if (hits.length >= limit) {
+  if (matchCount >= limit) {
     out += `\n[已截断：仅显示前 ${limit} 条匹配，可用更精确的 pattern 缩小范围]`;
   }
+  if (extraNote) out += extraNote;
   if (out.length > MAX_OUTPUT_CHARS) {
     out = `${out.slice(0, MAX_OUTPUT_CHARS)}\n\n[输出过长已截断，请缩小 pattern 或 path]`;
   }
@@ -233,8 +290,9 @@ function formatGrepResult(
     success: true,
     stdout: out,
     data: {
-      count: hits.length,
-      truncated: hits.length >= limit,
+      count: matchCount,
+      context_lines: hits.length - matchCount,
+      truncated: matchCount >= limit,
       results: hits,
     },
   };
@@ -250,6 +308,9 @@ export const grepContentTool = {
     path: 'string (optional) - file or directory to search (default: workspace root)',
     limit: 'number (optional, default 100, max 500) - max matches to return',
     case_sensitive: 'boolean (optional) - default false (case-insensitive)',
+    context_before: 'number (optional, 0-10) - lines of context before each match (-B)',
+    context_after: 'number (optional, 0-10) - lines of context after each match (-A)',
+    context: 'number (optional, 0-10) - sets both context_before and context_after (-C)',
   },
   jsonSchema: {
     type: 'object',
@@ -258,6 +319,9 @@ export const grepContentTool = {
       path: { type: 'string', description: 'file or directory to search (default: workspace root)' },
       limit: { type: 'number', description: 'max matches to return (default 100, max 500)' },
       case_sensitive: { type: 'boolean', description: 'default false (case-insensitive)' },
+      context_before: { type: 'number', description: 'lines of context before each match (-B), 0-10' },
+      context_after: { type: 'number', description: 'lines of context after each match (-A), 0-10' },
+      context: { type: 'number', description: 'sets both before/after context (-C), 0-10' },
     },
     required: ['pattern'],
     additionalProperties: false,

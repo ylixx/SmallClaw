@@ -109,7 +109,20 @@ export function resolveToolFilePath(
   if (!raw) return { ok: false, error: 'Missing required parameter "filename". You must pass a filename in the tool call arguments, e.g. {"filename": "report.html", "content": "..."}. Do not retry without it.' };
   if (raw.includes('\0')) return { ok: false, error: 'Invalid filename' };
 
-  const resolved = realpathForGuard(path.resolve(String(workspacePath || ''), raw));
+  // 归一化：剥离前导的 workspace 同名段，避免 "workspace/xxx" 被拼成
+  // "<ws>/workspace/xxx"（路径双拼 bug，doc_write 找不到目录、T8 PPT 生成失败）。
+  // 必须在 path.resolve 之前处理，否则双拼路径在此已固化。
+  let name = raw.replace(/\\/g, '/');
+  const wsNorm = String(workspacePath || '').replace(/\\/g, '/');
+  const base = wsNorm ? path.basename(wsNorm) : '';
+  if (base) {
+    const prefix = base.toLowerCase() + '/';
+    while (name.toLowerCase().startsWith(prefix)) name = name.slice(prefix.length);
+    const alt = './' + prefix;
+    while (name.toLowerCase().startsWith(alt)) name = name.slice(alt.length);
+  }
+
+  const resolved = realpathForGuard(path.resolve(String(workspacePath || ''), name));
 
   let filesPermissions: any = null;
   try {

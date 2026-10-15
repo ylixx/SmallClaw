@@ -1,0 +1,764 @@
+{
+  "_comment": "版式槽位映射：pattern_id -> 模板中的单页版式。slide=模板内页码(1-based, 按放映顺序)；text_slots/image_slots 的值是该页 shapes 列表中的形状索引(0-based, 文档顺序)。渲染器会把 fields[key] 写入 text_slots[key] 对应形状；缺省字段会被清空（避免模板占位文字泄漏）。",
+  "cover": {
+    "slide": 1,
+    "desc": "封面：论文标题 + 英文副标题 + 指导老师/答辩人",
+    "text_slots": {
+      "title": 3,
+      "en": 4,
+      "advisor": 8,
+      "presenter": 9
+    },
+    "image_slots": {
+      "bg": 1
+    }
+  },
+  "toc": {
+    "slide": 2,
+    "desc": "目录：6 个章节（编号 01-06 固定）",
+    "text_slots": {
+      "t1": 9,
+      "e1": 2,
+      "t2": 12,
+      "e2": 3,
+      "t3": 15,
+      "e3": 4,
+      "t4": 18,
+      "e4": 5,
+      "t5": 21,
+      "e5": 6,
+      "t6": 24,
+      "e6": 25
+    }
+  },
+  "section": {
+    "slide": 3,
+    "desc": "章节过渡页：编号 + 中文标题 + 英文 + 一句描述",
+    "text_slots": {
+      "num": 0,
+      "title": 1,
+      "en": 2,
+      "desc": 3
+    }
+  },
+  "thanks": {
+    "slide": 9,
+    "desc": "致谢/结束页",
+    "text_slots": {
+      "main": 5,
+      "org": 1,
+      "sub": 2,
+      "presenter": 4
+    }
+  },
+  "text-quote": {
+    "slide": 10,
+    "desc": "引文/结论段落 + 右下落款",
+    "text_slots": {
+      "title": 5,
+      "body": 0,
+      "source": 1
+    }
+  },
+  "text-frame": {
+    "slide": 11,
+    "desc": "小标题 + 框内长段文字",
+    "text_slots": {
+      "title": 4,
+      "st": 0,
+      "body": 1
+    }
+  },
+  "text-long": {
+    "slide": 12,
+    "desc": "一大段纯文字（折角卡片）",
+    "text_slots": {
+      "title": 5,
+      "body": 2
+    }
+  },
+  "text-2": {
+    "slide": 13,
+    "desc": "上下两段文字（各带小标题）",
+    "text_slots": {
+      "title": 7,
+      "s1": 0,
+      "b1": 1,
+      "s2": 3,
+      "b2": 4
+    }
+  },
+  "text-3": {
+    "slide": 14,
+    "desc": "三列卡片（小标题+正文）",
+    "text_slots": {
+      "title": 15,
+      "s1": 1,
+      "b1": 3,
+      "s2": 6,
+      "b2": 8,
+      "s3": 11,
+      "b3": 13
+    }
+  },
+  "text-4": {
+    "slide": 15,
+    "desc": "2x2 四块文字",
+    "text_slots": {
+      "title": 16,
+      "s1": 2,
+      "b1": 3,
+      "s2": 6,
+      "b2": 7,
+      "s3": 10,
+      "b3": 11,
+      "s4": 14,
+      "b4": 15
+    }
+  },
+  "text-4icon": {
+    "slide": 16,
+    "desc": "2x2 四块图标+文字",
+    "text_slots": {
+      "title": 16,
+      "s1": 0,
+      "b1": 2,
+      "s2": 4,
+      "b2": 6,
+      "s3": 8,
+      "b3": 10,
+      "s4": 12,
+      "b4": 14
+    }
+  },
+  "text-6": {
+    "slide": 17,
+    "desc": "3x2 六块图标+文字",
+    "text_slots": {
+      "title": 33,
+      "s1": 5,
+      "b1": 6,
+      "s2": 9,
+      "b2": 10,
+      "s3": 12,
+      "b3": 13,
+      "s4": 15,
+      "b4": 16,
+      "s5": 18,
+      "b5": 19,
+      "s6": 21,
+      "b6": 22
+    }
+  },
+  "imgtext-wide": {
+    "slide": 18,
+    "desc": "横幅长图 + 图注标题 + 说明文字",
+    "text_slots": {
+      "title": 1,
+      "cap": 6,
+      "body": 2
+    },
+    "image_slots": {
+      "img1": 0
+    }
+  },
+  "imgtext-1v1": {
+    "slide": 19,
+    "desc": "左图右文（标题+关键词）",
+    "text_slots": {
+      "title": 9,
+      "st": 5,
+      "body": 4,
+      "kw": 8
+    },
+    "image_slots": {
+      "img1": 0
+    }
+  },
+  "imgtext-2v2": {
+    "slide": 20,
+    "desc": "左双图 + 右两段图文",
+    "text_slots": {
+      "title": 14,
+      "s1": 4,
+      "b1": 3,
+      "s2": 10,
+      "b2": 9,
+      "kw1": 12,
+      "kw2": 13
+    },
+    "image_slots": {
+      "img1": 1,
+      "img2": 0
+    }
+  },
+  "imgtext-2pair": {
+    "slide": 21,
+    "desc": "对角图文两组（交叉布局）",
+    "text_slots": {
+      "title": 11,
+      "s1": 3,
+      "b1": 2,
+      "s2": 6,
+      "b2": 5,
+      "kw1": 9,
+      "kw2": 10
+    },
+    "image_slots": {
+      "img1": 0,
+      "img2": 1
+    }
+  },
+  "imgtext-3": {
+    "slide": 22,
+    "desc": "三图三文并列",
+    "text_slots": {
+      "title": 11,
+      "s1": 2,
+      "b1": 3,
+      "s2": 5,
+      "b2": 6,
+      "s3": 8,
+      "b3": 9
+    },
+    "image_slots": {
+      "img1": 12,
+      "img2": 13,
+      "img3": 14
+    }
+  },
+  "imgtext-4": {
+    "slide": 23,
+    "desc": "四图四文并列（含关键词标签）",
+    "text_slots": {
+      "title": 20,
+      "s1": 4,
+      "b1": 5,
+      "kw1": 7,
+      "s2": 8,
+      "b2": 9,
+      "kw2": 11,
+      "s3": 12,
+      "b3": 13,
+      "kw3": 15,
+      "s4": 17,
+      "b4": 18,
+      "kw4": 16
+    },
+    "image_slots": {
+      "img1": 1,
+      "img2": 2,
+      "img3": 0,
+      "img4": 3
+    }
+  },
+  "mockup-3": {
+    "slide": 24,
+    "desc": "样机图 + 右侧三条要点",
+    "text_slots": {
+      "title": 0,
+      "s1": 2,
+      "b1": 4,
+      "s2": 6,
+      "b2": 8,
+      "s3": 10,
+      "b3": 12
+    },
+    "image_slots": {
+      "img1": 16
+    }
+  },
+  "person": {
+    "slide": 25,
+    "desc": "人物页：头像 + 姓名 + 简介",
+    "text_slots": {
+      "title": 5,
+      "name": 2,
+      "bio": 3
+    },
+    "image_slots": {
+      "img1": 6
+    }
+  },
+  "steps-3": {
+    "slide": 31,
+    "desc": "三步骤圆形流程",
+    "text_slots": {
+      "title": 16,
+      "desc": 3,
+      "s1": 8,
+      "b1": 9,
+      "s2": 13,
+      "b2": 14,
+      "s3": 10,
+      "b3": 11
+    }
+  },
+  "process-5": {
+    "slide": 32,
+    "desc": "五节点横向进程图",
+    "text_slots": {
+      "title": 17,
+      "s1": 8,
+      "b1": 10,
+      "s2": 29,
+      "b2": 31,
+      "s3": 20,
+      "b3": 22,
+      "s4": 2,
+      "b4": 4,
+      "s5": 25,
+      "b5": 27
+    }
+  },
+  "timeline-4": {
+    "slide": 33,
+    "desc": "四节点时间轴（年份+小标题+说明）",
+    "text_slots": {
+      "title": 21,
+      "d1": 2,
+      "s1": 4,
+      "b1": 5,
+      "d2": 7,
+      "s2": 9,
+      "b2": 10,
+      "d3": 12,
+      "s3": 14,
+      "b3": 15,
+      "d4": 17,
+      "s4": 19,
+      "b4": 20
+    }
+  },
+  "swot": {
+    "slide": 35,
+    "desc": "SWOT 分析（S/W/O/T 四象限）",
+    "text_slots": {
+      "title": 20,
+      "s_st": 12,
+      "s_b": 13,
+      "w_st": 0,
+      "w_b": 1,
+      "o_st": 14,
+      "o_b": 15,
+      "t_st": 4,
+      "t_b": 5
+    }
+  },
+  "compare-2": {
+    "slide": 37,
+    "desc": "左右优劣对比（各三点）",
+    "text_slots": {
+      "title": 21,
+      "mid": 17,
+      "l_top": 14,
+      "l_mid": 16,
+      "l_bot": 15,
+      "r_top": 11,
+      "r_mid": 13,
+      "r_bot": 12
+    }
+  },
+  "two-views": {
+    "slide": 39,
+    "desc": "两派观点对照（各三点）",
+    "text_slots": {
+      "title": 0,
+      "lab1": 13,
+      "lab2": 14,
+      "l1": 5,
+      "l2": 9,
+      "l3": 6,
+      "r1": 7,
+      "r2": 10,
+      "r3": 8
+    }
+  },
+  "six-views": {
+    "slide": 40,
+    "desc": "中心结论 + 六个观点",
+    "text_slots": {
+      "title": 1,
+      "center": 21,
+      "l1": 3,
+      "l2": 5,
+      "l3": 4,
+      "r1": 6,
+      "r2": 8,
+      "r3": 7
+    }
+  },
+  "table": {
+    "slide": 42,
+    "desc": "数据表格 + 标题 + 结论注释（支持 table 数据）",
+    "text_slots": {
+      "title": 5,
+      "table_title": 1,
+      "caption": 4
+    },
+    "table_slot": 0
+  },
+  "chart-pie": {
+    "slide": 43,
+    "desc": "饼图 + 四角说明（支持 chart 数据）",
+    "text_slots": {
+      "title": 15,
+      "s1": 8,
+      "b1": 9,
+      "s2": 11,
+      "b2": 12,
+      "s3": 2,
+      "b3": 3,
+      "s4": 5,
+      "b4": 6
+    },
+    "chart_slot": 0,
+    "chart_native": true
+  },
+  "chart-line": {
+    "slide": 46,
+    "desc": "折线图 + 结论文字（支持 chart 数据）",
+    "text_slots": {
+      "title": 3,
+      "caption": 1
+    },
+    "chart_slot": 0,
+    "chart_native": true
+  },
+  "chart-donut3": {
+    "slide": 47,
+    "desc": "三圆环百分比 + 标题 + 说明（charts.chart1~3 写入三个圆环数据）",
+    "text_slots": {
+      "title": 9,
+      "kw1": 4,
+      "pct1": 13,
+      "kw2": 5,
+      "pct2": 12,
+      "kw3": 6,
+      "pct3": 3,
+      "caption": 8
+    },
+    "chart_slots": {
+      "chart1": 0,
+      "chart2": 1,
+      "chart3": 2
+    },
+    "chart_native": true
+  },
+  "chart-bar": {
+    "slide": 48,
+    "desc": "簇状条形图 + 结论文字（支持 chart 数据）",
+    "text_slots": {
+      "title": 3,
+      "caption": 0
+    },
+    "chart_slot": 1,
+    "chart_native": true
+  },
+  "refs": {
+    "slide": 54,
+    "desc": "参考文献（最多 6 条，编号固定 01-06）",
+    "text_slots": {
+      "title": 0,
+      "ref1": 5,
+      "ref2": 8,
+      "ref3": 11,
+      "ref4": 14,
+      "ref5": 17,
+      "ref6": 20
+    }
+  },
+  "qa": {
+    "slide": 51,
+    "desc": "Q&A 问答页",
+    "text_slots": {
+      "title": 0,
+      "main": 1
+    }
+  },
+  "person-2": {
+    "slide": 26,
+    "desc": "人物简历页：头像+姓名+六项信息",
+    "text_slots": {
+      "title": 18,
+      "name": 1,
+      "bio": 0,
+      "major": 2,
+      "edu": 4,
+      "skill": 6,
+      "work": 8,
+      "honor": 11,
+      "contact": 13
+    },
+    "image_slots": {
+      "img1": 19
+    }
+  },
+  "person-2pair": {
+    "slide": 27,
+    "desc": "双人物对角布局",
+    "text_slots": {
+      "title": 8,
+      "name1": 3,
+      "bio1": 0,
+      "name2": 7,
+      "bio2": 4
+    },
+    "image_slots": {
+      "img1": 9,
+      "img2": 10
+    }
+  },
+  "person-3": {
+    "slide": 28,
+    "desc": "三人物并列",
+    "text_slots": {
+      "title": 12,
+      "name1": 7,
+      "bio1": 6,
+      "name2": 9,
+      "bio2": 8,
+      "name3": 11,
+      "bio3": 10
+    },
+    "image_slots": {
+      "img1": 4,
+      "img2": 5,
+      "img3": 3
+    }
+  },
+  "person-4": {
+    "slide": 29,
+    "desc": "四人物 2x2 阵列",
+    "text_slots": {
+      "title": 9,
+      "name1": 4,
+      "bio1": 5,
+      "name2": 14,
+      "bio2": 6,
+      "name3": 16,
+      "bio3": 8,
+      "name4": 15,
+      "bio4": 7
+    },
+    "image_slots": {
+      "img1": 10,
+      "img2": 11,
+      "img3": 13,
+      "img4": 12
+    }
+  },
+  "person-6": {
+    "slide": 30,
+    "desc": "六人物阵列",
+    "text_slots": {
+      "title": 19,
+      "name1": 7,
+      "bio1": 8,
+      "name2": 20,
+      "bio2": 12,
+      "name3": 21,
+      "bio3": 10,
+      "name4": 23,
+      "bio4": 14,
+      "name5": 24,
+      "bio5": 18,
+      "name6": 22,
+      "bio6": 16
+    },
+    "image_slots": {
+      "img1": 5,
+      "img2": 1,
+      "img3": 0,
+      "img4": 4,
+      "img5": 3,
+      "img6": 2
+    }
+  },
+  "timeline2-5": {
+    "slide": 34,
+    "desc": "创意时间轴（5 节点，时间+说明）",
+    "text_slots": {
+      "title": 28,
+      "d1": 12,
+      "b1": 13,
+      "d2": 3,
+      "b2": 4,
+      "d3": 6,
+      "b3": 7,
+      "d4": 9,
+      "b4": 10,
+      "d5": 16,
+      "b5": 17
+    }
+  },
+  "swot2": {
+    "slide": 36,
+    "desc": "SWOT 分析-02（菱形版）",
+    "text_slots": {
+      "title": 20,
+      "s_st": 11,
+      "s_b": 12,
+      "w_st": 18,
+      "w_b": 19,
+      "o_st": 15,
+      "o_b": 16,
+      "t_st": 13,
+      "t_b": 14
+    }
+  },
+  "compare-data": {
+    "slide": 38,
+    "desc": "双圆环数据对比（左右各一图）",
+    "text_slots": {
+      "title": 12,
+      "kw1": 0,
+      "pct1": 3,
+      "b1": 1,
+      "kw2": 8,
+      "pct2": 6,
+      "b2": 9
+    },
+    "chart_slots": {
+      "chart1": 2,
+      "chart2": 5
+    },
+    "chart_native": true
+  },
+  "cycle-4": {
+    "slide": 41,
+    "desc": "循环图示（中心词+四向要点）",
+    "text_slots": {
+      "title": 22,
+      "center": 21,
+      "kw1": 1,
+      "kw2": 4,
+      "kw3": 2,
+      "kw4": 3,
+      "s1": 6,
+      "b1": 7,
+      "s2": 9,
+      "b2": 10,
+      "s3": 14,
+      "b3": 15,
+      "s4": 17,
+      "b4": 18
+    }
+  },
+  "chart-bar-3": {
+    "slide": 44,
+    "desc": "簇状柱形图 + 左侧三条说明",
+    "text_slots": {
+      "title": 12,
+      "s1": 2,
+      "b1": 3,
+      "s2": 4,
+      "b2": 5,
+      "s3": 7,
+      "b3": 8
+    },
+    "chart_slot": 0,
+    "chart_native": true
+  },
+  "chart-line-2": {
+    "slide": 45,
+    "desc": "平滑曲线图 + 右侧两条说明",
+    "text_slots": {
+      "title": 7,
+      "s1": 1,
+      "b1": 2,
+      "s2": 5,
+      "b2": 6
+    },
+    "chart_slot": 3,
+    "chart_native": true
+  },
+  "chart-bar-2": {
+    "slide": 49,
+    "desc": "簇状条形图 + 右侧两条说明",
+    "text_slots": {
+      "title": 7,
+      "s1": 1,
+      "b1": 2,
+      "s2": 5,
+      "b2": 6
+    },
+    "chart_slot": 3,
+    "chart_native": true
+  },
+  "chart-bar-stacked": {
+    "slide": 50,
+    "desc": "百分比堆积条形图 + 结论",
+    "text_slots": {
+      "title": 3,
+      "caption": 1
+    },
+    "chart_slot": 0,
+    "chart_native": true
+  },
+  "honors-3": {
+    "slide": 52,
+    "desc": "荣誉展示（三奖项，奖杯图）",
+    "text_slots": {
+      "title": 0,
+      "desc": 7,
+      "award1": 4,
+      "event1": 3,
+      "award2": 2,
+      "event2": 1,
+      "award3": 5,
+      "event3": 6
+    }
+  },
+  "honors-6": {
+    "slide": 53,
+    "desc": "荣誉展示（六奖项，奖牌图）",
+    "text_slots": {
+      "title": 0,
+      "desc": 3,
+      "award1": 8,
+      "award2": 11,
+      "award3": 20,
+      "award4": 14,
+      "award5": 5,
+      "award6": 17
+    }
+  },
+  "_roles": {
+    "cover": [
+      "cover"
+    ],
+    "toc": [
+      "toc"
+    ],
+    "section": [
+      "section"
+    ],
+    "thanks": [
+      "thanks"
+    ],
+    "refs": [
+      "refs"
+    ],
+    "qa": [
+      "qa"
+    ]
+  },
+  "_leak_words": [
+    "输入相关",
+    "这里可以",
+    "这里输入",
+    "请输入",
+    "这里是标题",
+    "输入对应",
+    "点击图片",
+    "输入关键词",
+    "小标题",
+    "20XX",
+    "千阳",
+    "广财",
+    "如何更换",
+    "人物姓名",
+    "xxxx"
+  ]
+}

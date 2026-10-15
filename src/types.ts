@@ -239,6 +239,22 @@ export interface AgentDefinition {
 
 // Config Types
 
+/** An external agent runner reachable over ACP/stdio (newline-delimited JSON-RPC). */
+export interface ExternalAgentDef {
+  /** Runner id used in delegate_external_agent calls (e.g. "claude_code"). */
+  id: string;
+  /** Human-readable name. */
+  name?: string;
+  /** Executable to launch (e.g. "claude", "npx", "codex"). */
+  command: string;
+  /** Args to launch the runner in stdio/ACP mode (e.g. ["@zed-industries/claude-code-acp"]). */
+  args?: string[];
+  /** Extra env vars for the runner process. */
+  env?: Record<string, string>;
+  /** Default true when omitted. */
+  enabled?: boolean;
+}
+
 export interface SmallClawConfig {
   version: string;
   gateway: {
@@ -320,6 +336,13 @@ export interface SmallClawConfig {
    * Leave empty to use single-agent mode (original behavior).
    */
   agents?: AgentDefinition[];
+  /**
+   * External agent runners reachable via ACP (Agent Client Protocol) over stdio.
+   * Lets the local model delegate hard work to bigger external agents
+   * (claude_code / codex / opencode / ...). Empty by default — the
+   * delegate_external_agent tool reports guidance when none are configured.
+   */
+  external_agents?: ExternalAgentDef[];
   session?: {
     maxMessages?: number;
     compactionThreshold?: number;

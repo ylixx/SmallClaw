@@ -103,6 +103,9 @@ desktop.ini
 # --- LOCAL SCRATCH (backups, launcher scripts, debug dumps) ---
 .backup/
 backup_*/
+.backup_msg_actions/
+nul
+logs/gen_bat.py
 
 # --- WORKBUDDY WORKSPACE DATA ---
 .workbuddy/

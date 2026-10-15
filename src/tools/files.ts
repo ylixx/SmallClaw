@@ -4,6 +4,7 @@ import fsSync from 'fs';
 import os from 'os';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
+import iconv from 'iconv-lite';
 import { getConfig } from '../config/config.js';
 import { ToolResult } from '../types.js';
 
@@ -168,6 +169,7 @@ export interface ReadToolArgs {
   path: string;
   start_line?: number;
   num_lines?: number;
+  encoding?: string; // 'utf-8' | 'auto' | 'gbk' | 'gb2312' | 'gb18030' | 'latin1' | 'ascii' | 'base64' | 'hex'
 }
 
 type RetrievalMode = 'fast' | 'standard' | 'deep';
@@ -196,6 +198,52 @@ function retrievalMaxLines(mode: RetrievalMode): number {
   return 240;
 }
 
+// 将 Buffer 按指定编码解码为文本；auto 模式检测 BOM 与二进制
+function decodeBuffer(buf: Buffer, enc: string): { text?: string; binary?: boolean; error?: string } {
+  const lower = String(enc || 'auto').toLowerCase();
+  if (lower === 'auto') {
+    if (buf.length >= 3 && buf[0] === 0xEF && buf[1] === 0xBB && buf[2] === 0xBF) {
+      return { text: buf.toString('utf-8', 3) };
+    }
+    if (buf.length >= 2 && buf[0] === 0xFF && buf[1] === 0xFE) {
+      return { text: buf.toString('utf16le', 2) };
+    }
+    if (buf.length >= 2 && buf[0] === 0xFE && buf[1] === 0xFF) {
+      return { text: iconv.decode(buf.slice(2), 'utf-16be') };
+    }
+    // 二进制探测：前 8KB 出现 NUL 字节视为二进制
+    const scan = Math.min(buf.length, 8192);
+    for (let i = 0; i < scan; i++) {
+      if (buf[i] === 0x00) return { binary: true };
+    }
+    return { text: buf.toString('utf-8') };
+  }
+  switch (lower) {
+    case 'utf-8':
+    case 'utf8':
+      return { text: buf.toString('utf-8') };
+    case 'latin1':
+    case 'binary':
+      return { text: buf.toString('latin1') };
+    case 'ascii':
+      return { text: buf.toString('ascii') };
+    case 'base64':
+      return { text: buf.toString('base64') };
+    case 'hex':
+      return { text: buf.toString('hex') };
+    case 'gbk':
+    case 'gb2312':
+    case 'gb18030':
+      try {
+        return { text: iconv.decode(buf, lower) };
+      } catch (e: any) {
+        return { error: `decode ${lower} failed: ${e?.message || e}` };
+      }
+    default:
+      return { error: `unsupported encoding: ${enc}` };
+  }
+}
+
 export async function executeRead(args: ReadToolArgs): Promise<ToolResult> {
   try {
     const absPath = resolveWorkspacePath(args.path);
@@ -206,15 +254,37 @@ export async function executeRead(args: ReadToolArgs): Promise<ToolResult> {
         error: pathCheck.reason
       };
     }
-    const content = await fs.readFile(absPath, 'utf-8');
+    const buf = await fs.readFile(absPath);
+    const encoded = String(args.encoding || 'auto');
+    const decoded = decodeBuffer(buf, encoded);
+    if (decoded.error) {
+      return { success: false, error: decoded.error };
+    }
+    if (decoded.binary) {
+      // 纯二进制（非文本）：返回元信息，不尝试按行输出
+      const previewHex = buf.slice(0, 64).toString('hex').replace(/(.{2})/g, '$1 ').trim();
+      return {
+        success: true,
+        data: {
+          path: absPath,
+          binary: true,
+          size: buf.length,
+          detected_encoding: encoded === 'auto' ? 'binary' : encoded,
+          preview_hex: previewHex,
+          note: '文件被识别为二进制（含 NUL 字节），read 仅返回元信息。如需图片/音视频元数据请用 view_media。',
+        },
+        stdout: `[二进制文件] size=${buf.length}B, preview_hex=${previewHex}`,
+      };
+    }
+    const content = decoded.text ?? '';
     const allLines = content.split('\n');
     const mode = getRetrievalMode();
     const cap = retrievalMaxLines(mode);
     const startLine = Math.max(1, Number(args.start_line || 1) || 1);
     const requested = Math.max(1, Number(args.num_lines || cap) || cap);
-    const window = Math.min(requested, cap);
+    const windowSize = Math.min(requested, cap);
     const startIdx = Math.max(0, startLine - 1);
-    const selected = allLines.slice(startIdx, startIdx + window);
+    const selected = allLines.slice(startIdx, startIdx + windowSize);
     // 行号前缀（`行号\t内容`）：模型可精确引用"第 N 行"，与 edit 工具联动
     const outContent = selected.map((l, i) => `${startLine + i}\t${l}`).join('\n');
     const endLine = startLine + selected.length - 1;
@@ -223,6 +293,7 @@ export async function executeRead(args: ReadToolArgs): Promise<ToolResult> {
       success: true,
       data: {
         path: absPath,
+        encoding: encoded === 'auto' ? 'utf-8(detected)' : encoded,
         content: outContent,
         size: outContent.length,
         lines: allLines.length,
@@ -248,6 +319,21 @@ export async function executeRead(args: ReadToolArgs): Promise<ToolResult> {
 export interface WriteToolArgs {
   path: string;
   content: string;
+  backup?: boolean; // 写入前若已存在则先复制为 <path>.bak
+}
+
+async function backupIfRequested(absPath: string, doBackup: boolean): Promise<{ backupPath?: string; error?: string }> {
+  if (!doBackup) return {};
+  try {
+    if (fsSync.existsSync(absPath)) {
+      const bak = `${absPath}.bak`;
+      await fs.copyFile(absPath, bak);
+      return { backupPath: bak };
+    }
+    return {};
+  } catch (err: any) {
+    return { error: `backup failed: ${err?.message || err}` };
+  }
 }
 
 export async function executeWrite(args: WriteToolArgs): Promise<ToolResult> {
@@ -272,6 +358,8 @@ export async function executeWrite(args: WriteToolArgs): Promise<ToolResult> {
         error: pathCheck.reason
       };
     }
+    const bak = await backupIfRequested(absPath, args.backup === true);
+    if (bak.error) return { success: false, error: bak.error };
     // Ensure directory exists
     const dir = path.dirname(absPath);
     await fs.mkdir(dir, { recursive: true });
@@ -282,7 +370,8 @@ export async function executeWrite(args: WriteToolArgs): Promise<ToolResult> {
       data: {
         path: absPath,
         size: args.content.length,
-        lines: args.content.split('\n').length
+        lines: args.content.split('\n').length,
+        backup: bak.backupPath || null,
       }
     };
   } catch (error: any) {
@@ -298,6 +387,7 @@ export interface EditToolArgs {
   path: string;
   old_str: string;
   new_str: string;
+  backup?: boolean; // 写入前若已存在则先复制为 <path>.bak
 }
 
 export async function executeEdit(args: EditToolArgs): Promise<ToolResult> {
@@ -329,6 +419,8 @@ export async function executeEdit(args: EditToolArgs): Promise<ToolResult> {
     }
     // Perform replacement
     const newContent = content.replace(args.old_str, args.new_str);
+    const bak = await backupIfRequested(absPath, args.backup === true);
+    if (bak.error) return { success: false, error: bak.error };
     // Write back
     await fs.writeFile(absPath, newContent, 'utf-8');
     return {
@@ -338,7 +430,8 @@ export async function executeEdit(args: EditToolArgs): Promise<ToolResult> {
         replacements: 1,
         old_length: content.length,
         new_length: newContent.length,
-        diff: newContent.length - content.length
+        diff: newContent.length - content.length,
+        backup: bak.backupPath || null,
       }
     };
   } catch (error: any) {
@@ -395,34 +488,69 @@ export async function executeList(args: ListToolArgs): Promise<ToolResult> {
 // Tool exports
 export const readTool = {
   name: 'read',
-  description: 'Read file contents (snippet-windowed by retrieval mode caps)',
+  description: 'Read file contents (snippet-windowed by retrieval mode caps). Supports encoding: utf-8 (default), auto (detect BOM + binary), gbk/gb2312/gb18030, latin1, ascii, base64, hex.',
   execute: executeRead,
   schema: {
     path: 'string (required) - Path to the file to read',
     start_line: 'number (optional) - 1-based starting line (default 1)',
     num_lines: 'number (optional) - number of lines to return (capped by retrieval mode)',
-  }
+    encoding: 'string (optional) - utf-8 | auto | gbk | gb2312 | gb18030 | latin1 | ascii | base64 | hex (default auto)',
+  },
+  jsonSchema: {
+    type: 'object',
+    properties: {
+      path: { type: 'string', description: 'Path to the file to read' },
+      start_line: { type: 'number', description: '1-based starting line (default 1)' },
+      num_lines: { type: 'number', description: 'number of lines to return (capped by retrieval mode)' },
+      encoding: { type: 'string', description: 'utf-8 | auto | gbk | gb2312 | gb18030 | latin1 | ascii | base64 | hex (default auto)' },
+    },
+    required: ['path'],
+    additionalProperties: false,
+  },
 };
 
 export const writeTool = {
   name: 'write',
-  description: 'Create or overwrite a file',
+  description: 'Create or overwrite a file. Set backup:true to save a <path>.bak before overwriting.',
   execute: executeWrite,
   schema: {
     path: 'string (required) - Path to the file',
-    content: 'string (required) - File contents'
-  }
+    content: 'string (required) - File contents',
+    backup: 'boolean (optional) - if true and file exists, copy to <path>.bak before writing'
+  },
+  jsonSchema: {
+    type: 'object',
+    properties: {
+      path: { type: 'string', description: 'Path to the file' },
+      content: { type: 'string', description: 'File contents' },
+      backup: { type: 'boolean', description: 'if true and file exists, copy to <path>.bak before writing' },
+    },
+    required: ['path', 'content'],
+    additionalProperties: false,
+  },
 };
 
 export const editTool = {
   name: 'edit',
-  description: 'Edit a file by replacing text (string must appear exactly once)',
+  description: 'Edit a file by replacing text (string must appear exactly once). Set backup:true to save a <path>.bak before writing.',
   execute: executeEdit,
   schema: {
     path: 'string (required) - Path to the file',
     old_str: 'string (required) - Text to find (must appear exactly once)',
-    new_str: 'string (required) - Replacement text'
-  }
+    new_str: 'string (required) - Replacement text',
+    backup: 'boolean (optional) - if true and file exists, copy to <path>.bak before writing'
+  },
+  jsonSchema: {
+    type: 'object',
+    properties: {
+      path: { type: 'string', description: 'Path to the file' },
+      old_str: { type: 'string', description: 'Text to find (must appear exactly once)' },
+      new_str: { type: 'string', description: 'Replacement text' },
+      backup: { type: 'boolean', description: 'if true and file exists, copy to <path>.bak before writing' },
+    },
+    required: ['path', 'old_str', 'new_str'],
+    additionalProperties: false,
+  },
 };
 
 export const listTool = {
